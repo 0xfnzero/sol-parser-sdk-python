@@ -118,8 +118,8 @@ GEYSER_API_TOKEN=your_token python examples/multi_protocol_grpc.py
 
 ### Examples
 
-| Description | Command | Source Code |
-|-------------|---------|-------------|
+| Description | Run Command | Source Code |
+|--------------|-------------|-------------|
 | **PumpFun** | | |
 | PumpFun trade filtering (Buy/Sell/BuyExactSolIn/Create) with latency metrics | `python examples/pumpfun_trade_filter.py` | [examples/pumpfun_trade_filter.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_trade_filter.py) |
 | Quick PumpFun connection test (first 10 events) | `python examples/pumpfun_quick_test.py` | [examples/pumpfun_quick_test.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_quick_test.py) |

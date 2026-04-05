@@ -136,22 +136,6 @@ async def main():
 asyncio.run(main())
 ```
 
-### 仅解析日志（无需 gRPC）
-
-```python
-from sol_parser.unified_parser import parse_logs_only
-
-logs = [
-    "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P invoke [1]",
-    "Program data: vdt/pQ8AAA...",  # base64 编码的事件
-    "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P success",
-]
-
-events = parse_logs_only(logs, "tx_signature", 123456789, None)
-for ev in events:
-    print(type(ev).__name__, ev)
-```
-
 ---
 
 ## 🏗️ 支持的协议与事件

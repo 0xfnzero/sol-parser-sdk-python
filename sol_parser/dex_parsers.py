@@ -1552,6 +1552,21 @@ def parse_ps_buy_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
         if o + ln <= len(data):
             ix = data[o : o + ln].decode("utf-8", errors="replace")
     ev["ix_name"] = ix
+    # Mayhem mode and cashback fields
+    mm = False
+    if o < len(data):
+        mm = _bool(data, o)
+        o += 1
+    cb_bps = 0
+    cb = 0
+    if o + 16 <= len(data):
+        cb_bps = _u64le(data, o)
+        o += 8
+        cb = _u64le(data, o)
+    ev["mayhem_mode"] = mm
+    ev["cashback_fee_basis_points"] = cb_bps
+    ev["cashback"] = cb
+    ev["is_cashback_coin"] = cb_bps > 0
     return {"PumpSwapBuy": ev}
 
 

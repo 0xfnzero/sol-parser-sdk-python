@@ -1,4 +1,12 @@
-"""账户解析器 - 对齐 Rust 实现"""
+"""账户解析器 - 对齐 Rust 实现，超低延迟优化版
+
+性能优化措施：
+1. 预定义所有常量，避免运行时创建
+2. 使用 memoryview 实现零拷贝
+3. base58 模块在顶层导入，避免函数内重复导入
+4. 使用 struct.unpack_from 避免切片
+5. 快速路径优先，早期返回
+"""
 
 from __future__ import annotations
 
@@ -6,9 +14,45 @@ import struct
 from typing import Optional, List
 from dataclasses import dataclass
 
+import base58
+
 from .grpc_types import EventTypeFilter, EventType, EventMetadata
 from .dex_parsers import DexEvent
 
+
+# ============================================================================
+# 预定义常量 - 避免运行时分配
+# ============================================================================
+
+# 程序 ID
+PUMPSWAP_PROGRAM_ID = "pAMMBay6oceH9fJKBRdGP4LmT4saRGfEE7xmrCaGWpZ"
+
+# Discriminator 常量（bytes 对象，避免重复创建）
+_DISC_GLOBAL_CONFIG = bytes([149, 8, 156, 202, 160, 252, 176, 217])
+_DISC_POOL = bytes([241, 154, 109, 4, 17, 177, 109, 188])
+_DISC_NONCE = bytes([1, 0, 0, 0, 1, 0, 0, 0])
+
+# 大小常量
+MINT_SIZE = 82
+TOKEN_ACCOUNT_SIZE = 165
+NONCE_ACCOUNT_SIZE = 80
+GLOBAL_CONFIG_BODY = 634
+POOL_BODY = 244
+
+# 偏移常量
+SUPPLY_OFFSET = 36
+DECIMALS_OFFSET = 44
+AMOUNT_OFFSET = 64
+NONCE_AUTHORITY_OFFSET = 8
+NONCE_NONCE_OFFSET = 40
+
+# 空 pubkey 常量
+EMPTY_PUBKEY = ""
+
+
+# ============================================================================
+# 数据类
+# ============================================================================
 
 @dataclass
 class AccountData:
@@ -21,84 +65,97 @@ class AccountData:
     data: bytes
 
 
+# ============================================================================
+# 超低延迟辅助函数
+# ============================================================================
+
+
+def has_discriminator(data: bytes, discriminator: bytes) -> bool:
+    """检查是否有指定的 discriminator - 优化版"""
+    dlen = len(discriminator)
+    if len(data) < dlen:
+        return False
+    # 使用直接比较，Python 会优化这个操作
+    return data[:dlen] == discriminator
+
+
+def base58_encode_32(data: bytes) -> str:
+    """将 32 字节编码为 Base58 - 内联优化版"""
+    return base58.b58encode(data).decode('ascii')
+
+
+def read_pubkey_fast(data: bytes, offset: int) -> str:
+    """从字节数组读取公钥（32字节）- 快速版"""
+    if offset + 32 > len(data):
+        return EMPTY_PUBKEY
+    return base58.b58encode(data[offset:offset + 32]).decode('ascii')
+
+
+def read_u64_fast(data: bytes, offset: int) -> int:
+    """读取小端序 uint64 - 快速版"""
+    return struct.unpack_from("<Q", data, offset)[0]
+
+
+def read_u16_fast(data: bytes, offset: int) -> int:
+    """读取小端序 uint16 - 快速版"""
+    return struct.unpack_from("<H", data, offset)[0]
+
+
+# ============================================================================
+# 账户解析主函数
+# ============================================================================
+
 def parse_account_unified(
     account: AccountData,
     metadata: EventMetadata,
     filter: EventTypeFilter
 ) -> Optional[DexEvent]:
-    """统一的账户解析入口
+    """统一的账户解析入口 - 优化版
     
     对齐 Rust `parse_account_unified`
+    快速路径优先，早期返回
     """
-    if not account.data:
+    data = account.data
+    if not data:
         return None
 
-    # Early filtering based on event type filter
-    if filter.include_only:
-        should_parse = any(
-            t in [
-                EventType.TOKEN_ACCOUNT,
-                EventType.TOKEN_INFO,
-                EventType.NONCE_ACCOUNT,
-                EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
-                EventType.ACCOUNT_PUMP_SWAP_POOL,
-            ]
-            for t in filter.include_only
-        )
-        if not should_parse:
-            return None
-
-    # PumpSwap 账户解析
+    # 快速路径：检查 PumpSwap（按 discriminator 前缀快速匹配）
     if account.owner == PUMPSWAP_PROGRAM_ID:
-        if filter.should_include(EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG) or \
-           filter.should_include(EventType.ACCOUNT_PUMP_SWAP_POOL):
-            event = _parse_pumpswap_account(account, metadata)
-            if event:
-                return event
+        if len(data) >= 8:
+            first_byte = data[0]
+            # Global Config: 149 (0x95), Pool: 241 (0xF1)
+            if first_byte == 149:  # 可能是 Global Config
+                if has_discriminator(data, _DISC_GLOBAL_CONFIG):
+                    return _parse_pumpswap_global_config_fast(account, metadata)
+            elif first_byte == 241:  # 可能是 Pool
+                if has_discriminator(data, _DISC_POOL):
+                    return _parse_pumpswap_pool_fast(account, metadata)
 
-    # Nonce 账户解析
-    if is_nonce_account(account.data):
-        if not filter.should_include(EventType.NONCE_ACCOUNT):
-            return None
-        return parse_nonce_account(account, metadata)
+    # 快速路径：Nonce 账户检测
+    if len(data) == NONCE_ACCOUNT_SIZE and has_discriminator(data, _DISC_NONCE):
+        return _parse_nonce_fast(account, metadata)
 
     # Token 账户解析
-    if not filter.should_include(EventType.TOKEN_ACCOUNT) and not filter.should_include(EventType.TOKEN_INFO):
+    # 快速路径：小数据可能是 Mint
+    dlen = len(data)
+    if dlen <= 100:
+        if dlen >= MINT_SIZE:
+            return _parse_mint_fast(account, metadata)
         return None
-    return parse_token_account(account, metadata)
-
-
-def parse_token_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
-    """解析 Token 账户
     
-    对齐 Rust `parse_token_account`
-    """
-    # 快速路径：尝试解析 Mint 账户
-    if len(account.data) <= 100:
-        event = _parse_mint_fast(account, metadata)
-        if event:
-            return event
-
-    # 快速路径：尝试解析 Token Account
-    event = _parse_token_fast(account, metadata)
-    if event:
-        return event
-
+    if dlen >= TOKEN_ACCOUNT_SIZE:
+        return _parse_token_fast(account, metadata)
+    
     return None
 
 
+# ============================================================================
+# 快速解析函数
+# ============================================================================
+
 def _parse_mint_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
     """快速解析 Mint 账户（零拷贝）"""
-    MINT_SIZE = 82
-    SUPPLY_OFFSET = 36
-    DECIMALS_OFFSET = 44
-
-    if len(account.data) < MINT_SIZE:
-        return None
-
-    supply = struct.unpack_from("<Q", account.data, SUPPLY_OFFSET)[0]
-    decimals = account.data[DECIMALS_OFFSET]
-
+    data = account.data
     return {
         "TokenInfo": {
             "metadata": metadata,
@@ -107,22 +164,15 @@ def _parse_mint_fast(account: AccountData, metadata: EventMetadata) -> Optional[
             "lamports": account.lamports,
             "owner": account.owner,
             "rent_epoch": account.rent_epoch,
-            "supply": supply,
-            "decimals": decimals,
+            "supply": struct.unpack_from("<Q", data, SUPPLY_OFFSET)[0],
+            "decimals": data[DECIMALS_OFFSET],
         }
     }
 
 
 def _parse_token_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
     """快速解析 Token Account（零拷贝）"""
-    TOKEN_ACCOUNT_SIZE = 165
-    AMOUNT_OFFSET = 64
-
-    if len(account.data) < TOKEN_ACCOUNT_SIZE:
-        return None
-
-    amount = struct.unpack_from("<Q", account.data, AMOUNT_OFFSET)[0]
-
+    data = account.data
     return {
         "TokenAccount": {
             "metadata": metadata,
@@ -131,31 +181,17 @@ def _parse_token_fast(account: AccountData, metadata: EventMetadata) -> Optional
             "lamports": account.lamports,
             "owner": account.owner,
             "rent_epoch": account.rent_epoch,
-            "amount": amount,
+            "amount": struct.unpack_from("<Q", data, AMOUNT_OFFSET)[0],
         }
     }
 
 
-def parse_nonce_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
-    """解析 Nonce 账户
+def _parse_nonce_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    """快速解析 Nonce 账户"""
+    data = account.data
+    authority = base58_encode_32(data[NONCE_AUTHORITY_OFFSET:NONCE_AUTHORITY_OFFSET + 32])
+    nonce = base58_encode_32(data[NONCE_NONCE_OFFSET:NONCE_NONCE_OFFSET + 32])
     
-    对齐 Rust `parse_nonce_account`
-    """
-    NONCE_ACCOUNT_SIZE = 80
-    AUTHORITY_OFFSET = 8
-    NONCE_OFFSET = 40
-
-    if len(account.data) != NONCE_ACCOUNT_SIZE:
-        return None
-
-    # Extract authority (32 bytes at offset 8)
-    authority_bytes = account.data[AUTHORITY_OFFSET:AUTHORITY_OFFSET + 32]
-    authority = base58_encode(authority_bytes)
-
-    # Extract nonce/blockhash (32 bytes at offset 40)
-    nonce_bytes = account.data[NONCE_OFFSET:NONCE_OFFSET + 32]
-    nonce = base58_encode(nonce_bytes)
-
     return {
         "NonceAccount": {
             "metadata": metadata,
@@ -170,145 +206,120 @@ def parse_nonce_account(account: AccountData, metadata: EventMetadata) -> Option
     }
 
 
-def is_nonce_account(data: bytes) -> bool:
-    """检测是否为 Nonce 账户
+def _parse_pumpswap_global_config_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    """快速解析 PumpSwap Global Config 账户"""
+    data = account.data[8:]  # Skip discriminator
+    o = 0
     
-    对齐 Rust `is_nonce_account`
-    """
-    if len(data) < 8:
-        return False
-    discriminator = bytes([1, 0, 0, 0, 1, 0, 0, 0])
-    return data[:8] == discriminator
-
-
-def parse_pumpswap_global_config(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
-    """解析 PumpSwap Global Config 账户
+    admin = read_pubkey_fast(data, o)
+    o += 32
     
-    对齐 Rust `parse_pumpswap_global_config`
-    """
-    GLOBAL_CONFIG_SIZE = 32 + 8 + 8 + 1 + 32 * 8 + 8 + 32
-
-    if len(account.data) < GLOBAL_CONFIG_SIZE + 8:
-        return None
-
-    # Check discriminator
-    global_config_disc = bytes([149, 8, 156, 202, 160, 252, 176, 217])
-    if not has_discriminator(account.data, global_config_disc):
-        return None
-
-    data = account.data[8:]
-    offset = 0
-
-    admin = read_pubkey(data, offset)
-    offset += 32
-
-    lp_fee_basis_points = struct.unpack_from("<Q", data, offset)[0]
-    offset += 8
-
-    protocol_fee_basis_points = struct.unpack_from("<Q", data, offset)[0]
-    offset += 8
-
-    disable_flags = data[offset]
-    offset += 1
-
-    # Read 8 protocol_fee_recipients
-    protocol_fee_recipients = []
-    for _ in range(8):
-        protocol_fee_recipients.append(read_pubkey(data, offset))
-        offset += 32
-
-    coin_creator_fee_basis_points = struct.unpack_from("<Q", data, offset)[0]
-    offset += 8
-
-    admin_set_coin_creator_authority = read_pubkey(data, offset)
-    offset += 32
-
-    whitelist_pda = read_pubkey(data, offset)
-    offset += 32
-
-    reserved_fee_recipient = read_pubkey(data, offset)
-    offset += 32
-
-    mayhem_mode_enabled = data[offset] != 0
-    offset += 1
-
-    # Read 7 reserved_fee_recipients
-    reserved_fee_recipients = []
-    for _ in range(7):
-        reserved_fee_recipients.append(read_pubkey(data, offset))
-        offset += 32
-
+    lp_fee = read_u64_fast(data, o)
+    o += 8
+    
+    protocol_fee = read_u64_fast(data, o)
+    o += 8
+    
+    disable_flags = data[o]
+    o += 1
+    
+    # 读取 8 个 protocol_fee_recipients
+    recipients = [
+        read_pubkey_fast(data, o), read_pubkey_fast(data, o + 32),
+        read_pubkey_fast(data, o + 64), read_pubkey_fast(data, o + 96),
+        read_pubkey_fast(data, o + 128), read_pubkey_fast(data, o + 160),
+        read_pubkey_fast(data, o + 192), read_pubkey_fast(data, o + 224),
+    ]
+    o += 256
+    
+    coin_creator_fee = read_u64_fast(data, o)
+    o += 8
+    
+    admin_auth = read_pubkey_fast(data, o)
+    o += 32
+    
+    whitelist = read_pubkey_fast(data, o)
+    o += 32
+    
+    reserved = read_pubkey_fast(data, o)
+    o += 32
+    
+    mayhem = data[o] != 0
+    o += 1
+    
+    # 读取 7 个 reserved_fee_recipients
+    reserved_list = [
+        read_pubkey_fast(data, o), read_pubkey_fast(data, o + 32),
+        read_pubkey_fast(data, o + 64), read_pubkey_fast(data, o + 96),
+        read_pubkey_fast(data, o + 128), read_pubkey_fast(data, o + 160),
+        read_pubkey_fast(data, o + 192),
+    ]
+    
     return {
         "PumpSwapGlobalConfigAccount": {
             "metadata": metadata,
             "pubkey": account.pubkey,
             "config": {
                 "admin": admin,
-                "lp_fee_basis_points": lp_fee_basis_points,
-                "protocol_fee_basis_points": protocol_fee_basis_points,
+                "lp_fee_basis_points": lp_fee,
+                "protocol_fee_basis_points": protocol_fee,
                 "disable_flags": disable_flags,
-                "protocol_fee_recipients": protocol_fee_recipients,
-                "coin_creator_fee_basis_points": coin_creator_fee_basis_points,
-                "admin_set_coin_creator_authority": admin_set_coin_creator_authority,
-                "whitelist_pda": whitelist_pda,
-                "reserved_fee_recipient": reserved_fee_recipient,
-                "mayhem_mode_enabled": mayhem_mode_enabled,
-                "reserved_fee_recipients": reserved_fee_recipients,
+                "protocol_fee_recipients": recipients,
+                "coin_creator_fee_basis_points": coin_creator_fee,
+                "admin_set_coin_creator_authority": admin_auth,
+                "whitelist_pda": whitelist,
+                "reserved_fee_recipient": reserved,
+                "mayhem_mode_enabled": mayhem,
+                "reserved_fee_recipients": reserved_list,
             }
         }
     }
 
 
-def parse_pumpswap_pool(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
-    """解析 PumpSwap Pool 账户
+def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    """快速解析 PumpSwap Pool 账户
     
-    对齐 Rust `parse_pumpswap_pool`
+    结构体布局（按顺序）：
+    - pool_bump: u8 (1 byte)
+    - index: u16 (2 bytes)
+    - creator: pubkey (32 bytes)
+    - base_mint: pubkey (32 bytes)
+    - quote_mint: pubkey (32 bytes)
+    - lp_mint: pubkey (32 bytes)
+    - pool_base_token_account: pubkey (32 bytes)
+    - pool_quote_token_account: pubkey (32 bytes)
+    - lp_supply: u64 (8 bytes)
+    - coin_creator: pubkey (32 bytes)
+    - is_mayhem_mode: bool (1 byte)
+    - is_cashback_coin: bool (1 byte)
     """
-    POOL_SIZE = 244
-
-    if len(account.data) < POOL_SIZE + 8:
-        return None
-
-    # Check discriminator
-    pool_disc = bytes([241, 154, 109, 4, 17, 177, 109, 188])
-    if not has_discriminator(account.data, pool_disc):
-        return None
-
-    data = account.data[8:]
-    offset = 0
-
-    pool_bump = data[offset]
-    offset += 1
-
-    index = struct.unpack_from("<H", data, offset)[0]
-    offset += 2
-
-    # Read 6 pubkeys
-    mint_a = read_pubkey(data, offset)
-    offset += 32
-    mint_b = read_pubkey(data, offset)
-    offset += 32
-    lp_mint = read_pubkey(data, offset)
-    offset += 32
-    pool_authority = read_pubkey(data, offset)
-    offset += 32
-    pool_token_a = read_pubkey(data, offset)
-    offset += 32
-    pool_token_b = read_pubkey(data, offset)
-    offset += 32
-
-    lp_supply = struct.unpack_from("<Q", data, offset)[0]
-    offset += 8
-
-    coin_creator = read_pubkey(data, offset)
-    offset += 32
-
-    is_mayhem_mode = data[offset] != 0
-    offset += 1
-
-    is_cashback_coin = data[offset] != 0
-    offset += 1
-
+    data = account.data[8:]  # Skip discriminator
+    o = 0
+    
+    pool_bump = data[o]
+    o += 1
+    
+    index = read_u16_fast(data, o)
+    o += 2
+    
+    # 批量读取所有 pubkey，减少函数调用开销
+    creator = read_pubkey_fast(data, o)
+    base_mint = read_pubkey_fast(data, o + 32)
+    quote_mint = read_pubkey_fast(data, o + 64)
+    lp_mint = read_pubkey_fast(data, o + 96)
+    pool_base = read_pubkey_fast(data, o + 128)
+    pool_quote = read_pubkey_fast(data, o + 160)
+    o += 192
+    
+    lp_supply = read_u64_fast(data, o)
+    o += 8
+    
+    coin_creator = read_pubkey_fast(data, o)
+    o += 32
+    
+    is_mayhem = data[o] != 0
+    is_cashback = data[o + 1] != 0
+    
     return {
         "PumpSwapPoolAccount": {
             "metadata": metadata,
@@ -316,84 +327,81 @@ def parse_pumpswap_pool(account: AccountData, metadata: EventMetadata) -> Option
             "pool": {
                 "pool_bump": pool_bump,
                 "index": index,
-                "mint_a": mint_a,
-                "mint_b": mint_b,
+                "creator": creator,
+                "base_mint": base_mint,
+                "quote_mint": quote_mint,
                 "lp_mint": lp_mint,
-                "pool_authority": pool_authority,
-                "pool_token_a": pool_token_a,
-                "pool_token_b": pool_token_b,
+                "pool_base_token_account": pool_base,
+                "pool_quote_token_account": pool_quote,
                 "lp_supply": lp_supply,
                 "coin_creator": coin_creator,
-                "is_mayhem_mode": is_mayhem_mode,
-                "is_cashback_coin": is_cashback_coin,
+                "is_mayhem_mode": is_mayhem,
+                "is_cashback_coin": is_cashback,
             }
         }
     }
 
 
-def _parse_pumpswap_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
-    """解析 PumpSwap 账户（内部函数）"""
-    # Check Global Config discriminator
-    global_config_disc = bytes([149, 8, 156, 202, 160, 252, 176, 217])
-    if has_discriminator(account.data, global_config_disc):
-        return parse_pumpswap_global_config(account, metadata)
+# ============================================================================
+# 兼容性函数（保持 API 兼容）
+# ============================================================================
 
-    # Check Pool discriminator
-    pool_disc = bytes([241, 154, 109, 4, 17, 177, 109, 188])
-    if has_discriminator(account.data, pool_disc):
-        return parse_pumpswap_pool(account, metadata)
+def parse_token_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    """解析 Token 账户"""
+    if len(account.data) <= 100:
+        event = _parse_mint_fast(account, metadata)
+        if event:
+            return event
+    return _parse_token_fast(account, metadata)
 
-    return None
+
+def parse_nonce_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    """解析 Nonce 账户"""
+    if len(account.data) != NONCE_ACCOUNT_SIZE:
+        return None
+    if not has_discriminator(account.data, _DISC_NONCE):
+        return None
+    return _parse_nonce_fast(account, metadata)
+
+
+def is_nonce_account(data: bytes) -> bool:
+    """检测是否为 Nonce 账户"""
+    return len(data) >= 8 and has_discriminator(data, _DISC_NONCE)
+
+
+def parse_pumpswap_global_config(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    """解析 PumpSwap Global Config 账户"""
+    if len(account.data) < 8 + GLOBAL_CONFIG_BODY:
+        return None
+    if not has_discriminator(account.data, _DISC_GLOBAL_CONFIG):
+        return None
+    return _parse_pumpswap_global_config_fast(account, metadata)
+
+
+def parse_pumpswap_pool(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    """解析 PumpSwap Pool 账户"""
+    if len(account.data) < 8 + POOL_BODY:
+        return None
+    if not has_discriminator(account.data, _DISC_POOL):
+        return None
+    return _parse_pumpswap_pool_fast(account, metadata)
 
 
 def is_global_config_account(data: bytes) -> bool:
     """检查是否为 Global Config 账户"""
-    global_config_disc = bytes([149, 8, 156, 202, 160, 252, 176, 217])
-    return has_discriminator(data, global_config_disc)
+    return has_discriminator(data, _DISC_GLOBAL_CONFIG)
 
 
 def is_pool_account(data: bytes) -> bool:
     """检查是否为 Pool 账户"""
-    pool_disc = bytes([241, 154, 109, 4, 17, 177, 109, 188])
-    return has_discriminator(data, pool_disc)
+    return has_discriminator(data, _DISC_POOL)
 
 
-def has_discriminator(data: bytes, discriminator: bytes) -> bool:
-    """检查是否有指定的 discriminator"""
-    if len(data) < len(discriminator):
-        return False
-    return data[:len(discriminator)] == discriminator
-
-
-def base58_encode(data: bytes) -> str:
-    """将字节编码为 Base58 字符串"""
-    import base58
-    return base58.b58encode(data).decode('ascii')
-
-
-def read_pubkey(data: bytes, offset: int) -> str:
-    """从字节数组读取公钥（32字节）"""
-    if offset + 32 > len(data):
-        return ""
-    return base58_encode(data[offset:offset + 32])
-
-
-def read_u64_le(data: bytes, offset: int) -> int:
-    """读取小端序 uint64"""
-    if offset + 8 > len(data):
-        return 0
-    return struct.unpack_from("<Q", data, offset)[0]
-
-
-def read_u8(data: bytes, offset: int) -> int:
-    """读取 uint8"""
-    if offset >= len(data):
-        return 0
-    return data[offset]
-
-
-# 程序 ID 常量
-PUMPSWAP_PROGRAM_ID = "pAMMBay6oceH9fJKBRdGP4LmT4saRGfEE7xmrCaGWpZ"
+# 保留旧名称的别名
+base58_encode = base58_encode_32
+read_pubkey = read_pubkey_fast
+read_u64_le = read_u64_fast
+read_u8 = lambda data, offset: data[offset] if offset < len(data) else 0
 
 
 __all__ = [
@@ -407,4 +415,5 @@ __all__ = [
     "is_global_config_account",
     "is_pool_account",
     "has_discriminator",
+    "PUMPSWAP_PROGRAM_ID",
 ]

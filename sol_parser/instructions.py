@@ -161,32 +161,32 @@ def parse_pumpfun_instruction(
     block_time_us: Optional[int],
     grpc_recv_us: int,
 ) -> Optional[DexEvent]:
-    """解析 PumpFun 指令"""
+    """解析 PumpFun 指令
+    
+    注意：PumpFun 的 Buy/Sell 操作通过统一的 TRADE 日志事件捕获，
+    在 dex_parsers.py 的 parse_trade_from_data 中处理。
+    这里只处理 Create 和 CreateV2 指令。
+    
+    Discriminators（8字节小端）：
+    - CREATE: [24, 30, 200, 40, 5, 28, 7, 119] = 8576854823835016728
+    - CREATE_V2: [214, 144, 76, 236, 95, 139, 49, 180] = 12992944682502211062
+    """
     if len(data) < 8:
         return None
 
     discriminator = struct.unpack_from("<Q", data, 0)[0]
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
-    # PumpFun Create: 8576854823835016728
+    # PumpFun Create: [24, 30, 200, 40, 5, 28, 7, 119]
     if discriminator == 8576854823835016728:
         return _parse_pumpfun_create(data, accounts, meta)
 
-    # PumpFun Buy: 16927863322537900544
-    if discriminator == 16927863322537900544:
-        return {"PumpFunBuy": {
-            "metadata": meta,
-            "mint": _get_account_safe(accounts, 2),
-            "user": _get_account_safe(accounts, 7),
-        }}
+    # PumpFun CreateV2: [214, 144, 76, 236, 95, 139, 49, 180]
+    if discriminator == 12992944682502211062:
+        return _parse_pumpfun_create_v2(data, accounts, meta)
 
-    # PumpFun Sell: 12502976635542175488
-    if discriminator == 12502976635542175488:
-        return {"PumpFunSell": {
-            "metadata": meta,
-            "mint": _get_account_safe(accounts, 2),
-            "user": _get_account_safe(accounts, 7),
-        }}
+    # BUY/SELL 是日志事件 discriminator，不是指令 discriminator
+    # 交易事件在 dex_parsers.py 的 parse_trade_from_data 中处理
 
     return None
 
@@ -223,8 +223,84 @@ def _parse_pumpfun_create(data: bytes, accounts: List[str], meta: EventMetadata)
             "name": name,
             "symbol": symbol,
             "uri": uri,
-            "creator": creator,
             "mint": _get_account_safe(accounts, 0),
+            "bonding_curve": _get_account_safe(accounts, 2),
+            "user": _get_account_safe(accounts, 7),
+            "creator": creator,
+            "token_program": Z,
+            "timestamp": 0,
+            "virtual_token_reserves": 0,
+            "virtual_sol_reserves": 0,
+            "real_token_reserves": 0,
+            "token_total_supply": 0,
+            "is_mayhem_mode": False,
+            "is_cashback_enabled": False,
+        }
+    }
+
+
+def _parse_pumpfun_create_v2(data: bytes, accounts: List[str], meta: EventMetadata) -> Optional[DexEvent]:
+    """解析 PumpFun CreateV2 指令
+    
+    对齐 TS pumpfun_ix.ts CREATE_V2 处理
+    """
+    if len(accounts) < 16:
+        return None
+        
+    offset = 8  # Skip discriminator
+    try:
+        name_len = struct.unpack_from("<I", data, offset)[0]
+        offset += 4
+        name = data[offset:offset + name_len].decode('utf-8')
+        offset += name_len
+
+        symbol_len = struct.unpack_from("<I", data, offset)[0]
+        offset += 4
+        symbol = data[offset:offset + symbol_len].decode('utf-8')
+        offset += symbol_len
+
+        uri_len = struct.unpack_from("<I", data, offset)[0]
+        offset += 4
+        uri = data[offset:offset + uri_len].decode('utf-8')
+        offset += uri_len
+    except Exception:
+        return None
+
+    creator = Z
+    if offset + 32 <= len(data):
+        import base58
+        creator = base58.b58encode(data[offset:offset + 32]).decode('ascii')
+
+    return {
+        "PumpFunCreateV2": {
+            "metadata": meta,
+            "name": name,
+            "symbol": symbol,
+            "uri": uri,
+            "mint": _get_account_safe(accounts, 0),
+            "mint_authority": _get_account_safe(accounts, 1),
+            "bonding_curve": _get_account_safe(accounts, 2),
+            "associated_bonding_curve": _get_account_safe(accounts, 3),
+            "global": _get_account_safe(accounts, 4),
+            "user": _get_account_safe(accounts, 5),
+            "system_program": _get_account_safe(accounts, 6),
+            "token_program": _get_account_safe(accounts, 7),
+            "associated_token_program": _get_account_safe(accounts, 8),
+            "mayhem_program_id": _get_account_safe(accounts, 9),
+            "global_params": _get_account_safe(accounts, 10),
+            "sol_vault": _get_account_safe(accounts, 11),
+            "mayhem_state": _get_account_safe(accounts, 12),
+            "mayhem_token_vault": _get_account_safe(accounts, 13),
+            "event_authority": _get_account_safe(accounts, 14),
+            "program": _get_account_safe(accounts, 15),
+            "creator": creator,
+            "timestamp": 0,
+            "virtual_token_reserves": 0,
+            "virtual_sol_reserves": 0,
+            "real_token_reserves": 0,
+            "token_total_supply": 0,
+            "is_mayhem_mode": False,
+            "is_cashback_enabled": False,
         }
     }
 

@@ -39,6 +39,19 @@
 
 ---
 
+## 📦 SDK 版本
+
+本 SDK 提供多种语言版本：
+
+| 语言 | 仓库 | 描述 |
+|------|------|------|
+| **Rust** | [sol-parser-sdk](https://github.com/0xfnzero/sol-parser-sdk) | 超低延迟，SIMD 优化 |
+| **Node.js** | [sol-parser-sdk-nodejs](https://github.com/0xfnzero/sol-parser-sdk-nodejs) | TypeScript/JavaScript，Node.js 支持 |
+| **Python** | [sol-parser-sdk-python](https://github.com/0xfnzero/sol-parser-sdk-python) | 原生 async/await 支持 |
+| **Go** | [sol-parser-sdk-golang](https://github.com/0xfnzero/sol-parser-sdk-golang) | 并发安全，goroutine 支持 |
+
+---
+
 ## 📊 性能亮点
 
 ### ⚡ 实时解析

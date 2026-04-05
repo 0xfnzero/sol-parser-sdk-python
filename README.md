@@ -118,18 +118,18 @@ GEYSER_API_TOKEN=your_token python examples/multi_protocol_grpc.py
 
 ### Examples
 
-| Description | Run Command | Source Code |
-|--------------|-------------|-------------|
+| Run Command | Description | Source Code |
+|-------------|-------------|-------------|
 | **PumpFun** | | |
-| PumpFun trade filtering (Buy/Sell/BuyExactSolIn/Create) with latency metrics | `python examples/pumpfun_trade_filter.py` | [examples/pumpfun_trade_filter.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_trade_filter.py) |
-| Quick PumpFun connection test (first 10 events) | `python examples/pumpfun_quick_test.py` | [examples/pumpfun_quick_test.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_quick_test.py) |
+| `python examples/pumpfun_trade_filter.py` | PumpFun trade filtering (Buy/Sell/BuyExactSolIn/Create) with latency metrics | [examples/pumpfun_trade_filter.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_trade_filter.py) |
+| `python examples/pumpfun_quick_test.py` | Quick PumpFun connection test (first 10 events) | [examples/pumpfun_quick_test.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_quick_test.py) |
 | **PumpSwap** | | |
-| PumpSwap ultra-low latency with per-event + 10s stats | `python examples/pumpswap_low_latency.py` | [examples/pumpswap_low_latency.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_low_latency.py) |
-| PumpSwap events with performance metrics | `python examples/pumpswap_with_metrics.py` | [examples/pumpswap_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_with_metrics.py) |
+| `python examples/pumpswap_low_latency.py` | PumpSwap ultra-low latency with per-event + 10s stats | [examples/pumpswap_low_latency.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_low_latency.py) |
+| `python examples/pumpswap_with_metrics.py` | PumpSwap events with performance metrics | [examples/pumpswap_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_with_metrics.py) |
 | **Meteora DAMM** | | |
-| Meteora DAMM V2 (Swap/AddLiquidity/RemoveLiquidity/CreatePosition/ClosePosition) | `python examples/meteora_damm_grpc.py` | [examples/meteora_damm_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/meteora_damm_grpc.py) |
+| `python examples/meteora_damm_grpc.py` | Meteora DAMM V2 (Swap/AddLiquidity/RemoveLiquidity/CreatePosition/ClosePosition) | [examples/meteora_damm_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/meteora_damm_grpc.py) |
 | **Multi-Protocol** | | |
-| Subscribe to all DEX protocols simultaneously | `python examples/multi_protocol_grpc.py` | [examples/multi_protocol_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/multi_protocol_grpc.py) |
+| `python examples/multi_protocol_grpc.py` | Subscribe to all DEX protocols simultaneously | [examples/multi_protocol_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/multi_protocol_grpc.py) |
 
 ### Basic Usage
 

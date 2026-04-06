@@ -35,7 +35,9 @@ class SlotStatus(IntEnum):
 
 class EventType(str, Enum):
     """事件类型"""
+    # Block
     BLOCK_META = "BlockMeta"
+    # PumpFun
     BONK_TRADE = "BonkTrade"
     BONK_POOL_CREATE = "BonkPoolCreate"
     BONK_MIGRATE_AMM = "BonkMigrateAmm"
@@ -47,6 +49,8 @@ class EventType(str, Enum):
     PUMP_FUN_CREATE_V2 = "PumpFunCreateV2"
     PUMP_FUN_COMPLETE = "PumpFunComplete"
     PUMP_FUN_MIGRATE = "PumpFunMigrate"
+    # PumpSwap
+    PUMP_SWAP_TRADE = "PumpSwapTrade"
     PUMP_SWAP_BUY = "PumpSwapBuy"
     PUMP_SWAP_SELL = "PumpSwapSell"
     PUMP_SWAP_CREATE_POOL = "PumpSwapCreatePool"
@@ -77,19 +81,21 @@ class EventType(str, Enum):
     ORCA_WHIRLPOOL_LIQUIDITY_INCREASED = "OrcaWhirlpoolLiquidityIncreased"
     ORCA_WHIRLPOOL_LIQUIDITY_DECREASED = "OrcaWhirlpoolLiquidityDecreased"
     ORCA_WHIRLPOOL_POOL_INITIALIZED = "OrcaWhirlpoolPoolInitialized"
-    # Meteora
+    # Meteora Pools
     METEORA_POOLS_SWAP = "MeteoraPoolsSwap"
     METEORA_POOLS_ADD_LIQUIDITY = "MeteoraPoolsAddLiquidity"
     METEORA_POOLS_REMOVE_LIQUIDITY = "MeteoraPoolsRemoveLiquidity"
     METEORA_POOLS_BOOTSTRAP_LIQUIDITY = "MeteoraPoolsBootstrapLiquidity"
     METEORA_POOLS_POOL_CREATED = "MeteoraPoolsPoolCreated"
     METEORA_POOLS_SET_POOL_FEES = "MeteoraPoolsSetPoolFees"
+    # Meteora DAMM V2
     METEORA_DAMM_V2_SWAP = "MeteoraDammV2Swap"
     METEORA_DAMM_V2_ADD_LIQUIDITY = "MeteoraDammV2AddLiquidity"
     METEORA_DAMM_V2_REMOVE_LIQUIDITY = "MeteoraDammV2RemoveLiquidity"
     METEORA_DAMM_V2_CREATE_POSITION = "MeteoraDammV2CreatePosition"
     METEORA_DAMM_V2_CLOSE_POSITION = "MeteoraDammV2ClosePosition"
     METEORA_DAMM_V2_INITIALIZE_POOL = "MeteoraDammV2InitializePool"
+    # Meteora DLMM
     METEORA_DLMM_SWAP = "MeteoraDlmmSwap"
     METEORA_DLMM_ADD_LIQUIDITY = "MeteoraDlmmAddLiquidity"
     METEORA_DLMM_REMOVE_LIQUIDITY = "MeteoraDlmmRemoveLiquidity"
@@ -98,12 +104,94 @@ class EventType(str, Enum):
     METEORA_DLMM_CREATE_POSITION = "MeteoraDlmmCreatePosition"
     METEORA_DLMM_CLOSE_POSITION = "MeteoraDlmmClosePosition"
     METEORA_DLMM_CLAIM_FEE = "MeteoraDlmmClaimFee"
-    # 账户
+    # Account types
     TOKEN_ACCOUNT = "TokenAccount"
     TOKEN_INFO = "TokenInfo"
     NONCE_ACCOUNT = "NonceAccount"
     ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG = "AccountPumpSwapGlobalConfig"
     ACCOUNT_PUMP_SWAP_POOL = "AccountPumpSwapPool"
+
+
+def all_event_types() -> List[EventType]:
+    """返回所有支持的事件类型列表"""
+    return [
+        # Block
+        EventType.BLOCK_META,
+        # Bonk
+        EventType.BONK_TRADE,
+        EventType.BONK_POOL_CREATE,
+        EventType.BONK_MIGRATE_AMM,
+        # PumpFun
+        EventType.PUMP_FUN_TRADE,
+        EventType.PUMP_FUN_BUY,
+        EventType.PUMP_FUN_SELL,
+        EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
+        EventType.PUMP_FUN_CREATE,
+        EventType.PUMP_FUN_CREATE_V2,
+        EventType.PUMP_FUN_COMPLETE,
+        EventType.PUMP_FUN_MIGRATE,
+        # PumpSwap
+        EventType.PUMP_SWAP_TRADE,
+        EventType.PUMP_SWAP_BUY,
+        EventType.PUMP_SWAP_SELL,
+        EventType.PUMP_SWAP_CREATE_POOL,
+        EventType.PUMP_SWAP_LIQUIDITY_ADDED,
+        EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
+        # Raydium CLMM
+        EventType.RAYDIUM_CLMM_SWAP,
+        EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
+        EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
+        EventType.RAYDIUM_CLMM_CREATE_POOL,
+        EventType.RAYDIUM_CLMM_OPEN_POSITION,
+        EventType.RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT,
+        EventType.RAYDIUM_CLMM_CLOSE_POSITION,
+        EventType.RAYDIUM_CLMM_COLLECT_FEE,
+        # Raydium CPMM
+        EventType.RAYDIUM_CPMM_SWAP,
+        EventType.RAYDIUM_CPMM_DEPOSIT,
+        EventType.RAYDIUM_CPMM_WITHDRAW,
+        EventType.RAYDIUM_CPMM_INITIALIZE,
+        # Raydium AMM V4
+        EventType.RAYDIUM_AMM_V4_SWAP,
+        EventType.RAYDIUM_AMM_V4_DEPOSIT,
+        EventType.RAYDIUM_AMM_V4_WITHDRAW,
+        EventType.RAYDIUM_AMM_V4_WITHDRAW_PNL,
+        EventType.RAYDIUM_AMM_V4_INITIALIZE2,
+        # Orca Whirlpool
+        EventType.ORCA_WHIRLPOOL_SWAP,
+        EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED,
+        EventType.ORCA_WHIRLPOOL_LIQUIDITY_DECREASED,
+        EventType.ORCA_WHIRLPOOL_POOL_INITIALIZED,
+        # Meteora Pools
+        EventType.METEORA_POOLS_SWAP,
+        EventType.METEORA_POOLS_ADD_LIQUIDITY,
+        EventType.METEORA_POOLS_REMOVE_LIQUIDITY,
+        EventType.METEORA_POOLS_BOOTSTRAP_LIQUIDITY,
+        EventType.METEORA_POOLS_POOL_CREATED,
+        EventType.METEORA_POOLS_SET_POOL_FEES,
+        # Meteora DAMM V2
+        EventType.METEORA_DAMM_V2_SWAP,
+        EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
+        EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
+        EventType.METEORA_DAMM_V2_CREATE_POSITION,
+        EventType.METEORA_DAMM_V2_CLOSE_POSITION,
+        EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
+        # Meteora DLMM
+        EventType.METEORA_DLMM_SWAP,
+        EventType.METEORA_DLMM_ADD_LIQUIDITY,
+        EventType.METEORA_DLMM_REMOVE_LIQUIDITY,
+        EventType.METEORA_DLMM_INITIALIZE_POOL,
+        EventType.METEORA_DLMM_INITIALIZE_BIN_ARRAY,
+        EventType.METEORA_DLMM_CREATE_POSITION,
+        EventType.METEORA_DLMM_CLOSE_POSITION,
+        EventType.METEORA_DLMM_CLAIM_FEE,
+        # Account types
+        EventType.TOKEN_ACCOUNT,
+        EventType.TOKEN_INFO,
+        EventType.NONCE_ACCOUNT,
+        EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
+        EventType.ACCOUNT_PUMP_SWAP_POOL,
+    ]
 
 
 @dataclass

@@ -12,7 +12,27 @@ from typing import Any, Dict, List, Optional
 
 import base58
 
-DexEvent = Dict[str, Any]
+from .grpc_types import EventType, EventMetadata
+from .event_types import (
+    DexEvent, PumpFunTradeEvent, PumpFunCreateEvent, PumpFunMigrateEvent,
+    PumpSwapBuyEvent, PumpSwapSellEvent, PumpSwapCreatePoolEvent,
+    PumpSwapLiquidityAddedEvent, PumpSwapLiquidityRemovedEvent,
+    RaydiumClmmSwapEvent, RaydiumClmmIncreaseLiquidityEvent,
+    RaydiumClmmDecreaseLiquidityEvent, RaydiumClmmCreatePoolEvent,
+    RaydiumClmmCollectFeeEvent, RaydiumCpmmSwapEvent, RaydiumCpmmDepositEvent,
+    RaydiumCpmmWithdrawEvent, OrcaWhirlpoolSwapEvent, OrcaWhirlpoolLiquidityIncreasedEvent,
+    OrcaWhirlpoolLiquidityDecreasedEvent, OrcaWhirlpoolPoolInitializedEvent,
+    MeteoraDlmmSwapEvent, MeteoraDlmmAddLiquidityEvent, MeteoraDlmmRemoveLiquidityEvent,
+    MeteoraDlmmInitializePoolEvent, MeteoraDlmmInitializeBinArrayEvent,
+    MeteoraDlmmCreatePositionEvent, MeteoraDlmmClosePositionEvent,
+    MeteoraDlmmClaimFeeEvent, MeteoraPoolsSwapEvent, MeteoraPoolsAddLiquidityEvent,
+    MeteoraPoolsRemoveLiquidityEvent, MeteoraPoolsBootstrapLiquidityEvent,
+    MeteoraPoolsPoolCreatedEvent, MeteoraDammV2SwapEvent, MeteoraDammV2CreatePositionEvent,
+    MeteoraDammV2ClosePositionEvent, MeteoraDammV2AddLiquidityEvent,
+    MeteoraDammV2RemoveLiquidityEvent, MeteoraDammV2InitializePoolEvent,
+    BonkTradeEvent, BonkPoolCreateEvent, BonkMigrateAmmEvent,
+)
+
 Z = "11111111111111111111111111111111"
 
 
@@ -79,9 +99,25 @@ PUMP_CREATE = _d(27, 114, 169, 77, 222, 235, 99, 118)
 PUMP_MIGRATE = _d(189, 233, 93, 185, 92, 148, 234, 148)
 
 
-def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> Optional[DexEvent]:
+def _make_meta(meta: dict) -> EventMetadata:
+    """从 dict 构造 EventMetadata"""
+    if isinstance(meta, EventMetadata):
+        return meta
+    if isinstance(meta, dict):
+        return EventMetadata(
+            signature=meta.get("signature", ""),
+            slot=meta.get("slot", 0),
+            tx_index=meta.get("tx_index", 0),
+            block_time_us=meta.get("block_time_us", 0),
+            grpc_recv_us=meta.get("grpc_recv_us", 0),
+            recent_blockhash=meta.get("recent_blockhash", ""),
+        )
+    return EventMetadata()
+
+
+def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexEvent:
     if len(data) < 200:
-        return None
+        return DexEvent()
     o = 0
     mint = _pub(data, o)
     o += 32
@@ -133,59 +169,61 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> Opti
     cb_bps = _u64le(data, o) if o + 8 <= len(data) else 0
     o += 8
     cb = _u64le(data, o) if o + 8 <= len(data) else 0
-    trade = {
-        "metadata": meta,
-        "mint": mint,
-        "sol_amount": sol_amount,
-        "token_amount": token_amount,
-        "is_buy": is_buy,
-        "is_created_buy": is_created_buy,
-        "user": user,
-        "timestamp": ts,
-        "virtual_sol_reserves": vsol,
-        "virtual_token_reserves": vtok,
-        "real_sol_reserves": rsol,
-        "real_token_reserves": rtok,
-        "fee_recipient": fee_rec,
-        "fee_basis_points": fee_bps,
-        "fee": fee,
-        "creator": creator,
-        "creator_fee_basis_points": cfbps,
-        "creator_fee": cfee,
-        "track_volume": tv,
-        "total_unclaimed_tokens": tuc,
-        "total_claimed_tokens": tcc,
-        "current_sol_volume": csv,
-        "last_update_timestamp": lut,
-        "ix_name": ix_name,
-        "mayhem_mode": mm,
-        "cashback_fee_basis_points": cb_bps,
-        "cashback": cb,
-        "is_cashback_coin": cb_bps > 0,
-        "bonding_curve": Z,
-        "associated_bonding_curve": Z,
-        "token_program": Z,
-        "creator_vault": Z,
-    }
+    
+    event_data = PumpFunTradeEvent(
+        metadata=_make_meta(meta),
+        mint=mint,
+        sol_amount=sol_amount,
+        token_amount=token_amount,
+        is_buy=is_buy,
+        is_created_buy=is_created_buy,
+        user=user,
+        timestamp=ts,
+        virtual_sol_reserves=vsol,
+        virtual_token_reserves=vtok,
+        real_sol_reserves=rsol,
+        real_token_reserves=rtok,
+        fee_recipient=fee_rec,
+        fee_basis_points=fee_bps,
+        fee=fee,
+        creator=creator,
+        creator_fee_basis_points=cfbps,
+        creator_fee=cfee,
+        track_volume=tv,
+        total_unclaimed_tokens=tuc,
+        total_claimed_tokens=tcc,
+        current_sol_volume=csv,
+        last_update_timestamp=lut,
+        ix_name=ix_name,
+        mayhem_mode=mm,
+        cashback_fee_basis_points=cb_bps,
+        cashback=cb,
+        is_cashback_coin=cb_bps > 0,
+        bonding_curve=Z,
+        associated_bonding_curve=Z,
+        token_program=Z,
+        creator_vault=Z,
+    )
+    
     if ix_name == "buy":
-        return {"PumpFunBuy": trade}
+        return DexEvent(type=EventType.PUMP_FUN_BUY, data=event_data)
     if ix_name == "sell":
-        return {"PumpFunSell": trade}
+        return DexEvent(type=EventType.PUMP_FUN_SELL, data=event_data)
     if ix_name == "buy_exact_sol_in":
-        return {"PumpFunBuyExactSolIn": trade}
-    return {"PumpFunTrade": trade}
+        return DexEvent(type=EventType.PUMP_FUN_BUY_EXACT_SOL_IN, data=event_data)
+    return DexEvent(type=EventType.PUMP_FUN_TRADE, data=event_data)
 
 
-def parse_create_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
+def parse_create_from_data(data: bytes, meta: dict) -> DexEvent:
     o = 0
     try:
         name, o = _borsh_str(data, o)
         sym, o = _borsh_str(data, o)
         uri, o = _borsh_str(data, o)
     except Exception:
-        return None
+        return DexEvent()
     if len(data) < o + 32 * 4 + 8 * 5 + 32 + 1:
-        return None
+        return DexEvent()
     mint = _pub(data, o)
     o += 32
     bc = _pub(data, o)
@@ -209,30 +247,33 @@ def parse_create_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     mm = _bool(data, o) if o < len(data) else False
     o += 1
     ice = _bool(data, o) if o < len(data) else False
-    ev = {
-        "metadata": meta,
-        "name": name,
-        "symbol": sym,
-        "uri": uri,
-        "mint": mint,
-        "bonding_curve": bc,
-        "user": user,
-        "creator": creator,
-        "timestamp": ts,
-        "virtual_token_reserves": vtr,
-        "virtual_sol_reserves": vsol,
-        "real_token_reserves": rtr,
-        "token_total_supply": tts,
-        "token_program": tp,
-        "is_mayhem_mode": mm,
-        "is_cashback_enabled": ice,
-    }
-    return {"PumpFunCreate": ev}
+    
+    return DexEvent(
+        type=EventType.PUMP_FUN_CREATE,
+        data=PumpFunCreateEvent(
+            metadata=_make_meta(meta),
+            name=name,
+            symbol=sym,
+            uri=uri,
+            mint=mint,
+            bonding_curve=bc,
+            user=user,
+            creator=creator,
+            timestamp=ts,
+            virtual_token_reserves=vtr,
+            virtual_sol_reserves=vsol,
+            real_token_reserves=rtr,
+            token_total_supply=tts,
+            token_program=tp,
+            is_mayhem_mode=mm,
+            is_cashback_enabled=ice,
+        ),
+    )
 
 
-def parse_migrate_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
+def parse_migrate_from_data(data: bytes, meta: dict) -> DexEvent:
     if len(data) < 32 + 32 + 8 + 8 + 8 + 32 + 8 + 32:
-        return None
+        return DexEvent()
     o = 0
     user = _pub(data, o)
     o += 32
@@ -249,27 +290,29 @@ def parse_migrate_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     ts = _i64le(data, o)
     o += 8
     pool = _pub(data, o)
-    return {
-        "PumpFunMigrate": {
-            "metadata": meta,
-            "user": user,
-            "mint": mint,
-            "mint_amount": ma,
-            "sol_amount": sa,
-            "pool_migration_fee": pmf,
-            "bonding_curve": bc,
-            "timestamp": ts,
-            "pool": pool,
-        }
-    }
+    
+    return DexEvent(
+        type=EventType.PUMP_FUN_MIGRATE,
+        data=PumpFunMigrateEvent(
+            metadata=_make_meta(meta),
+            user=user,
+            mint=mint,
+            mint_amount=ma,
+            sol_amount=sa,
+            pool_migration_fee=pmf,
+            bonding_curve=bc,
+            timestamp=ts,
+            pool=pool,
+        ),
+    )
 
 
 # --- Raydium CLMM ---
 
 
-def parse_clmm_swap_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
+def parse_clmm_swap_from_data(data: bytes, meta: dict) -> DexEvent:
     if len(data) < 32 + 32 + 8 + 8 + 16 + 1:
-        return None
+        return DexEvent()
     o = 0
     ps = _pub(data, o)
     o += 32
@@ -278,28 +321,30 @@ def parse_clmm_swap_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     sqrt = str(_u128le_int(data, o))
     o += 16
     zfo = _bool(data, o)
-    return {
-        "RaydiumClmmSwap": {
-            "metadata": meta,
-            "pool_state": ps,
-            "sender": user,
-            "token_account_0": Z,
-            "token_account_1": Z,
-            "amount_0": 0,
-            "amount_1": 0,
-            "zero_for_one": zfo,
-            "sqrt_price_x64": sqrt,
-            "liquidity": "0",
-            "transfer_fee_0": 0,
-            "transfer_fee_1": 0,
-            "tick": 0,
-        }
-    }
+    
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_SWAP,
+        data=RaydiumClmmSwapEvent(
+            metadata=_make_meta(meta),
+            pool_state=ps,
+            sender=user,
+            token_account_0=Z,
+            token_account_1=Z,
+            amount_0=0,
+            amount_1=0,
+            zero_for_one=zfo,
+            sqrt_price_x64=sqrt,
+            liquidity="0",
+            transfer_fee_0=0,
+            transfer_fee_1=0,
+            tick=0,
+        ),
+    )
 
 
-def parse_clmm_inc_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
+def parse_clmm_inc_from_data(data: bytes, meta: dict) -> DexEvent:
     if len(data) < 32 + 32 + 16 + 8 + 8:
-        return None
+        return DexEvent()
     o = 0
     pool = _pub(data, o)
     o += 32
@@ -310,22 +355,24 @@ def parse_clmm_inc_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     a0 = _u64le(data, o)
     o += 8
     a1 = _u64le(data, o)
-    return {
-        "RaydiumClmmIncreaseLiquidity": {
-            "metadata": meta,
-            "pool": pool,
-            "position_nft_mint": Z,
-            "user": user,
-            "liquidity": liq,
-            "amount0_max": a0,
-            "amount1_max": a1,
-        }
-    }
+    
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
+        data=RaydiumClmmIncreaseLiquidityEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            position_nft_mint=Z,
+            user=user,
+            liquidity=liq,
+            amount0_max=a0,
+            amount1_max=a1,
+        ),
+    )
 
 
-def parse_clmm_dec_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
+def parse_clmm_dec_from_data(data: bytes, meta: dict) -> DexEvent:
     if len(data) < 32 + 32 + 16 + 8 + 8:
-        return None
+        return DexEvent()
     o = 0
     pool = _pub(data, o)
     o += 32
@@ -336,22 +383,24 @@ def parse_clmm_dec_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     a0 = _u64le(data, o)
     o += 8
     a1 = _u64le(data, o)
-    return {
-        "RaydiumClmmDecreaseLiquidity": {
-            "metadata": meta,
-            "pool": pool,
-            "position_nft_mint": Z,
-            "user": user,
-            "liquidity": liq,
-            "amount0_min": a0,
-            "amount1_min": a1,
-        }
-    }
+    
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
+        data=RaydiumClmmDecreaseLiquidityEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            position_nft_mint=Z,
+            user=user,
+            liquidity=liq,
+            amount0_min=a0,
+            amount1_min=a1,
+        ),
+    )
 
 
-def parse_clmm_create_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
+def parse_clmm_create_from_data(data: bytes, meta: dict) -> DexEvent:
     if len(data) < 32 + 32 + 16 + 8:
-        return None
+        return DexEvent()
     o = 0
     pool = _pub(data, o)
     o += 32
@@ -360,24 +409,26 @@ def parse_clmm_create_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     sqrt = str(_u128le_int(data, o))
     o += 16
     ot = _u64le(data, o)
-    return {
-        "RaydiumClmmCreatePool": {
-            "metadata": meta,
-            "pool": pool,
-            "creator": cr,
-            "token_0_mint": Z,
-            "token_1_mint": Z,
-            "tick_spacing": 0,
-            "fee_rate": 0,
-            "sqrt_price_x64": sqrt,
-            "open_time": ot,
-        }
-    }
+    
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_CREATE_POOL,
+        data=RaydiumClmmCreatePoolEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            creator=cr,
+            token_0_mint=Z,
+            token_1_mint=Z,
+            tick_spacing=0,
+            fee_rate=0,
+            sqrt_price_x64=sqrt,
+            open_time=ot,
+        ),
+    )
 
 
-def parse_clmm_collect_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
+def parse_clmm_collect_from_data(data: bytes, meta: dict) -> DexEvent:
     if len(data) < 32 + 32 + 8 + 8:
-        return None
+        return DexEvent()
     o = 0
     ps = _pub(data, o)
     o += 32
@@ -386,15 +437,17 @@ def parse_clmm_collect_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     a0 = _u64le(data, o)
     o += 8
     a1 = _u64le(data, o)
-    return {
-        "RaydiumClmmCollectFee": {
-            "metadata": meta,
-            "pool_state": ps,
-            "position_nft_mint": pn,
-            "amount_0": a0,
-            "amount_1": a1,
-        }
-    }
+    
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_COLLECT_FEE,
+        data=RaydiumClmmCollectFeeEvent(
+            metadata=_make_meta(meta),
+            pool_state=ps,
+            position_nft_mint=pn,
+            amount_0=a0,
+            amount_1=a1,
+        ),
+    )
 
 
 # --- Raydium AMM ---

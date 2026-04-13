@@ -329,12 +329,35 @@ class YellowstoneGrpc:
     async def _handle_stream(
         self, sub: Subscription, req: Any, cancel_event: asyncio.Event
     ) -> None:
-        """处理流式响应"""
+        """处理流式响应。
+
+        Geyser 会周期性下发 ``SubscribeUpdate.ping``；必须在同一 Subscribe 双向流上回写
+        ``SubscribeRequest.ping``（与 Rust / TypeScript / Go 一致），否则公共节点或 LB 可能断开。
+        """
+        outgoing: asyncio.Queue = asyncio.Queue()
+
+        async def request_iterator():
+            yield req
+            while True:
+                if cancel_event.is_set():
+                    return
+                ping_req = await outgoing.get()
+                if ping_req is None:
+                    return
+                yield ping_req
+
         try:
             metadata = self._get_metadata()
-            async for update in self._client.Subscribe(iter([req]), metadata=metadata):
+            async for update in self._client.Subscribe(request_iterator(), metadata=metadata):
                 if cancel_event.is_set():
                     break
+                if update.HasField("ping"):
+                    await outgoing.put(
+                        geyser_pb2.SubscribeRequest(
+                            ping=geyser_pb2.SubscribeRequestPing(id=1)
+                        )
+                    )
+                    continue
                 if sub.callbacks.on_update:
                     converted = self._convert_update(update)
                     sub.callbacks.on_update(converted)
@@ -342,6 +365,7 @@ class YellowstoneGrpc:
             if sub.callbacks.on_error:
                 sub.callbacks.on_error(e)
         finally:
+            await outgoing.put(None)
             self._subscribers.pop(sub.id, None)
             if sub.callbacks.on_end:
                 sub.callbacks.on_end()

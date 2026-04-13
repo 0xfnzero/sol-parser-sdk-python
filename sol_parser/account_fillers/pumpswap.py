@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
 
 from ..event_types import (
     PumpSwapBuyEvent,
@@ -48,6 +48,10 @@ def fill_sell_accounts(e: PumpSwapSellEvent, get: AccountGetter) -> None:
     _fill_trade_common(e, get)
 
 
+def fill_trade_accounts(_e: Any, _get: AccountGetter) -> None:
+    pass
+
+
 def fill_create_pool_accounts(e: PumpSwapCreatePoolEvent, get: AccountGetter) -> None:
     if _empty(e.pool):
         e.pool = get(0)
@@ -65,15 +69,9 @@ def fill_create_pool_accounts(e: PumpSwapCreatePoolEvent, get: AccountGetter) ->
         e.user_quote_token_account = get(7)
 
 
-def fill_liquidity_added_accounts(e: PumpSwapLiquidityAddedEvent, get: AccountGetter) -> None:
-    if _empty(e.pool):
-        e.pool = get(0)
-    if _empty(e.user):
-        e.user = get(1)
+def fill_liquidity_added_accounts(_e: PumpSwapLiquidityAddedEvent, _get: AccountGetter) -> None:
+    pass
 
 
-def fill_liquidity_removed_accounts(e: PumpSwapLiquidityRemovedEvent, get: AccountGetter) -> None:
-    if _empty(e.pool):
-        e.pool = get(0)
-    if _empty(e.user):
-        e.user = get(1)
+def fill_liquidity_removed_accounts(_e: PumpSwapLiquidityRemovedEvent, _get: AccountGetter) -> None:
+    pass

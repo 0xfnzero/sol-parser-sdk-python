@@ -1,36 +1,39 @@
 #!/usr/bin/env python3
-"""
-Multi-Protocol gRPC Example
+"""多协议 gRPC — Program ID 与 ``sol-parser-sdk/src/grpc/program_ids.rs`` / ``Protocol`` 枚举对齐。
 
-Subscribe to multiple DEX protocols simultaneously:
-PumpFun, PumpSwap, Raydium, Orca, Meteora, Bonk
-
-Run: python examples/multi_protocol_grpc.py
-Config: ``GRPC_URL`` / ``GRPC_TOKEN``, ``.env``, or CLI ``--grpc-url`` / ``--grpc-token``.
+Run: ``python examples/multi_protocol_grpc.py``
 """
+
+from __future__ import annotations
 
 import asyncio
-import json
 import os
 import sys
-import time
+
+import base58
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from sol_parser import parse_logs_only
-from sol_parser.env_config import parse_grpc_credentials
+from sol_parser import format_dex_event_json, parse_logs_only
+from sol_parser.env_config import load_dotenv_silent, parse_grpc_credentials
+from sol_parser.event_types import DexEvent
 from sol_parser.grpc_client import YellowstoneGrpc
-from sol_parser.grpc_types import TransactionFilter, SubscribeCallbacks
+from sol_parser.grpc_types import (
+    ClientConfig,
+    Protocol,
+    SubscribeCallbacks,
+    transaction_filter_for_protocols,
+)
 
-PROGRAM_IDS = [
-    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",  # PumpFun
-    "pAMMBay6oceH9fJKBRdGP4LmT4saRGfEE7xmrCaGWpZ",  # PumpSwap
-    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",  # Raydium AMM V4
-    "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",  # Raydium CLMM
-    "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",  # Raydium CPMM
-    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",   # Orca Whirlpool
-    "Eo7WjKq67rjJQDd1d4dSYkT7LeHVAaFL1K7dajEgrpwz",  # Meteora DAMM V2
-    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",   # Meteora DLMM
+# 与 Rust ``PROTOCOL_PROGRAM_IDS`` 覆盖范围一致（不含 Orca 等未在 Protocol 中的程序）
+PROTOCOLS = [
+    Protocol.PUMP_FUN,
+    Protocol.PUMP_SWAP,
+    Protocol.BONK,
+    Protocol.RAYDIUM_CPMM,
+    Protocol.RAYDIUM_CLMM,
+    Protocol.RAYDIUM_AMM_V4,
+    Protocol.METEORA_DAMM_V2,
 ]
 
 stats: dict[str, int] = {}
@@ -47,19 +50,21 @@ async def stats_reporter():
         print()
 
 
-async def main():
+async def main() -> None:
+    load_dotenv_silent()
     endpoint, token = parse_grpc_credentials(
         sys.argv[1:],
         default_endpoint="solana-yellowstone-grpc.publicnode.com:443",
     )
+
     print("🚀 Multi-Protocol gRPC Example")
     print("================================\n")
     print(f"📡 Endpoint: {endpoint}")
-    print(f"📊 Protocols: PumpFun, PumpSwap, Raydium, Orca, Meteora\n")
+    print(f"📊 Protocols: {[p.value for p in PROTOCOLS]}\n")
 
-    client = YellowstoneGrpc(endpoint)
-    if token:
-        client.set_x_token(token)
+    cfg = ClientConfig.default()
+    cfg.enable_metrics = True
+    client = YellowstoneGrpc.new_with_config(endpoint, token or None, cfg)
 
     await client.connect()
     asyncio.create_task(stats_reporter())
@@ -73,45 +78,32 @@ async def main():
         if not logs:
             return
 
-        sig = tx_info.signature.hex()[:16] + "..."
-        events = parse_logs_only(logs, sig, slot, None)
+        sb = bytes(tx_info.signature) if tx_info.signature else b""
+        sig_b58 = base58.b58encode(sb).decode("ascii") if len(sb) == 64 else ""
 
-        for ev in events:
-            key = next(iter(ev))
+        for ev in parse_logs_only(
+            logs, sig_b58, slot, None, subscribe_tx_info=tx_info
+        ):
+            if not isinstance(ev, DexEvent):
+                continue
+            key = str(ev.type.value)
             stats[key] = stats.get(key, 0) + 1
-            data = ev[key]
-            s = json.dumps({key: data}, default=str)
-            if len(s) > 200:
-                s = s[:200] + "..."
-            ts = time.strftime("%H:%M:%S")
-            print(f"[{ts}] {key}")
-            print(f"  sig={sig} slot={slot}")
-            if isinstance(data, dict):
-                if data.get("mint"):
-                    print(f"  mint : {data['mint']}")
-                if data.get("pool"):
-                    print(f"  pool : {data['pool']}")
-                if data.get("user"):
-                    print(f"  user : {data['user']}")
-                if data.get("sol_amount") is not None:
-                    print(f"  sol  : {data['sol_amount']} lamports")
-            print()
+            print(format_dex_event_json(ev))
 
-    tx_filter = TransactionFilter(
-        account_include=PROGRAM_IDS,
-        account_exclude=[],
-        account_required=[],
-        vote=False,
-        failed=False,
-    )
-    callbacks = SubscribeCallbacks(
-        on_update=on_update,
-        on_error=lambda e: print(f"Stream error: {e}", file=sys.stderr),
-        on_end=lambda: print("Stream ended"),
+    tx_filter = transaction_filter_for_protocols(PROTOCOLS)
+    tx_filter.vote = False
+    tx_filter.failed = False
+
+    await client.subscribe_transactions(
+        tx_filter,
+        SubscribeCallbacks(
+            on_update=on_update,
+            on_error=lambda e: print(f"Stream error: {e}", file=sys.stderr),
+            on_end=lambda: print("Stream ended"),
+        ),
     )
 
-    sub = await client.subscribe_transactions(tx_filter, callbacks)
-    print(f"✅ Subscribed (id={sub.id})")
+    print(f"✅ Subscribed")
     print("🛑 Press Ctrl+C to stop...\n")
 
     try:

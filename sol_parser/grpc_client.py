@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from typing import Dict, List, Optional, Callable, Any, AsyncGenerator
+from typing import Dict, List, Optional, Callable, Any, AsyncGenerator, Tuple
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import grpc
 from grpc import aio
@@ -55,6 +56,35 @@ try:
     HAS_PROTO = True
 except ImportError:
     HAS_PROTO = False
+
+
+def normalize_grpc_endpoint(endpoint: str, default_tls_from_config: bool) -> Tuple[str, bool]:
+    """将 ``https://host:443`` / ``http://host`` 转为 gRPC 可用的 ``host:port``，并决定是否走 TLS。
+
+    ``grpc.aio.secure_channel`` / ``insecure_channel`` 的 *target* 不能包含 scheme，否则会出现
+    DNS 报错 ``Misformatted domain name``。
+    """
+    s = (endpoint or "").strip()
+    if not s:
+        return s, default_tls_from_config
+    if "://" not in s:
+        return s, default_tls_from_config
+    parsed = urlparse(s)
+    host = parsed.hostname or ""
+    if not host:
+        return s, default_tls_from_config
+    port = parsed.port
+    if port is not None:
+        target = f"{host}:{port}"
+    else:
+        if parsed.scheme == "https":
+            target = f"{host}:443"
+        elif parsed.scheme == "http":
+            target = f"{host}:80"
+        else:
+            target = host
+    use_tls = parsed.scheme == "https"
+    return target, use_tls
 
 
 @dataclass
@@ -189,7 +219,11 @@ class YellowstoneGrpc:
 
             channel_options = self._get_channel_options()
 
-            if self.config.enable_tls:
+            target, use_tls = normalize_grpc_endpoint(
+                self.endpoint, self.config.enable_tls
+            )
+
+            if use_tls:
                 # 创建 SSL 凭证
                 ssl_creds = grpc.ssl_channel_credentials()
 
@@ -201,13 +235,13 @@ class YellowstoneGrpc:
                     composite_creds = ssl_creds
 
                 self._channel = aio.secure_channel(
-                    self.endpoint,
+                    target,
                     composite_creds,
                     options=channel_options
                 )
             else:
                 self._channel = aio.insecure_channel(
-                    self.endpoint,
+                    target,
                     options=channel_options
                 )
 

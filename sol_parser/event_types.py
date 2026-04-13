@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Union, List, Optional, Any, Generic, TypeVar, Dict
+from typing import Union, List, Optional, Any, Generic, TypeVar, Dict, Tuple
 
 from .grpc_types import EventMetadata, EventType
 
@@ -33,6 +33,9 @@ class DexEvent:
     Attributes:
         type: 事件类型
         data: 具体的事件数据（如 PumpFunTradeEvent 等）
+    
+    控制台可读输出请用 :func:`sol_parser.format_dex_event_json`（缩进 JSON），
+    默认 ``repr``/``print(ev)`` 为单行 dataclass 表示，并非 JSON。
     """
     type: EventType = field(default=EventType.BLOCK_META)
     data: Any = None  # 具体的事件类型，如 PumpFunTradeEvent
@@ -69,6 +72,33 @@ class DexEvent:
         if isinstance(self.data, PumpSwapSellEvent):
             return self.data
         return None
+
+
+def event_key_and_payload(ev: Union["DexEvent", Dict[str, Any]]) -> Tuple[str, Any]:
+    """从强类型 :class:`DexEvent` 或历史「单键 dict」形态取出事件名与 payload。"""
+    if isinstance(ev, DexEvent):
+        if ev.data is None:
+            return "", None
+        return str(ev.type.value), ev.data
+    if isinstance(ev, dict) and ev:
+        k = next(iter(ev))
+        return k, ev.get(k)
+    return "", None
+
+
+def grpc_recv_us_from_payload(data: Any) -> int:
+    """读取 metadata.grpc_recv_us（兼容 dict 与 dataclass payload）。"""
+    if data is None:
+        return 0
+    if isinstance(data, dict):
+        m = data.get("metadata") or {}
+        if isinstance(m, dict):
+            return int(m.get("grpc_recv_us", 0) or 0)
+        return int(getattr(m, "grpc_recv_us", 0) or 0)
+    meta = getattr(data, "metadata", None)
+    if meta is None:
+        return 0
+    return int(getattr(meta, "grpc_recv_us", 0) or 0)
 
 
 # ============================================================
@@ -119,6 +149,8 @@ class PumpFunTradeEvent(DexEventBase):
     associated_bonding_curve: str = ""
     token_program: str = ""
     creator_vault: str = ""
+    #: 第 17 个账户（索引 16），部分交易存在（Creator Rewards / fee 等）；由 ``fill_trade_accounts`` 从指令账户填充。
+    extra_instruction_account: str = ""
 
 
 @dataclass

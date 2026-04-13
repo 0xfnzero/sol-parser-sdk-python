@@ -22,6 +22,92 @@ from .merger import merge_dex_events
 from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
 
 
+def collect_program_invokes(msg: Any, meta: Any) -> Dict[bytes, List[Tuple[int, int]]]:
+    """从已解析的 ``Message`` + ``TransactionStatusMeta`` 收集各 program_id 的 (outer, inner) 指令索引。"""
+    invokes_raw: Dict[bytes, List[Tuple[int, int]]] = {}
+    static_keys: List[bytes] = [bytes(x) for x in msg.account_keys]
+    w_keys: List[bytes] = [bytes(x) for x in meta.loaded_writable_addresses]
+    r_keys: List[bytes] = [bytes(x) for x in meta.loaded_readonly_addresses]
+    keys_len = len(static_keys)
+    wlen = len(w_keys)
+
+    def get_key_raw(i: int) -> Optional[bytes]:
+        if i < keys_len:
+            return static_keys[i]
+        if i < keys_len + wlen:
+            return w_keys[i - keys_len]
+        j = i - keys_len - wlen
+        if j < len(r_keys):
+            return r_keys[j]
+        return None
+
+    for i, ix in enumerate(msg.instructions):
+        raw_pid = get_key_raw(ix.program_id_index)
+        if raw_pid:
+            invokes_raw.setdefault(raw_pid, []).append((i, -1))
+
+    for inner in meta.inner_instructions:
+        outer_idx = inner.index
+        for j, inner_ix in enumerate(inner.instructions):
+            raw_pid = get_key_raw(inner_ix.program_id_index)
+            if raw_pid:
+                invokes_raw.setdefault(raw_pid, []).append((int(outer_idx), j))
+
+    return invokes_raw
+
+
+def apply_account_fill_to_events(
+    events: List[DexEvent],
+    tx_pb: Any,
+    meta_pb: Any,
+) -> None:
+    """对已解析的 ``solana_storage_pb2.Transaction`` + ``TransactionStatusMeta`` 应用账户填充 + ``fill_data``。"""
+    if not events or tx_pb is None or meta_pb is None:
+        return
+    msg = tx_pb.message
+    if not msg.account_keys and not msg.instructions:
+        return
+    invokes_raw = collect_program_invokes(msg, meta_pb)
+    invokes_str: Dict[str, List[Tuple[int, int]]] = {
+        base58.b58encode(k).decode("ascii"): v for k, v in invokes_raw.items()
+    }
+    for ev in events:
+        fill_accounts_with_owned_keys(ev, meta_pb, tx_pb, invokes_raw)
+        fill_data(ev, meta_pb, tx_pb, invokes_str)
+    recent_bh = ""
+    if msg.recent_blockhash:
+        recent_bh = base58.b58encode(bytes(msg.recent_blockhash)).decode("ascii")
+    for ev in events:
+        if isinstance(ev.data, object) and hasattr(ev.data, "metadata"):
+            m = ev.data.metadata
+            if isinstance(m, EventMetadata) and recent_bh:
+                m.recent_blockhash = recent_bh
+
+
+def enrich_dex_events_with_subscribe_tx_info(
+    events: List[DexEvent],
+    info: SubscribeUpdateTransactionInfo,
+) -> None:
+    """对仅由日志解析得到的事件补全账户字段（对齐 Rust ``fill_accounts_with_owned_keys`` + ``fill_data``）。
+
+    需要 ``info.transaction_raw`` / ``info.meta_raw``（Yellowstone 订阅里通常有）。
+    无 raw 时静默跳过。
+    """
+    if not events:
+        return
+    try:
+        from . import solana_storage_pb2 as sol_pb
+    except ImportError:
+        return
+    if not info.transaction_raw or not info.meta_raw:
+        return
+    tx = sol_pb.Transaction()
+    tx.ParseFromString(info.transaction_raw)
+    meta = sol_pb.TransactionStatusMeta()
+    meta.ParseFromString(info.meta_raw)
+    apply_account_fill_to_events(events, tx, meta)
+
+
 def detect_pumpfun_create_from_logs(log_messages: List[str]) -> bool:
     """对齐 Rust ``detect_pumpfun_create``：Program data 前缀匹配 create 日志。"""
     needle = "Program data: G3KpTd7rY3Y"
@@ -178,7 +264,7 @@ def parse_instructions_enhanced_from_parsed(
             return ""
         return base58.b58encode(raw).decode("ascii")
 
-    invokes_raw: Dict[bytes, List[Tuple[int, int]]] = {}
+    invokes_raw = collect_program_invokes(msg, meta)
 
     is_created_buy = detect_pumpfun_create_from_logs(list(meta.log_messages))
 
@@ -186,9 +272,6 @@ def parse_instructions_enhanced_from_parsed(
 
     for i, ix in enumerate(msg.instructions):
         pid_idx = ix.program_id_index
-        raw_pid = get_key_raw(pid_idx)
-        if raw_pid:
-            invokes_raw.setdefault(raw_pid, []).append((i, -1))
         pid = get_key_b58(pid_idx)
         data = bytes(ix.data)
         acct_bytes = bytes(ix.accounts)
@@ -202,9 +285,6 @@ def parse_instructions_enhanced_from_parsed(
     for inner in meta.inner_instructions:
         outer_idx = inner.index
         for j, inner_ix in enumerate(inner.instructions):
-            raw_pid = get_key_raw(inner_ix.program_id_index)
-            if raw_pid:
-                invokes_raw.setdefault(raw_pid, []).append((int(outer_idx), j))
             pid = get_key_b58(inner_ix.program_id_index)
             data = bytes(inner_ix.data)
             ev = parse_inner_instruction(

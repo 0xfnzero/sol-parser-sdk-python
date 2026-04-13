@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Callable
 
-from ..event_types import PumpFunCreateEvent, PumpFunCreateV2TokenEvent, PumpFunTradeEvent
+from ..event_types import (
+    PumpFunCreateEvent,
+    PumpFunCreateV2TokenEvent,
+    PumpFunMigrateEvent,
+    PumpFunTradeEvent,
+)
 
 Z = "11111111111111111111111111111111"
 
@@ -27,6 +32,9 @@ def fill_trade_accounts(e: PumpFunTradeEvent, get: AccountGetter) -> None:
         e.creator_vault = get(9) if e.is_buy else get(8)
     if _empty(e.token_program):
         e.token_program = get(8) if e.is_buy else get(9)
+    a16 = get(16)
+    if not _empty(a16):
+        e.extra_instruction_account = a16
 
 
 def fill_create_accounts(e: PumpFunCreateEvent, get: AccountGetter) -> None:
@@ -71,3 +79,7 @@ def fill_create_v2_accounts(e: PumpFunCreateV2TokenEvent, get: AccountGetter) ->
         e.event_authority = get(14)
     if _empty(e.program):
         e.program = get(15)
+
+
+def fill_migrate_accounts(_e: PumpFunMigrateEvent, _get: AccountGetter) -> None:
+    pass

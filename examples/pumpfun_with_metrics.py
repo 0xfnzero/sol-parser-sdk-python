@@ -1,38 +1,37 @@
 #!/usr/bin/env python3
-"""
-PumpFun Event Parsing with Detailed Performance Metrics
+"""PumpFun + 性能指标 — 对齐 ``sol-parser-sdk/examples/pumpfun_with_metrics.rs``。
 
-Demonstrates how to:
-- Subscribe to PumpFun protocol events
-- Measure gRPC recv time, queue recv time, and end-to-end latency per event
-- Display periodic 10s summaries (total count, rate, avg/min/max latency)
-
-Run: python examples/pumpfun_with_metrics.py  (``GRPC_URL`` / ``GRPC_TOKEN`` or ``.env``)
+Run: ``python examples/pumpfun_with_metrics.py``
 """
+
+from __future__ import annotations
 
 import asyncio
 import os
 import sys
-import time
+
+import base58
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from sol_parser import parse_logs_only
-from sol_parser.env_config import parse_grpc_credentials
+from sol_parser import format_dex_event_json, now_micros, parse_logs_only
+from sol_parser.env_config import load_dotenv_silent, parse_grpc_credentials
+from sol_parser.event_types import DexEvent
 from sol_parser.grpc_client import YellowstoneGrpc
-from sol_parser.grpc_types import TransactionFilter, SubscribeCallbacks
-
-PROGRAM_IDS = ["6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"]  # PumpFun
+from sol_parser.grpc_types import (
+    ClientConfig,
+    EventType,
+    Protocol,
+    SubscribeCallbacks,
+    event_type_filter_include_only,
+    transaction_filter_for_protocols,
+)
 
 event_count = 0
 total_latency = 0
-min_latency = float("inf")
+min_latency = 2**62
 max_latency = 0
 last_count = 0
-
-
-def now_us() -> int:
-    return int(time.time() * 1_000_000)
 
 
 async def stats_reporter():
@@ -41,37 +40,86 @@ async def stats_reporter():
         await asyncio.sleep(10)
         if event_count == 0:
             continue
-        avg = total_latency // event_count if event_count > 0 else 0
-        rate = (event_count - last_count) / 10.0
-        min_us = 0 if min_latency == float("inf") else min_latency
+        count = event_count
+        total = total_latency
+        min_l = min_latency if min_latency < 2**62 else 0
+        max_l = max_latency
+        queue_len = 0
+        avg = total // count if count else 0
+        events_per_sec = (count - last_count) / 10.0
+
         print("\n╔════════════════════════════════════════════════════╗")
-        print("║          Performance Stats (10s window)            ║")
+        print("║          性能统计 (10秒间隔)                       ║")
         print("╠════════════════════════════════════════════════════╣")
-        print(f"║  Total Events : {event_count:>10}                              ║")
-        print(f"║  Events/sec   : {rate:>10.1f}                              ║")
-        print(f"║  Avg Latency  : {avg:>10} μs                           ║")
-        print(f"║  Min Latency  : {min_us:>10} μs                           ║")
-        print(f"║  Max Latency  : {max_latency:>10} μs                           ║")
+        print(f"║  事件总数: {count:>10}                              ║")
+        print(f"║  事件速率: {events_per_sec:>10.1f} events/sec                  ║")
+        print(f"║  队列长度: {queue_len:>10}                              ║")
+        print(f"║  平均延迟: {avg:>10} μs                           ║")
+        print(f"║  最小延迟: {min_l:>10} μs                           ║")
+        print(f"║  最大延迟: {max_l:>10} μs                           ║")
         print("╚════════════════════════════════════════════════════╝\n")
-        last_count = event_count
+
+        if queue_len > 1000:
+            print(f"⚠️  警告: 队列堆积 ({queue_len}), 消费速度 < 生产速度")
+
+        last_count = count
 
 
-async def main():
+def _grpc_recv_us(ev: DexEvent) -> int | None:
+    d = ev.data
+    if d is None:
+        return None
+    meta = getattr(d, "metadata", None)
+    if meta is None:
+        return None
+    v = int(getattr(meta, "grpc_recv_us", 0) or 0)
+    return v if v > 0 else None
+
+
+async def main() -> None:
     global event_count, total_latency, min_latency, max_latency
 
+    load_dotenv_silent()
     endpoint, token = parse_grpc_credentials(
         sys.argv[1:],
         default_endpoint="solana-yellowstone-grpc.publicnode.com:443",
     )
+
     print("Starting Sol Parser SDK Example with Metrics...")
     print("🚀 Subscribing to Yellowstone gRPC events...")
-    print(f"📡 Endpoint: {endpoint}\n")
 
-    client = YellowstoneGrpc(endpoint)
-    if token:
-        client.set_x_token(token)
+    config = ClientConfig.default()
+    config.enable_metrics = True
+    config.connection_timeout_ms = 10000
+    config.request_timeout_ms = 30000
+    config.enable_tls = True
+
+    client = YellowstoneGrpc.new_with_config(endpoint, token or None, config)
+    print("✅ gRPC client created successfully")
+
+    protocols = [Protocol.PUMP_FUN]
+    print(f"📊 Protocols to monitor: {[p.value for p in protocols]}")
+
+    tx_filter = transaction_filter_for_protocols(protocols)
+    tx_filter.vote = False
+    tx_filter.failed = False
+
+    print("🎧 Starting subscription...")
+    print("🔍 Monitoring programs for DEX events...")
+
+    event_filter = event_type_filter_include_only(
+        [
+            EventType.PUMP_FUN_BUY,
+            EventType.PUMP_FUN_SELL,
+            EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
+            EventType.PUMP_FUN_CREATE,
+            EventType.PUMP_FUN_CREATE_V2,
+        ]
+    )
+
+    print("📋 Event Filter: Buy, Sell, BuyExactSolIn, Create")
+
     await client.connect()
-
     asyncio.create_task(stats_reporter())
 
     def on_update(update):
@@ -85,67 +133,62 @@ async def main():
         if not logs:
             return
 
-        sig = tx_info.signature.hex()
-        queue_recv_us = now_us()
-        events = parse_logs_only(logs, sig, slot, None)
+        sb = bytes(tx_info.signature) if tx_info.signature else b""
+        sig = base58.b58encode(sb).decode("ascii") if len(sb) == 64 else ""
 
-        for ev in events:
-            key = next(iter(ev))
-            if not key.startswith("PumpFun"):
+        for ev in parse_logs_only(
+            logs, sig, slot, None, subscribe_tx_info=tx_info
+        ):
+            if not isinstance(ev, DexEvent) or ev.data is None:
                 continue
-            data = ev[key] or {}
-            metadata = data.get("metadata", {}) if isinstance(data, dict) else {}
-            grpc_recv_us = metadata.get("grpc_recv_us", 0)
-            latency_us = queue_recv_us - grpc_recv_us if grpc_recv_us > 0 else 0
+            if not event_filter.should_include(ev.type):
+                continue
+
+            grpc_recv_us_opt = _grpc_recv_us(ev)
+            if grpc_recv_us_opt is None:
+                continue
+
+            queue_recv_us = now_micros()
+            latency_us = queue_recv_us - grpc_recv_us_opt
+            if latency_us < 0:
+                latency_us = 0
 
             event_count += 1
             total_latency += latency_us
-            if latency_us < min_latency:
-                min_latency = latency_us
-            if latency_us > max_latency:
-                max_latency = latency_us
+            min_latency = min(min_latency, latency_us)
+            max_latency = max(max_latency, latency_us)
 
-            print(f"\n================================================")
-            print(f"gRPC recv time : {grpc_recv_us} μs")
-            print(f"Queue recv time: {queue_recv_us} μs")
-            print(f"Latency        : {latency_us} μs")
-            print(f"================================================")
-            print(f"Event: {key}")
-            if isinstance(data, dict):
-                for field in ("mint", "sol_amount", "token_amount", "user", "name", "symbol"):
-                    if field in data:
-                        print(f"  {field}: {data[field]}")
+            queue_len = 0
+
+            print("\n================================================")
+            print(f"gRPC接收时间: {grpc_recv_us_opt} μs")
+            print(f"事件接收时间: {queue_recv_us} μs")
+            print(f"延迟时间: {latency_us} μs")
+            print(f"队列长度: {queue_len}")
+            print("================================================")
+            print(format_dex_event_json(ev))
             print()
 
-    def on_error(err):
-        print(f"Stream error: {err}", file=sys.stderr)
-
-    def on_end():
-        print("Stream ended")
-
-    tx_filter = TransactionFilter(
-        account_include=PROGRAM_IDS,
-        account_exclude=[],
-        account_required=[],
-        vote=False,
-        failed=False,
+    await client.subscribe_transactions(
+        tx_filter,
+        SubscribeCallbacks(
+            on_update=on_update,
+            on_error=lambda e: print(f"Stream error: {e}", file=sys.stderr),
+            on_end=lambda: None,
+        ),
     )
-    callbacks = SubscribeCallbacks(on_update=on_update, on_error=on_error, on_end=on_end)
 
-    sub = await client.subscribe_transactions(tx_filter, callbacks)
-    print("✅ gRPC client created successfully")
-    print("📋 Event Filter: Buy, Sell, BuyExactSolIn, Create")
-    print(f"✅ Subscribed (id={sub.id})")
-    print("🛑 Press Ctrl+C to stop...\n")
+    print("🛑 Press Ctrl+C to stop...")
 
     try:
         await asyncio.Event().wait()
-    except KeyboardInterrupt:
-        pass
     finally:
         await client.disconnect()
-        print("\n👋 Shutting down gracefully...")
+        print("👋 Shutting down gracefully...")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

@@ -4,9 +4,12 @@ import base58
 import base64
 import struct
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from .dex_parsers import DexEvent, dispatch_program_data, parse_trade_from_data
+
+if TYPE_CHECKING:
+    from .grpc_types import SubscribeUpdateTransactionInfo
 from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
 
 
@@ -76,14 +79,19 @@ def parse_log_optimized(
 
 
 def parse_log_unified(
-    log: str, signature: str, slot: int, block_time_us: Optional[int] = None
+    log: str,
+    signature: str,
+    slot: int,
+    block_time_us: Optional[int] = None,
+    *,
+    tx_index: int = 0,
 ) -> Optional[DexEvent]:
     grpc = int(time.time() * 1_000_000)
     return parse_log_optimized(
         log,
         signature,
         slot,
-        0,
+        tx_index,
         block_time_us,
         grpc,
         None,
@@ -93,21 +101,58 @@ def parse_log_unified(
 
 
 def parse_transaction_events(
-    logs: List[str], signature: str, slot: int, block_time_us: Optional[int] = None
+    logs: List[str],
+    signature: str,
+    slot: int,
+    block_time_us: Optional[int] = None,
+    *,
+    subscribe_tx_info: Optional["SubscribeUpdateTransactionInfo"] = None,
+    tx_index: Optional[int] = None,
 ) -> List[DexEvent]:
     """对齐 Rust `parse_transaction_events` - 解析完整交易并返回所有 DEX 事件"""
-    return parse_logs_only(logs, signature, slot, block_time_us)
+    return parse_logs_only(
+        logs,
+        signature,
+        slot,
+        block_time_us,
+        subscribe_tx_info=subscribe_tx_info,
+        tx_index=tx_index,
+    )
 
 
 def parse_logs_only(
-    logs: List[str], signature: str, slot: int, block_time_us: Optional[int] = None
+    logs: List[str],
+    signature: str,
+    slot: int,
+    block_time_us: Optional[int] = None,
+    *,
+    subscribe_tx_info: Optional["SubscribeUpdateTransactionInfo"] = None,
+    tx_index: Optional[int] = None,
 ) -> List[DexEvent]:
+    """解析日志中的 Program data 事件。
+
+    若传入 ``subscribe_tx_info`` 且含 ``transaction_raw`` / ``meta_raw``（Yellowstone 订阅），
+    会在解析后调用 :func:`grpc_instruction_parser.enrich_dex_events_with_subscribe_tx_info`
+    从指令账户补全 bonding_curve、creator_vault 等字段（与 Rust gRPC 路径一致）。
+
+    ``tx_index`` 为区块内交易序号（与 gRPC ``SubscribeUpdateTransactionInfo.index`` 一致）。
+    未显式传入且提供了 ``subscribe_tx_info`` 时，使用 ``subscribe_tx_info.index``。
+    """
+    resolved_tx_index = 0
+    if tx_index is not None:
+        resolved_tx_index = int(tx_index)
+    elif subscribe_tx_info is not None:
+        resolved_tx_index = int(getattr(subscribe_tx_info, "index", 0) or 0)
     out: List[DexEvent] = []
     for log in logs:
-        ev = parse_log_unified(log, signature, slot, block_time_us)
+        ev = parse_log_unified(log, signature, slot, block_time_us, tx_index=resolved_tx_index)
         if ev:
             out.append(ev)
     enrich_create_v2_observed_fee_recipient(out)
+    if subscribe_tx_info is not None:
+        from .grpc_instruction_parser import enrich_dex_events_with_subscribe_tx_info
+
+        enrich_dex_events_with_subscribe_tx_info(out, subscribe_tx_info)
     return out
 
 
@@ -117,9 +162,11 @@ def parse_transaction_events_streaming(
     slot: int,
     block_time_us: Optional[int],
     callback: Callable[[DexEvent], None],
+    *,
+    tx_index: int = 0,
 ) -> None:
     """对齐 Rust `parse_transaction_events_streaming`"""
-    parse_logs_streaming(logs, signature, slot, block_time_us, callback)
+    parse_logs_streaming(logs, signature, slot, block_time_us, callback, tx_index=tx_index)
 
 
 def parse_logs_streaming(
@@ -128,10 +175,12 @@ def parse_logs_streaming(
     slot: int,
     block_time_us: Optional[int],
     callback: Callable[[DexEvent], None],
+    *,
+    tx_index: int = 0,
 ) -> None:
     """对齐 Rust `parse_logs_streaming` - 流式解析，每解析出一个事件立即回调"""
     for log in logs:
-        ev = parse_log_unified(log, signature, slot, block_time_us)
+        ev = parse_log_unified(log, signature, slot, block_time_us, tx_index=tx_index)
         if ev:
             callback(ev)
 
@@ -149,9 +198,19 @@ def parse_transaction_with_listener(
     slot: int,
     block_time_us: Optional[int],
     listener: EventListener,
+    *,
+    subscribe_tx_info: Optional["SubscribeUpdateTransactionInfo"] = None,
+    tx_index: Optional[int] = None,
 ) -> None:
     """对齐 Rust `parse_transaction_with_listener`"""
-    events = parse_logs_only(logs, signature, slot, block_time_us)
+    events = parse_logs_only(
+        logs,
+        signature,
+        slot,
+        block_time_us,
+        subscribe_tx_info=subscribe_tx_info,
+        tx_index=tx_index,
+    )
     for ev in events:
         listener.on_dex_event(ev)
 

@@ -197,8 +197,10 @@ def all_event_types() -> List[EventType]:
 @dataclass
 class EventMetadata:
     """事件元数据"""
+
     signature: str = ""
     slot: int = 0
+    #: 区块内交易序号（Yellowstone ``SubscribeUpdateTransactionInfo.index`` / RPC ``transactionIndex``）
     tx_index: int = 0
     block_time_us: int = 0
     grpc_recv_us: int = 0
@@ -473,6 +475,38 @@ class Protocol(str, Enum):
     RAYDIUM_CLMM = "RaydiumClmm"
     RAYDIUM_AMM_V4 = "RaydiumAmmV4"
     METEORA_DAMM_V2 = "MeteoraDammV2"
+
+
+# 与 Rust ``grpc/program_ids::PROTOCOL_PROGRAM_IDS`` 一致
+_PROTOCOL_PROGRAM_IDS: Dict[Protocol, List[str]] = {
+    Protocol.PUMP_FUN: ["6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"],
+    Protocol.PUMP_SWAP: ["pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"],
+    Protocol.BONK: ["BSwp6bEBihVLdqJRKS58NaebUBSDNjN7MdpFwNaR6gn3"],
+    Protocol.RAYDIUM_CPMM: ["CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"],
+    Protocol.RAYDIUM_CLMM: ["CAMMCzo5YL8w4VFF8KVHrK22GGUQtcaMpgYqJPXBDvfE"],
+    Protocol.RAYDIUM_AMM_V4: ["675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"],
+    Protocol.METEORA_DAMM_V2: ["cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG"],
+}
+
+
+def program_ids_for_protocols(protocols: List[Protocol]) -> List[str]:
+    """对齐 Rust ``get_program_ids_for_protocols``。"""
+    out: List[str] = []
+    for p in protocols:
+        out.extend(_PROTOCOL_PROGRAM_IDS.get(p, []))
+    return sorted(set(out))
+
+
+def transaction_filter_for_protocols(protocols: List[Protocol]) -> TransactionFilter:
+    """对齐 Rust ``TransactionFilter::for_protocols``。"""
+    ids = program_ids_for_protocols(protocols)
+    return TransactionFilter(account_include=ids, account_exclude=[], account_required=[])
+
+
+def account_filter_for_protocols(protocols: List[Protocol]) -> AccountFilter:
+    """对齐 Rust ``AccountFilter::for_protocols``（owner = 程序 ID 列表）。"""
+    ids = program_ids_for_protocols(protocols)
+    return AccountFilter(account=[], owner=ids, filters=[])
 
 
 @dataclass

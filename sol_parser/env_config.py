@@ -76,8 +76,9 @@ def parse_grpc_credentials(
 ) -> Tuple[str, str]:
     """Resolve Yellowstone gRPC URL and x-token.
 
-    **Precedence (each field):** CLI flags > ``GRPC_URL`` / ``GRPC_TOKEN`` >
-    legacy ``GEYSER_ENDPOINT`` / ``GEYSER_API_TOKEN`` > *default_endpoint* (URL only).
+    **Precedence (each field):** CLI flags > ``GRPC_URL`` / ``GRPC_ENDPOINT`` /
+    ``GRPC_AUTH_TOKEN`` / ``GRPC_TOKEN`` > legacy ``GEYSER_*`` >
+    *default_endpoint* (URL only).
 
     Call :func:`load_dotenv_silent` first so a project-local ``.env`` is applied.
 
@@ -89,19 +90,21 @@ def parse_grpc_credentials(
     url = _first_nonempty(
         cli_url,
         os.environ.get("GRPC_URL"),
+        os.environ.get("GRPC_ENDPOINT"),
         os.environ.get("GEYSER_ENDPOINT"),
         default_endpoint,
     )
     token = _first_nonempty(
         cli_token,
+        os.environ.get("GRPC_AUTH_TOKEN"),
         os.environ.get("GRPC_TOKEN"),
         os.environ.get("GEYSER_API_TOKEN"),
     )
     if require_token and not token:
         print(
-            "Error: GRPC_TOKEN is required (x-token for the gRPC endpoint).\n"
-            "  Copy .env.example to .env in the package root and set GRPC_TOKEN, or:\n"
-            "  export GRPC_TOKEN=<your_token>\n"
+            "Error: GRPC_AUTH_TOKEN / GRPC_TOKEN is required (x-token for the gRPC endpoint).\n"
+            "  Copy .env.example to .env in the package root and set GRPC_AUTH_TOKEN or GRPC_TOKEN, or:\n"
+            "  export GRPC_AUTH_TOKEN=<your_token>\n"
             "  You can also pass: --grpc-token <token>  or  --token=<token>",
             file=sys.stderr,
         )
@@ -117,12 +120,22 @@ def require_grpc_env(argv: Optional[Sequence[str]] = None) -> Tuple[str, str]:
     load_dotenv_silent()
     argv = list(sys.argv[1:] if argv is None else argv)
     cli_url, cli_token = _parse_grpc_cli(argv)
-    url = _first_nonempty(cli_url, os.environ.get("GRPC_URL"), os.environ.get("GEYSER_ENDPOINT"))
-    token = _first_nonempty(cli_token, os.environ.get("GRPC_TOKEN"), os.environ.get("GEYSER_API_TOKEN"))
+    url = _first_nonempty(
+        cli_url,
+        os.environ.get("GRPC_URL"),
+        os.environ.get("GRPC_ENDPOINT"),
+        os.environ.get("GEYSER_ENDPOINT"),
+    )
+    token = _first_nonempty(
+        cli_token,
+        os.environ.get("GRPC_AUTH_TOKEN"),
+        os.environ.get("GRPC_TOKEN"),
+        os.environ.get("GEYSER_API_TOKEN"),
+    )
     if not url:
         print(
-            "Error: GRPC_URL is required.\n"
-            "  Copy .env.example to .env in the package root and set GRPC_URL (and GRPC_TOKEN), or:\n"
+            "Error: GRPC_URL / GRPC_ENDPOINT is required.\n"
+            "  Copy .env.example to .env in the package root and set GRPC_URL (and GRPC_AUTH_TOKEN), or:\n"
             "  export GRPC_URL=https://your-yellowstone-host:443\n"
             "  CLI: --grpc-url <url>  or  -g <url>",
             file=sys.stderr,
@@ -130,9 +143,9 @@ def require_grpc_env(argv: Optional[Sequence[str]] = None) -> Tuple[str, str]:
         sys.exit(1)
     if not token:
         print(
-            "Error: GRPC_TOKEN is required (x-token header for the gRPC endpoint).\n"
-            "  Copy .env.example to .env in the package root and set GRPC_TOKEN, or:\n"
-            "  export GRPC_TOKEN=<your_token>",
+            "Error: GRPC_AUTH_TOKEN / GRPC_TOKEN is required (x-token header for the gRPC endpoint).\n"
+            "  Copy .env.example to .env in the package root and set GRPC_AUTH_TOKEN, or:\n"
+            "  export GRPC_AUTH_TOKEN=<your_token>",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -175,7 +188,7 @@ def parse_optional_rpc_url(
                 return v
         if a.startswith("--rpc="):
             return a[6:].strip()
-    return _first_nonempty(os.environ.get("RPC_URL")) or default_rpc
+    return _first_nonempty(os.environ.get("RPC_URL"), os.environ.get("SOLANA_RPC_URL")) or default_rpc
 
 
 def _parse_sig_cli(argv: Sequence[str]) -> Optional[str]:

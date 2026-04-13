@@ -1,6 +1,6 @@
 """Solana DEX 日志解析 — 与本仓库 TS 包事件形态及解析约定对齐的子集与扩展入口。"""
 
-from .json_util import dex_event_json_dumps
+from .json_util import dex_event_json_dumps, dex_event_to_jsonable, format_dex_event_json
 from .parser import (
     EventListener,
     StreamingEventListener,
@@ -15,6 +15,7 @@ from .parser import (
     parse_transaction_with_streaming_listener,
     warmup_parser,
 )
+from .clock import now_micros
 from .grpc_types import (
     OrderMode,
     CommitmentLevel,
@@ -47,6 +48,9 @@ from .grpc_types import (
     event_type_filter_includes_meteora_damm_v2,
     event_type_filter_allows_instruction_parsing,
     all_event_types,
+    program_ids_for_protocols,
+    transaction_filter_for_protocols,
+    account_filter_for_protocols,
 )
 from .event_types import (
     # Base type
@@ -118,6 +122,8 @@ from .event_types import (
 )
 from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
 from .grpc_instruction_parser import (
+    apply_account_fill_to_events,
+    enrich_dex_events_with_subscribe_tx_info,
     parse_instructions_enhanced_from_parsed,
     parse_instructions_enhanced_from_subscribe_tx_info,
     merge_instruction_events,
@@ -146,9 +152,12 @@ from .rpc_parser import (
     RpcTransactionResponse,
     RpcTransactionMeta,
     RpcTransaction,
+    enrich_dex_events_from_rpc_get_transaction_result,
     parse_transaction_from_rpc,
     parse_rpc_transaction,
     convert_rpc_to_grpc,
+    rpc_get_transaction_result_dict_to_response,
+    rpc_response_to_solana_storage,
 )
 from .accounts import (
     AccountData,
@@ -179,6 +188,10 @@ from .instructions import (
 __all__ = [
     # Parser functions
     "dex_event_json_dumps",
+    "dex_event_to_jsonable",
+    "format_dex_event_json",
+    "apply_account_fill_to_events",
+    "enrich_dex_events_with_subscribe_tx_info",
     "parse_log_unified",
     "parse_log_optimized",
     "parse_log",
@@ -191,6 +204,7 @@ __all__ = [
     "EventListener",
     "StreamingEventListener",
     "warmup_parser",
+    "now_micros",
     # RPC parser
     "ParseError",
     "RpcClient",
@@ -200,6 +214,9 @@ __all__ = [
     "parse_transaction_from_rpc",
     "parse_rpc_transaction",
     "convert_rpc_to_grpc",
+    "enrich_dex_events_from_rpc_get_transaction_result",
+    "rpc_get_transaction_result_dict_to_response",
+    "rpc_response_to_solana_storage",
     # Accounts
     "AccountData",
     "parse_account_unified",
@@ -254,6 +271,9 @@ __all__ = [
     "event_type_filter_includes_meteora_damm_v2",
     "event_type_filter_allows_instruction_parsing",
     "all_event_types",
+    "program_ids_for_protocols",
+    "transaction_filter_for_protocols",
+    "account_filter_for_protocols",
     "parse_commitment_level",
     # Env / CLI (aligned with sol-parser-sdk-nodejs)
     "load_dotenv_silent",

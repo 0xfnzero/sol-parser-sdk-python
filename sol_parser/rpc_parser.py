@@ -102,10 +102,13 @@ class RpcTransaction:
 @dataclass
 class RpcTransactionResponse:
     """RPC 交易响应"""
+
     slot: int
     block_time: Optional[int]
     meta: Optional[RpcTransactionMeta]
     transaction: Optional[RpcTransaction]
+    #: 该笔交易在区块中的序号（``getTransaction`` 的 ``transactionIndex``；单交易拉取时可能为 0）
+    transaction_index: int = 0
 
 
 class RpcClient:
@@ -182,6 +185,7 @@ def parse_rpc_transaction(
 
     slot = tx.slot
     block_time_us = tx.block_time * 1_000_000 if tx.block_time else None
+    block_tx_index = int(getattr(tx, "transaction_index", 0) or 0)
 
     events: List[DexEvent] = []
 
@@ -192,7 +196,7 @@ def parse_rpc_transaction(
             msg.account_keys,
             signature,
             slot,
-            i,
+            block_tx_index,
             block_time_us,
             grpc_recv_us,
             filter,
@@ -208,7 +212,7 @@ def parse_rpc_transaction(
                 msg.account_keys,
                 signature,
                 slot,
-                group.index,
+                block_tx_index,
                 block_time_us,
                 grpc_recv_us,
                 filter,
@@ -227,7 +231,7 @@ def parse_rpc_transaction(
             log,
             signature,
             slot,
-            0,
+            block_tx_index,
             block_time_us,
             grpc_recv_us,
             filter,
@@ -240,6 +244,13 @@ def parse_rpc_transaction(
             events.append(ev)
 
     enrich_create_v2_observed_fee_recipient(events)
+
+    tx_pb, meta_pb = rpc_response_to_solana_storage(tx)
+    if tx_pb is not None and meta_pb is not None:
+        from .grpc_instruction_parser import apply_account_fill_to_events
+
+        apply_account_fill_to_events(events, tx_pb, meta_pb)
+
     return events, None
 
 
@@ -368,4 +379,268 @@ def convert_rpc_to_grpc(
 
     return grpc_meta, grpc_tx, None
 
+
+def _ix_data_from_rpc(ix: dict) -> bytes:
+    raw = ix.get("data")
+    if raw is None or raw == "":
+        return b""
+    if isinstance(raw, str):
+        try:
+            return base58.b58decode(raw)
+        except Exception:
+            return b""
+    return b""
+
+
+def _account_keys_from_message(msg: dict) -> List[str]:
+    keys = msg.get("accountKeys") or msg.get("account_keys") or []
+    out: List[str] = []
+    for k in keys:
+        if isinstance(k, str):
+            out.append(k)
+        elif isinstance(k, dict):
+            pk = k.get("pubkey") or k.get("pubKey")
+            if pk:
+                out.append(str(pk))
+    return out
+
+
+def _parse_rpc_compiled_ix(ix: dict, account_keys: List[str]) -> RpcCompiledInstruction:
+    if "programIdIndex" in ix:
+        pidx = int(ix["programIdIndex"])
+    elif "programId" in ix:
+        pid = ix["programId"]
+        try:
+            pidx = account_keys.index(pid)
+        except ValueError:
+            pidx = 0
+    else:
+        pidx = 0
+    accounts = ix.get("accounts") or []
+    if isinstance(accounts, str):
+        try:
+            accounts = list(base58.b58decode(accounts))
+        except Exception:
+            accounts = []
+    elif not isinstance(accounts, list):
+        accounts = []
+    acc_list = [int(x) for x in accounts]
+    return RpcCompiledInstruction(
+        program_id_index=pidx,
+        accounts=acc_list,
+        data=_ix_data_from_rpc(ix),
+    )
+
+
+def rpc_get_transaction_result_dict_to_response(
+    result: Optional[dict],
+) -> Optional[RpcTransactionResponse]:
+    """将 ``getTransaction`` 的 JSON ``result`` 转为 :class:`RpcTransactionResponse`。
+
+    支持 ``encoding: json`` / ``jsonParsed`` 下的 ``transaction`` 对象；若为仅 ``base64`` 数组则返回 ``None``（需另行解码）。
+    """
+    if not result or not isinstance(result, dict):
+        return None
+    tfield = result.get("transaction")
+    if tfield is None:
+        return None
+    if isinstance(tfield, list):
+        return None
+    if not isinstance(tfield, dict):
+        return None
+
+    slot = int(result.get("slot", 0))
+    block_time = result.get("blockTime")
+    if block_time is not None:
+        block_time = int(block_time)
+    tx_idx_raw = result.get("transactionIndex")
+    if tx_idx_raw is None:
+        tx_idx_raw = result.get("transaction_index")
+    transaction_index = int(tx_idx_raw) if tx_idx_raw is not None else 0
+
+    tx_body = tfield
+    sigs = tx_body.get("signatures") or []
+    if not isinstance(sigs, list):
+        sigs = []
+    msg_dict = tx_body.get("message")
+    if not isinstance(msg_dict, dict):
+        return None
+
+    account_keys = _account_keys_from_message(msg_dict)
+    instructions: List[RpcCompiledInstruction] = []
+    for ix in msg_dict.get("instructions") or []:
+        if not isinstance(ix, dict):
+            continue
+        if "programIdIndex" not in ix and "programId" not in ix:
+            continue
+        instructions.append(_parse_rpc_compiled_ix(ix, account_keys))
+
+    header = None
+    h = msg_dict.get("header")
+    if isinstance(h, dict):
+        header = RpcMessageHeader(
+            num_required_signatures=int(h.get("numRequiredSignatures", 0)),
+            num_readonly_signed_accounts=int(h.get("numReadonlySignedAccounts", 0)),
+            num_readonly_unsigned_accounts=int(h.get("numReadonlyUnsignedAccounts", 0)),
+        )
+
+    lookups: List[RpcMessageAddressTableLookup] = []
+    for lu in msg_dict.get("addressTableLookups") or []:
+        if not isinstance(lu, dict):
+            continue
+        wi = lu.get("writableIndexes") or lu.get("writable_indexes") or []
+        ri = lu.get("readonlyIndexes") or lu.get("readonly_indexes") or []
+        ak = lu.get("accountKey") or lu.get("account_key") or ""
+        lookups.append(
+            RpcMessageAddressTableLookup(
+                account_key=str(ak),
+                writable_indexes=[int(x) for x in wi],
+                readonly_indexes=[int(x) for x in ri],
+            )
+        )
+
+    recent = msg_dict.get("recentBlockhash") or msg_dict.get("recent_blockhash") or ""
+    message = RpcMessage(
+        account_keys=account_keys,
+        header=header,
+        recent_blockhash=str(recent),
+        instructions=instructions,
+        address_table_lookups=lookups,
+    )
+
+    rpc_tx = RpcTransaction(signatures=[str(s) for s in sigs], message=message)
+
+    meta_dict = result.get("meta")
+    if meta_dict is None:
+        meta = RpcTransactionMeta(
+            fee=0,
+            pre_balances=[],
+            post_balances=[],
+            log_messages=[],
+            inner_instructions=[],
+            pre_token_balances=[],
+            post_token_balances=[],
+            loaded_addresses=None,
+            compute_units_consumed=None,
+        )
+    else:
+        inner_groups: List[RpcInnerInstructionGroup] = []
+        for g in meta_dict.get("innerInstructions") or meta_dict.get("inner_instructions") or []:
+            if not isinstance(g, dict):
+                continue
+            ixs: List[RpcCompiledInstruction] = []
+            for ix in g.get("instructions") or []:
+                if not isinstance(ix, dict):
+                    continue
+                ixs.append(_parse_rpc_compiled_ix(ix, account_keys))
+            inner_groups.append(
+                RpcInnerInstructionGroup(index=int(g.get("index", 0)), instructions=ixs)
+            )
+        loaded = None
+        la = meta_dict.get("loadedAddresses") or meta_dict.get("loaded_addresses")
+        if isinstance(la, dict):
+            loaded = RpcLoadedAddresses(
+                writable=[str(x) for x in la.get("writable", [])],
+                readonly=[str(x) for x in la.get("readonly", [])],
+            )
+        logs = meta_dict.get("logMessages") or meta_dict.get("log_messages") or []
+        if not isinstance(logs, list):
+            logs = []
+        meta = RpcTransactionMeta(
+            fee=int(meta_dict.get("fee", 0)),
+            pre_balances=[int(x) for x in meta_dict.get("preBalances") or meta_dict.get("pre_balances") or []],
+            post_balances=[int(x) for x in meta_dict.get("postBalances") or meta_dict.get("post_balances") or []],
+            log_messages=[str(x) for x in logs],
+            inner_instructions=inner_groups,
+            pre_token_balances=[],
+            post_token_balances=[],
+            loaded_addresses=loaded,
+            compute_units_consumed=meta_dict.get("computeUnitsConsumed"),
+        )
+
+    return RpcTransactionResponse(
+        slot=slot,
+        block_time=block_time,
+        meta=meta,
+        transaction=rpc_tx,
+        transaction_index=transaction_index,
+    )
+
+
+def rpc_response_to_solana_storage(
+    rpc_tx: RpcTransactionResponse,
+) -> Tuple[Optional[Any], Optional[Any]]:
+    """将 :class:`RpcTransactionResponse` 转为 ``solana_storage_pb2`` 的 Transaction + TransactionStatusMeta。"""
+    try:
+        from . import solana_storage_pb2 as sol_pb
+    except ImportError:
+        return None, None
+    if rpc_tx.transaction is None or rpc_tx.transaction.message is None:
+        return None, None
+    if rpc_tx.meta is None:
+        return None, None
+
+    tx = sol_pb.Transaction()
+    for sig in rpc_tx.transaction.signatures:
+        tx.signatures.append(base58.b58decode(sig))
+
+    msg = rpc_tx.transaction.message
+    out_msg = tx.message
+    for k in msg.account_keys:
+        out_msg.account_keys.append(base58.b58decode(k))
+    if msg.recent_blockhash:
+        out_msg.recent_blockhash = base58.b58decode(msg.recent_blockhash)
+    for ix in msg.instructions:
+        c = out_msg.instructions.add()
+        c.program_id_index = ix.program_id_index
+        acc = ix.accounts
+        c.accounts = bytes(acc) if not isinstance(acc, bytes) else acc
+        c.data = ix.data
+    if msg.header:
+        out_msg.header.num_required_signatures = msg.header.num_required_signatures
+        out_msg.header.num_readonly_signed_accounts = msg.header.num_readonly_signed_accounts
+        out_msg.header.num_readonly_unsigned_accounts = msg.header.num_readonly_unsigned_accounts
+    for lu in msg.address_table_lookups:
+        l = out_msg.address_table_lookups.add()
+        l.account_key = base58.b58decode(lu.account_key)
+        l.writable_indexes = bytes(lu.writable_indexes)
+        l.readonly_indexes = bytes(lu.readonly_indexes)
+
+    m = rpc_tx.meta
+    meta = sol_pb.TransactionStatusMeta()
+    meta.fee = m.fee
+    meta.pre_balances.extend(m.pre_balances)
+    meta.post_balances.extend(m.post_balances)
+    meta.log_messages.extend(m.log_messages)
+    for group in m.inner_instructions:
+        g = meta.inner_instructions.add()
+        g.index = group.index
+        for ix in group.instructions:
+            ii = g.instructions.add()
+            ii.program_id_index = ix.program_id_index
+            acc = ix.accounts
+            ii.accounts = bytes(acc) if not isinstance(acc, bytes) else acc
+            ii.data = ix.data
+    if m.loaded_addresses:
+        for w in m.loaded_addresses.writable:
+            meta.loaded_writable_addresses.append(base58.b58decode(w))
+        for r in m.loaded_addresses.readonly:
+            meta.loaded_readonly_addresses.append(base58.b58decode(r))
+    return tx, meta
+
+
+def enrich_dex_events_from_rpc_get_transaction_result(
+    events: List[DexEvent],
+    result: Optional[dict],
+) -> None:
+    """对已有事件列表用 ``getTransaction`` 的 JSON ``result`` 做与 gRPC 相同的账户补全。"""
+    resp = rpc_get_transaction_result_dict_to_response(result)
+    if resp is None:
+        return
+    tx_pb, meta_pb = rpc_response_to_solana_storage(resp)
+    if tx_pb is None or meta_pb is None:
+        return
+    from .grpc_instruction_parser import apply_account_fill_to_events
+
+    apply_account_fill_to_events(events, tx_pb, meta_pb)
 

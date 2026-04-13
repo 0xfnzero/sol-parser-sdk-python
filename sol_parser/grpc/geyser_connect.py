@@ -19,17 +19,19 @@ async def connect_yellowstone_geyser(endpoint: str, config: Optional[GeyserConne
     import grpc
     from grpc import aio
 
+    from .grpc_client import normalize_grpc_endpoint
+
     cfg = config or GeyserConnectConfig()
     opts = [
         ("grpc.max_receive_message_length", cfg.max_decoding_message_size),
         ("grpc.max_send_message_length", cfg.max_decoding_message_size),
     ]
-    if endpoint.startswith("https://"):
+    target, use_tls = normalize_grpc_endpoint(endpoint, True)
+    if use_tls:
         creds = grpc.ssl_channel_credentials()
-        channel = aio.secure_channel(endpoint.replace("https://", "", 1), creds, options=opts)
+        channel = aio.secure_channel(target, creds, options=opts)
     else:
-        ep = endpoint.replace("http://", "", 1) if "://" in endpoint else endpoint
-        channel = aio.insecure_channel(ep, options=opts)
+        channel = aio.insecure_channel(target, options=opts)
     try:
         from .. import geyser_pb2_grpc
     except ImportError as e:

@@ -7,6 +7,9 @@ Fetches a specific transaction from Solana RPC and parses DEX events.
 Usage:
   TX_SIGNATURE=<sig> python examples/parse_tx_by_signature.py
   RPC_URL=https://api.mainnet-beta.solana.com TX_SIGNATURE=<sig> python examples/parse_tx_by_signature.py
+  python examples/parse_tx_by_signature.py --rpc=https://api.mainnet-beta.solana.com --sig=<sig>
+
+``.env`` (package root): ``RPC_URL``, ``TX_SIGNATURE``. CLI overrides env.
 """
 
 import json
@@ -17,12 +20,12 @@ import urllib.request
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from sol_parser import parse_logs_only
+from sol_parser.env_config import parse_rpc_and_tx_signature
 
 DEFAULT_SIGNATURE = "3zsihbygW7hoKGtduAyDDFzp4E1eis8gaBzEzzNKr8ma39baffpFcphok9wHFgR3EauDe9vYYsVf4Puh5pZ6UJiS"
-RPC_URL = os.environ.get("RPC_URL", "https://api.mainnet-beta.solana.com")
 
 
-def fetch_transaction(signature: str) -> dict | None:
+def fetch_transaction(signature: str, rpc_url: str) -> dict | None:
     payload = json.dumps({
         "jsonrpc": "2.0",
         "id": 1,
@@ -33,7 +36,7 @@ def fetch_transaction(signature: str) -> dict | None:
         ],
     }).encode()
     req = urllib.request.Request(
-        RPC_URL,
+        rpc_url,
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -46,15 +49,18 @@ def fetch_transaction(signature: str) -> dict | None:
 
 
 def main():
-    sig = os.environ.get("TX_SIGNATURE", DEFAULT_SIGNATURE)
+    rpc_url, sig = parse_rpc_and_tx_signature(
+        sys.argv[1:],
+        default_signature=DEFAULT_SIGNATURE,
+    )
 
     print("=== Transaction Parser ===\n")
     print(f"Signature: {sig}")
-    print(f"RPC URL  : {RPC_URL}\n")
+    print(f"RPC URL  : {rpc_url}\n")
 
     print("Fetching transaction from RPC...")
     try:
-        tx = fetch_transaction(sig)
+        tx = fetch_transaction(sig, rpc_url)
     except Exception as e:
         print(f"Failed to fetch: {e}", file=sys.stderr)
         sys.exit(1)

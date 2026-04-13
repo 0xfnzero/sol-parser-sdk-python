@@ -8,7 +8,7 @@ Demonstrates how to:
 - Display trade details with latency metrics
 
 Run: python examples/pumpfun_trade_filter.py
-Or:  GEYSER_ENDPOINT=xxx GEYSER_API_TOKEN=yyy python examples/pumpfun_trade_filter.py
+Config: ``GRPC_URL`` / ``GRPC_TOKEN``, ``.env``, or ``--grpc-url`` / ``--grpc-token`` (see pumpfun_quick_test).
 """
 
 import asyncio
@@ -19,11 +19,9 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from sol_parser import parse_logs_only
+from sol_parser.env_config import parse_grpc_credentials
 from sol_parser.grpc_client import YellowstoneGrpc
 from sol_parser.grpc_types import TransactionFilter, SubscribeCallbacks
-
-ENDPOINT = os.environ.get("GEYSER_ENDPOINT", "solana-yellowstone-grpc.publicnode.com:443")
-TOKEN = os.environ.get("GEYSER_API_TOKEN", "")
 
 PROGRAM_IDS = ["6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"]  # PumpFun
 
@@ -41,14 +39,18 @@ def now_us() -> int:
 async def main():
     global event_count, buy_count, sell_count, buy_exact_count, create_count
 
+    endpoint, token = parse_grpc_credentials(
+        sys.argv[1:],
+        default_endpoint="solana-yellowstone-grpc.publicnode.com:443",
+    )
     print("🚀 PumpFun Trade Event Filter Example")
     print("======================================\n")
-    print(f"📡 Endpoint: {ENDPOINT}")
+    print(f"📡 Endpoint: {endpoint}")
     print(f"🎯 Program: {PROGRAM_IDS[0]}\n")
 
-    client = YellowstoneGrpc(ENDPOINT)
-    if TOKEN:
-        client.set_x_token(TOKEN)
+    client = YellowstoneGrpc(endpoint)
+    if token:
+        client.set_x_token(token)
 
     await client.connect()
 

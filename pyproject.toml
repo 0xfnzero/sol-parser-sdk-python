@@ -1,9 +1,23 @@
 [project]
 name = "sol-parser-sdk-python"
-version = "0.3.0"
-description = "Solana DEX program log parsing (Python, aligned with this repo’s TS/Go)"
+version = "0.3.1"
+description = "Solana DEX program log parsing (pure Python, API aligned with sol-parser-sdk)"
 requires-python = ">=3.10"
-dependencies = ["base58>=2.0", "grpcio>=1.64.0", "grpcio-tools>=1.64.0"]
+dependencies = [
+    "base58>=2.0",
+    "grpcio>=1.64.0",
+    "grpcio-tools>=1.64.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+shredstream = [
+    "solders>=0.21.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-benchmark>=4.0",
+]
 
 [project.scripts]
 verify-program-log-discriminators = "sol_parser.verify_discriminators:main"
@@ -11,9 +25,8 @@ sol-parser-check-migration = "sol_parser.check_migration:main"
 sol-parser-verify-u128 = "sol_parser.u128_parity:main"
 
 [build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["sol_parser*"]
+[tool.hatch.build.targets.wheel]
+packages = ["sol_parser"]

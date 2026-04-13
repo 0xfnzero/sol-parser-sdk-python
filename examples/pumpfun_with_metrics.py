@@ -7,7 +7,7 @@ Demonstrates how to:
 - Measure gRPC recv time, queue recv time, and end-to-end latency per event
 - Display periodic 10s summaries (total count, rate, avg/min/max latency)
 
-Run: GEYSER_API_TOKEN=your_token python examples/pumpfun_with_metrics.py
+Run: python examples/pumpfun_with_metrics.py  (``GRPC_URL`` / ``GRPC_TOKEN`` or ``.env``)
 """
 
 import asyncio
@@ -18,11 +18,9 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from sol_parser import parse_logs_only
+from sol_parser.env_config import parse_grpc_credentials
 from sol_parser.grpc_client import YellowstoneGrpc
 from sol_parser.grpc_types import TransactionFilter, SubscribeCallbacks
-
-ENDPOINT = os.environ.get("GEYSER_ENDPOINT", "solana-yellowstone-grpc.publicnode.com:443")
-TOKEN = os.environ.get("GEYSER_API_TOKEN", "")
 
 PROGRAM_IDS = ["6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"]  # PumpFun
 
@@ -61,13 +59,17 @@ async def stats_reporter():
 async def main():
     global event_count, total_latency, min_latency, max_latency
 
+    endpoint, token = parse_grpc_credentials(
+        sys.argv[1:],
+        default_endpoint="solana-yellowstone-grpc.publicnode.com:443",
+    )
     print("Starting Sol Parser SDK Example with Metrics...")
     print("🚀 Subscribing to Yellowstone gRPC events...")
-    print(f"📡 Endpoint: {ENDPOINT}\n")
+    print(f"📡 Endpoint: {endpoint}\n")
 
-    client = YellowstoneGrpc(ENDPOINT)
-    if TOKEN:
-        client.set_x_token(TOKEN)
+    client = YellowstoneGrpc(endpoint)
+    if token:
+        client.set_x_token(token)
     await client.connect()
 
     asyncio.create_task(stats_reporter())

@@ -20,8 +20,13 @@ from .grpc_types import (
     CommitmentLevel,
     SlotStatus,
     EventType,
+    EventMetadata,
     ClientConfig,
     TransactionFilter,
+    AccountFilter,
+    Protocol,
+    SlotFilter,
+    account_filter_memcmp,
     EventTypeFilter,
     IncludeOnlyFilter,
     ExcludeFilter,
@@ -49,6 +54,7 @@ from .event_types import (
     # PumpFun events
     PumpFunTradeEvent,
     PumpFunCreateEvent,
+    PumpFunCreateV2TokenEvent,
     PumpFunMigrateEvent,
     # PumpSwap events
     PumpSwapBuyEvent,
@@ -62,6 +68,12 @@ from .event_types import (
     RaydiumClmmDecreaseLiquidityEvent,
     RaydiumClmmCreatePoolEvent,
     RaydiumClmmCollectFeeEvent,
+    # Raydium AMM V4 (legacy)
+    RaydiumAmmV4SwapEvent,
+    RaydiumAmmV4DepositEvent,
+    RaydiumAmmV4WithdrawEvent,
+    RaydiumAmmV4WithdrawPnlEvent,
+    RaydiumAmmV4Initialize2Event,
     # Raydium CPMM events
     RaydiumCpmmSwapEvent,
     RaydiumCpmmDepositEvent,
@@ -82,6 +94,7 @@ from .event_types import (
     MeteoraDlmmClosePositionEvent,
     MeteoraDlmmClaimFeeEvent,
     # Meteora Pools events
+    MeteoraPoolsSetPoolFeesEvent,
     MeteoraPoolsSwapEvent,
     MeteoraPoolsAddLiquidityEvent,
     MeteoraPoolsRemoveLiquidityEvent,
@@ -101,6 +114,26 @@ from .event_types import (
     # Union type and helper
     TypedDexEvent,
     to_typed_event,
+    legacy_dict_to_dex_event,
+)
+from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
+from .grpc_instruction_parser import (
+    parse_instructions_enhanced_from_parsed,
+    parse_instructions_enhanced_from_subscribe_tx_info,
+    merge_instruction_events,
+    detect_pumpfun_create_from_logs,
+)
+from .merger import merge_dex_events
+from .account_dispatcher import fill_accounts_with_owned_keys, fill_data
+from .entries_decode import decode_entries_bincode_flat
+from .shredstream_client import ShredStreamClient, ShredStreamConfig
+from .env_config import (
+    load_dotenv_silent,
+    parse_grpc_credentials,
+    parse_optional_rpc_url,
+    parse_rpc_and_tx_signature,
+    parse_shredstream_url,
+    require_grpc_env,
 )
 from .grpc_client import parse_commitment_level
 from .grpc_client import (
@@ -128,6 +161,13 @@ from .accounts import (
     is_global_config_account,
     is_pool_account,
     has_discriminator,
+    rpc_resolve_user_wallet_pubkey,
+    user_wallet_pubkey_for_onchain_account,
+)
+from .grpc.subscribe_builder import (
+    build_subscribe_request,
+    build_subscribe_request_with_commitment,
+    build_subscribe_transaction_filters_named,
 )
 from .instructions import (
     parse_instruction_unified,
@@ -171,6 +211,11 @@ __all__ = [
     "is_global_config_account",
     "is_pool_account",
     "has_discriminator",
+    "rpc_resolve_user_wallet_pubkey",
+    "user_wallet_pubkey_for_onchain_account",
+    "build_subscribe_request",
+    "build_subscribe_request_with_commitment",
+    "build_subscribe_transaction_filters_named",
     # Instructions
     "parse_instruction_unified",
     "parse_pumpfun_instruction",
@@ -181,8 +226,13 @@ __all__ = [
     "CommitmentLevel",
     "SlotStatus",
     "EventType",
+    "EventMetadata",
     "ClientConfig",
     "TransactionFilter",
+    "AccountFilter",
+    "Protocol",
+    "SlotFilter",
+    "account_filter_memcmp",
     "EventTypeFilter",
     "IncludeOnlyFilter",
     "ExcludeFilter",
@@ -205,6 +255,13 @@ __all__ = [
     "event_type_filter_allows_instruction_parsing",
     "all_event_types",
     "parse_commitment_level",
+    # Env / CLI (aligned with sol-parser-sdk-nodejs)
+    "load_dotenv_silent",
+    "parse_grpc_credentials",
+    "parse_optional_rpc_url",
+    "parse_rpc_and_tx_signature",
+    "parse_shredstream_url",
+    "require_grpc_env",
     # gRPC client
     "YellowstoneGrpc",
     "Subscription",
@@ -212,6 +269,7 @@ __all__ = [
     "DexEventBase",
     "PumpFunTradeEvent",
     "PumpFunCreateEvent",
+    "PumpFunCreateV2TokenEvent",
     "PumpFunMigrateEvent",
     "PumpSwapBuyEvent",
     "PumpSwapSellEvent",
@@ -223,6 +281,11 @@ __all__ = [
     "RaydiumClmmDecreaseLiquidityEvent",
     "RaydiumClmmCreatePoolEvent",
     "RaydiumClmmCollectFeeEvent",
+    "RaydiumAmmV4SwapEvent",
+    "RaydiumAmmV4DepositEvent",
+    "RaydiumAmmV4WithdrawEvent",
+    "RaydiumAmmV4WithdrawPnlEvent",
+    "RaydiumAmmV4Initialize2Event",
     "RaydiumCpmmSwapEvent",
     "RaydiumCpmmDepositEvent",
     "RaydiumCpmmWithdrawEvent",
@@ -239,6 +302,7 @@ __all__ = [
     "MeteoraDlmmCreatePositionEvent",
     "MeteoraDlmmClosePositionEvent",
     "MeteoraDlmmClaimFeeEvent",
+    "MeteoraPoolsSetPoolFeesEvent",
     "MeteoraPoolsSwapEvent",
     "MeteoraPoolsAddLiquidityEvent",
     "MeteoraPoolsRemoveLiquidityEvent",
@@ -255,4 +319,16 @@ __all__ = [
     "BonkMigrateAmmEvent",
     "TypedDexEvent",
     "to_typed_event",
+    "legacy_dict_to_dex_event",
+    "enrich_create_v2_observed_fee_recipient",
+    "parse_instructions_enhanced_from_parsed",
+    "parse_instructions_enhanced_from_subscribe_tx_info",
+    "merge_instruction_events",
+    "merge_dex_events",
+    "detect_pumpfun_create_from_logs",
+    "fill_accounts_with_owned_keys",
+    "fill_data",
+    "decode_entries_bincode_flat",
+    "ShredStreamClient",
+    "ShredStreamConfig",
 ]

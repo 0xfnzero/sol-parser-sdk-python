@@ -9,7 +9,9 @@ from dataclasses import dataclass
 import base58
 
 from .dex_parsers import DexEvent, dispatch_program_data, parse_trade_from_data
-from .grpc_types import EventTypeFilter, EventType
+from .grpc_types import EventTypeFilter, EventType, IncludeOnlyFilter
+from .instructions import parse_instruction_unified
+from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
 
 
 class ParseError(Exception):
@@ -24,7 +26,7 @@ class ParseError(Exception):
 class RpcCompiledInstruction:
     """编译指令"""
     program_id_index: int
-    accounts: List[int]
+    accounts: Union[List[int], bytes]
     data: bytes
 
 
@@ -233,11 +235,11 @@ def parse_rpc_transaction(
             recent_blockhash,
         )
         if ev:
-            # 检查是否是 PumpFun Create 事件
-            if ev.get("PumpFunCreate") or ev.get("PumpFunCreateV2"):
+            if ev.type in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
                 is_created_buy = True
             events.append(ev)
 
+    enrich_create_v2_observed_fee_recipient(events)
     return events, None
 
 
@@ -264,127 +266,15 @@ def _parse_rpc_instruction(
 
     # 构建账户列表
     accounts = []
-    for acc_idx in ix.accounts:
+    acc_iter = ix.accounts if isinstance(ix.accounts, (list, tuple)) else list(ix.accounts)
+    for acc_idx in acc_iter:
         if acc_idx < len(account_keys):
             accounts.append(account_keys[acc_idx])
 
-    # 根据程序 ID 路由到相应的解析器
-    if program_id == PUMPFUN_PROGRAM_ID:
-        if filter and not _filter_includes_pumpfun(filter):
-            return None
-        return _parse_pumpfun_instruction(data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us)
-
-    elif program_id == PUMPSWAP_PROGRAM_ID:
-        if filter and not _filter_includes_pumpswap(filter):
-            return None
-        return _parse_pumpswap_instruction(data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us)
-
-    elif program_id == METEORA_DAMM_V2_PROGRAM_ID:
-        if filter and not _filter_includes_meteora_damm_v2(filter):
-            return None
-        return _parse_meteora_damm_instruction(data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us)
-
-    return None
-
-
-def _filter_includes_pumpfun(filter: EventTypeFilter) -> bool:
-    """检查过滤器是否包含 PumpFun 相关类型"""
-    pumpfun_types = [
-        EventType.PUMP_FUN_TRADE,
-        EventType.PUMP_FUN_BUY,
-        EventType.PUMP_FUN_SELL,
-        EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
-        EventType.PUMP_FUN_CREATE,
-        EventType.PUMP_FUN_CREATE_V2,
-        EventType.PUMP_FUN_COMPLETE,
-        EventType.PUMP_FUN_MIGRATE,
-    ]
-    for t in pumpfun_types:
-        if filter.should_include(t):
-            return True
-    return False
-
-
-def _filter_includes_pumpswap(filter: EventTypeFilter) -> bool:
-    """检查过滤器是否包含 PumpSwap 相关类型"""
-    pumpswap_types = [
-        EventType.PUMP_SWAP_BUY,
-        EventType.PUMP_SWAP_SELL,
-        EventType.PUMP_SWAP_CREATE_POOL,
-        EventType.PUMP_SWAP_LIQUIDITY_ADDED,
-        EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
-    ]
-    for t in pumpswap_types:
-        if filter.should_include(t):
-            return True
-    return False
-
-
-def _filter_includes_meteora_damm_v2(filter: EventTypeFilter) -> bool:
-    """检查过滤器是否包含 Meteora DAMM V2 相关类型"""
-    meteora_types = [
-        EventType.METEORA_DAMM_V2_SWAP,
-        EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
-        EventType.METEORA_DAMM_V2_CREATE_POSITION,
-        EventType.METEORA_DAMM_V2_CLOSE_POSITION,
-        EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
-        EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
-    ]
-    for t in meteora_types:
-        if filter.should_include(t):
-            return True
-    return False
-
-
-def _parse_pumpfun_instruction(
-    data: bytes,
-    accounts: List[str],
-    signature: str,
-    slot: int,
-    tx_index: int,
-    block_time_us: Optional[int],
-    grpc_recv_us: int,
-) -> Optional[DexEvent]:
-    """解析 PumpFun 指令"""
-    # 解析 discriminator (前 8 字节)
-    if len(data) < 8:
-        return None
-
-    # 这里需要根据具体的指令格式解析
-    # 暂时返回 None，需要实现具体的解析逻辑
-    return None
-
-
-def _parse_pumpswap_instruction(
-    data: bytes,
-    accounts: List[str],
-    signature: str,
-    slot: int,
-    tx_index: int,
-    block_time_us: Optional[int],
-    grpc_recv_us: int,
-) -> Optional[DexEvent]:
-    """解析 PumpSwap 指令"""
-    if len(data) < 8:
-        return None
-
-    return None
-
-
-def _parse_meteora_damm_instruction(
-    data: bytes,
-    accounts: List[str],
-    signature: str,
-    slot: int,
-    tx_index: int,
-    block_time_us: Optional[int],
-    grpc_recv_us: int,
-) -> Optional[DexEvent]:
-    """解析 Meteora DAMM 指令"""
-    if len(data) < 8:
-        return None
-
-    return None
+    f: EventTypeFilter = filter if filter is not None else IncludeOnlyFilter([])
+    return parse_instruction_unified(
+        data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us, f, program_id
+    )
 
 
 def convert_rpc_to_grpc(
@@ -479,7 +369,3 @@ def convert_rpc_to_grpc(
     return grpc_meta, grpc_tx, None
 
 
-# 程序 ID 常量
-PUMPFUN_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
-PUMPSWAP_PROGRAM_ID = "pAMMBay6oceH9fJKBRdGP4LmT4saRGfEE7xmrCaGWpZ"
-METEORA_DAMM_V2_PROGRAM_ID = "dammbaKJpFxX3onKJ23VvQeyn8r8zPqowyyPAPKFqG"

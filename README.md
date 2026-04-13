@@ -32,372 +32,229 @@
 
 ---
 
-## 📦 SDK Versions
+## Other language SDKs
 
-This SDK is available in multiple languages:
-
-| Language | Repository | Description |
-|----------|------------|-------------|
-| **Rust** | [sol-parser-sdk](https://github.com/0xfnzero/sol-parser-sdk) | Ultra-low latency with SIMD optimization |
-| **Node.js** | [sol-parser-sdk-nodejs](https://github.com/0xfnzero/sol-parser-sdk-nodejs) | TypeScript/JavaScript for Node.js |
-| **Python** | [sol-parser-sdk-python](https://github.com/0xfnzero/sol-parser-sdk-python) | Async/await native support |
-| **Go** | [sol-parser-sdk-golang](https://github.com/0xfnzero/sol-parser-sdk-golang) | Concurrent-safe with goroutine support |
+| Language | Repository |
+|----------|------------|
+| Rust | [sol-parser-sdk](https://github.com/0xfnzero/sol-parser-sdk) |
+| Node.js | [sol-parser-sdk-nodejs](https://github.com/0xfnzero/sol-parser-sdk-nodejs) |
+| Python | [sol-parser-sdk-python](https://github.com/0xfnzero/sol-parser-sdk-python) |
+| Go | [sol-parser-sdk-golang](https://github.com/0xfnzero/sol-parser-sdk-golang) |
 
 ---
 
-## 📊 Performance Highlights
+## How to use
 
-### ⚡ Real-Time Parsing
-- **Sub-millisecond** log-based event parsing
-- **gRPC streaming** with Yellowstone/Geyser protocol
-- **Async/await** native support with asyncio
-- **Event type filtering** for targeted parsing
-- **Minimal allocations** on hot paths
+### 1. Install
 
-### 🎚️ Flexible Order Modes
-| Mode | Latency | Description |
-|------|---------|-------------|
-| **Unordered** | <1ms | Immediate output, ultra-low latency |
-| **MicroBatch** | 1-5ms | Micro-batch ordering with time window |
-| **StreamingOrdered** | 5-20ms | Stream ordering with continuous sequence release |
-| **Ordered** | 10-100ms | Full slot ordering, wait for complete slot |
-
-### 🚀 Optimization Highlights
-- ✅ **Async/await native** with asyncio for efficient I/O
-- ✅ **Optimized pattern matching** for protocol detection
-- ✅ **Event type filtering** for targeted parsing
-- ✅ **Conditional Create detection** (only when needed)
-- ✅ **Multiple order modes** for latency vs ordering trade-off
-- ✅ **Type-safe event classes** for better IDE support
-
----
-
-## 🔥 Quick Start
-
-### Installation
-
-```bash
-git clone https://github.com/0xfnzero/sol-parser-sdk-python
-cd sol-parser-sdk-python
-pip install -e .
-pip install grpcio grpcio-tools protobuf base58
-```
-
-### Use PyPI
+**From PyPI**
 
 ```bash
 pip install sol-parser-sdk-python
 ```
 
-### Performance Testing
-
-Test parsing with the optimized examples:
+**From source**
 
 ```bash
-# PumpFun trade filter (Buy/Sell/BuyExactSolIn/Create)
-GEYSER_API_TOKEN=your_token python examples/pumpfun_trade_filter.py
-
-# PumpSwap low-latency with performance metrics
-GEYSER_API_TOKEN=your_token python examples/pumpswap_low_latency.py
-
-# All protocols simultaneously
-GEYSER_API_TOKEN=your_token python examples/multi_protocol_grpc.py
-
-# Expected output:
-# gRPC接收时间: 1234567890 μs
-# 事件接收时间: 1234567900 μs
-# 延迟时间: 10 μs  <-- Ultra-low latency!
+git clone https://github.com/0xfnzero/sol-parser-sdk-python
+cd sol-parser-sdk-python
+pip install -e .
+pip install grpcio grpcio-tools protobuf base58 python-dotenv
 ```
 
-### Examples
+### 2. Environment (Yellowstone gRPC examples)
 
-| Description | Run Command | Source Code |
-|-------------|-------------|-------------|
-| **PumpFun** | | |
-| PumpFun trade filtering with metrics | `python examples/pumpfun_trade_filter.py` | [examples/pumpfun_trade_filter.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_trade_filter.py) |
-| Quick PumpFun connection test | `python examples/pumpfun_quick_test.py` | [examples/pumpfun_quick_test.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_quick_test.py) |
-| **PumpSwap** | | |
-| PumpSwap ultra-low latency with stats | `python examples/pumpswap_low_latency.py` | [examples/pumpswap_low_latency.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_low_latency.py) |
-| PumpSwap events with metrics | `python examples/pumpswap_with_metrics.py` | [examples/pumpswap_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_with_metrics.py) |
-| **Meteora DAMM** | | |
-| Meteora DAMM V2 events | `python examples/meteora_damm_grpc.py` | [examples/meteora_damm_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/meteora_damm_grpc.py) |
-| **Multi-Protocol** | | |
-| Subscribe to all DEX protocols | `python examples/multi_protocol_grpc.py` | [examples/multi_protocol_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/multi_protocol_grpc.py) |
+At the **package root** (next to `pyproject.toml`):
 
-### Basic Usage
+```bash
+cp .env.example .env
+# Set GRPC_URL and GRPC_TOKEN
+```
+
+Run examples from that directory so `.env` is picked up (same idea as the Node.js package).
+
+**CLI overrides:** `--grpc-url` / `-g`, `--grpc-token` / `--token` (also `--grpc-url=https://host:443`). **Legacy env:** `GEYSER_ENDPOINT` / `GEYSER_API_TOKEN`. **Precedence:** explicit shell `export` wins over `.env`; `python-dotenv` does not overwrite existing variables.
+
+Helpers: `sol_parser.env_config` (`parse_grpc_credentials`, `require_grpc_env`, `parse_shredstream_url`, …), re-exported from `sol_parser`.
+
+### 3. Smoke test
+
+```bash
+python examples/pumpfun_quick_test.py
+```
+
+Requires `GRPC_URL` and (for most providers) `GRPC_TOKEN` in `.env` or the environment. You can pass credentials on the command line instead; see step 2.
+
+### 4. Minimal gRPC subscribe + parse
 
 ```python
 import asyncio
 import os
-import base58
 
-from sol_parser.grpc_client import GrpcClient
-from sol_parser.grpc_types import TransactionFilter
-from sol_parser.unified_parser import parse_logs_only
-
-ENDPOINT = "https://solana-yellowstone-grpc.publicnode.com:443"
-X_TOKEN = os.environ.get("GEYSER_API_TOKEN", "")
+from sol_parser import parse_logs_only
+from sol_parser.grpc_client import YellowstoneGrpc
+from sol_parser.grpc_types import TransactionFilter, SubscribeCallbacks
 
 async def main():
-    client = GrpcClient(ENDPOINT, X_TOKEN)
+    endpoint = (
+        os.environ.get("GRPC_URL", "").strip()
+        or os.environ.get("GEYSER_ENDPOINT", "solana-yellowstone-grpc.publicnode.com:443")
+    )
+    token = os.environ.get("GRPC_TOKEN", "").strip() or os.environ.get("GEYSER_API_TOKEN", "")
+
+    client = YellowstoneGrpc(endpoint)
+    if token:
+        client.set_x_token(token)
+    await client.connect()
 
     filter_ = TransactionFilter(
         account_include=[
             "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",  # PumpFun
             "pAMMBay6oceH9fJKBRdGP4LmT4saRGfEE7xmrCaGWpZ",  # PumpSwap
         ],
+        account_exclude=[],
+        account_required=[],
         vote=False,
         failed=False,
     )
 
-    async def on_update(update):
-        tx = update.transaction
-        if tx is None or tx.transaction is None:
+    def on_update(update):
+        if update.transaction is None or update.transaction.transaction is None:
             return
-
-        tx_info = tx.transaction
+        tx_info = update.transaction.transaction
+        slot = update.transaction.slot
         logs = tx_info.log_messages
         if not logs:
             return
-
-        sig = base58.b58encode(tx_info.signature).decode()
-        events = parse_logs_only(logs, sig, tx.slot, None)
-
+        sig = tx_info.signature.hex()
+        events = parse_logs_only(logs, sig, slot, None)
         for ev in events:
-            ev_type = type(ev).__name__
-            print(f"[{ev_type}] {ev}")
+            print(ev)
 
-    await client.subscribe_transactions(filter_, on_update)
+    sub = await client.subscribe_transactions(
+        filter_,
+        SubscribeCallbacks(on_update=on_update, on_error=print, on_end=lambda: None),
+    )
+    print("subscribed", sub.id)
+
+    try:
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        pass
+    await client.disconnect()
 
 asyncio.run(main())
 ```
 
----
+**Lighter path:** `parse_logs_only(logs, …)` only needs log messages from the update (no full wire transaction).
 
-## 🏗️ Supported Protocols
+### 5. ShredStream (HTTP — not Yellowstone gRPC)
 
-### DEX Protocols
-- ✅ **PumpFun** - Meme coin trading
-- ✅ **PumpSwap** - PumpFun swap protocol
-- ✅ **Raydium AMM V4** - Automated Market Maker
-- ✅ **Raydium CLMM** - Concentrated Liquidity
-- ✅ **Raydium CPMM** - Concentrated Pool
-- ✅ **Orca Whirlpool** - Concentrated liquidity AMM
-- ✅ **Meteora DAMM V2** - Dynamic AMM
-- ✅ **Meteora DLMM** - Dynamic Liquidity Market Maker
-- ✅ **Bonk Launchpad** - Token launch platform
-
-### Event Types
-Each protocol supports:
-- 📈 **Trade/Swap Events** - Buy/sell transactions
-- 💧 **Liquidity Events** - Deposits/withdrawals
-- 🏊 **Pool Events** - Pool creation/initialization
-- 🎯 **Position Events** - Open/close positions (CLMM)
+The Node.js SDK includes a ShredStream HTTP client. **Python** provides the same env/CLI helpers as Node (`parse_shredstream_url`: `SHREDSTREAM_URL` / `SHRED_URL`, `--url` / `-u` / `--endpoint=`) for configuration parity; a native ShredStream client may be added later. **Not** `GRPC_URL`.
 
 ---
 
-## ⚡ Performance Features
+## Examples
 
-### Optimized Pattern Matching
-```python
-import re
+From the **package root** after `pip install -e .`. Run with `python examples/<file>.py`.
 
-# Pre-compiled regex patterns for fast protocol detection
-PUMPFUN_PATTERN = re.compile(r"Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+| Description | Run command | Source |
+|-------------|-------------|--------|
+| **PumpFun** | | |
+| PumpFun trade filtering | `python examples/pumpfun_trade_filter.py` | [pumpfun_trade_filter.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_trade_filter.py) |
+| PumpFun events + metrics | `python examples/pumpfun_with_metrics.py` | [pumpfun_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_with_metrics.py) |
+| Quick PumpFun connection test | `python examples/pumpfun_quick_test.py` | [pumpfun_quick_test.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_quick_test.py) |
+| **PumpSwap** | | |
+| PumpSwap ultra-low latency | `python examples/pumpswap_low_latency.py` | [pumpswap_low_latency.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_low_latency.py) |
+| PumpSwap events + metrics | `python examples/pumpswap_with_metrics.py` | [pumpswap_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_with_metrics.py) |
+| **Meteora DAMM** | | |
+| Meteora DAMM V2 events | `python examples/meteora_damm_grpc.py` | [meteora_damm_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/meteora_damm_grpc.py) |
+| **Multi-protocol** | | |
+| Subscribe to all DEX protocols | `python examples/multi_protocol_grpc.py` | [multi_protocol_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/multi_protocol_grpc.py) |
+| **Utility** | | |
+| Parse tx by signature (HTTP RPC; not gRPC). `TX_SIGNATURE` / `RPC_URL` in `.env` or `--sig` / `--rpc`. | `python examples/parse_tx_by_signature.py` | [parse_tx_by_signature.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/parse_tx_by_signature.py) |
 
-# Fast check before full parsing
-if PUMPFUN_PATTERN.search(log_string):
-    return parse_pumpfun_event(logs, signature, slot)
-```
-
-### Event Type Filtering
-```python
-# Filter specific event types for targeted parsing
-from sol_parser.types import EventType
-
-event_filter = {
-    "include_only": [EventType.PumpFunTrade, EventType.PumpSwapBuy]
-}
-```
-
-### Async Stats Reporter
-```python
-import asyncio
-
-total_events = 0
-
-async def stats_reporter():
-    while True:
-        await asyncio.sleep(10)
-        print(f"Total events in last 10s: {total_events}")
-
-asyncio.create_task(stats_reporter())
-```
+**Env:** gRPC examples need **`GRPC_URL`** + **`GRPC_TOKEN`** (or legacy `GEYSER_*`). See **`.env.example`**.
 
 ---
 
-## 🎯 Event Filtering
+## Protocols
 
-Reduce processing overhead by filtering specific events:
-
-### Example: Trading Bot
-```python
-from sol_parser.types import EventType
-
-event_filter = {
-    "include_only": [
-        EventType.PumpFunTrade,
-        EventType.RaydiumAmmV4Swap,
-        EventType.RaydiumClmmSwap,
-        EventType.OrcaWhirlpoolSwap,
-    ]
-}
-```
-
-### Example: Pool Monitor
-```python
-from sol_parser.types import EventType
-
-event_filter = {
-    "include_only": [
-        EventType.PumpFunCreate,
-        EventType.PumpSwapCreatePool,
-    ]
-}
-```
-
-**Performance Impact:**
-- 60-80% reduction in processing
-- Lower memory usage
-- Reduced network bandwidth
+PumpFun, PumpSwap, Raydium AMM V4 / CLMM / CPMM, Orca Whirlpool, Meteora DAMM V2 / DLMM, Bonk Launchpad (see `sol_parser/`).
 
 ---
 
-## 🔧 Advanced Features
+## Useful exports
 
-### Create+Buy Detection
-Automatically detects when a token is created and immediately bought in the same transaction:
+- `parse_logs_only` — log-based DEX events from gRPC log messages.
+- `YellowstoneGrpc` — async Yellowstone gRPC client (`connect`, `subscribe_transactions`, `disconnect`).
+- `parse_grpc_credentials` / `require_grpc_env` — load `.env` + env + CLI (aligned with [sol-parser-sdk-nodejs](https://github.com/0xfnzero/sol-parser-sdk-nodejs) `grpc_env`).
 
-```python
-from sol_parser.unified_parser import parse_logs_only
+---
 
-# Automatically detects "Program data: GB7IKAUcB3c..." pattern
-events = parse_logs_only(logs, signature, slot, None)
+## Advanced
 
-# Sets is_created_buy flag on Trade events
-for ev in events:
-    if hasattr(ev, 'is_created_buy') and ev.is_created_buy:
-        print("Create+Buy detected!")
-```
-
-### Custom gRPC Endpoint
+### Custom gRPC endpoint
 
 ```python
 import os
 
-endpoint = os.environ.get("GEYSER_ENDPOINT", "https://solana-yellowstone-grpc.publicnode.com:443")
-token = os.environ.get("GEYSER_API_TOKEN", "")
-client = GrpcClient(endpoint, token)
+from sol_parser.grpc_client import YellowstoneGrpc
+
+endpoint = os.environ.get("GRPC_URL") or os.environ.get(
+    "GEYSER_ENDPOINT", "solana-yellowstone-grpc.publicnode.com:443"
+)
+token = os.environ.get("GRPC_TOKEN") or os.environ.get("GEYSER_API_TOKEN", "")
+client = YellowstoneGrpc(endpoint)
+if token:
+    client.set_x_token(token)
 ```
 
-### Unsubscribe
+### Create + buy detection
 
-```python
-# Async context manager for automatic cleanup
-async with GrpcClient(ENDPOINT, TOKEN) as client:
-    await client.subscribe_transactions(filter_, on_update)
-```
+`parse_logs_only` can detect create-and-buy patterns from program logs; see the PumpFun examples.
 
 ---
 
-## 📁 Project Structure
+## Project structure
 
 ```
 sol-parser-sdk-python/
 ├── sol_parser/
-│   ├── grpc_client.py          # GrpcClient (async, connect, subscribe)
-│   ├── grpc_types.py           # TransactionFilter, TransactionUpdate, etc.
-│   ├── unified_parser.py       # parse_logs_only, parse_transaction_events
-│   ├── optimized_matcher.py    # Log parsing (all protocols)
+│   ├── grpc_client.py          # YellowstoneGrpc (async connect / subscribe)
+│   ├── env_config.py           # GRPC_URL, .env, CLI helpers (Node parity)
+│   ├── grpc_types.py           # TransactionFilter, SubscribeCallbacks, …
+│   ├── parser.py               # parse_logs_only, …
 │   ├── geyser_pb2.py           # Generated proto (Yellowstone)
-│   ├── geyser_pb2_grpc.py      # Generated gRPC stubs
-│   ├── solana_storage_pb2.py   # Generated proto (Solana storage)
-│   └── ...
+│   └── …
 ├── examples/
 │   ├── pumpfun_trade_filter.py
 │   ├── pumpfun_quick_test.py
-│   ├── pumpswap_low_latency.py
-│   ├── pumpswap_with_metrics.py
-│   ├── meteora_damm_grpc.py
-│   └── multi_protocol_grpc.py
+│   └── …
+├── .env.example
 └── pyproject.toml
 ```
 
 ---
 
-## 🚀 Optimization Techniques
-
-### 1. **Async/Await Native**
-- Full asyncio support for non-blocking I/O
-- Efficient event loop integration
-- Concurrent connection handling
-
-### 2. **Optimized Pattern Matching**
-- Pre-compiled regex patterns for protocol detection
-- Fast path for single-protocol filtering
-- Minimal string operations
-
-### 3. **Event Type Filtering**
-- Early filtering at protocol level
-- Conditional Create detection
-- Single-type ultra-fast path
-
-### 4. **Type-Safe Events**
-- Strongly typed event classes
-- Better IDE autocomplete and type hints
-- Runtime type checking where needed
-
-### 5. **Efficient Memory Usage**
-- Reusable buffers where possible
-- Generator-based event streaming
-- Minimal object allocation on hot path
-
----
-
-## 📄 License
-
-MIT License
-
-## 📞 Contact
-
-- **Repository**: https://github.com/0xfnzero/sol-parser-sdk-python
-- **Website**: https://fnzero.dev/
-- **Telegram**: https://t.me/fnzero_group
-- **Discord**: https://discord.gg/vuazbGkqQE
-
----
-
-## ⚠️ Performance Tips
-
-1. **Use Event Filtering** — Filter by program ID for 60-80% performance gain
-2. **Use async/await** — Leverage asyncio for non-blocking I/O
-3. **Use latest Python** — Python 3.10+ has better async performance
-4. **Monitor latency** — Check gRPC receive timestamps in production
-5. **Avoid blocking calls** — Keep event processing async
-
-## 🔬 Development
+## Development
 
 ```bash
-# Install dev dependencies
 pip install -e ".[dev]"
-
-# Run tests
 pytest tests/
-
-# Format code
-black sol_parser/
-isort sol_parser/
-
-# Type check
-mypy sol_parser/
 ```
+
+---
+
+## License
+
+MIT — https://github.com/0xfnzero/sol-parser-sdk-python
+
+---
+
+## Contact
+
+- **Repository**: https://github.com/0xfnzero/sol-parser-sdk-python  
+- **Website**: https://fnzero.dev/  
+- **Telegram**: https://t.me/fnzero_group  
+- **Discord**: https://discord.gg/vuazbGkqQE  

@@ -5,7 +5,13 @@ PumpFun Quick Test
 Quick connection test - subscribes to ALL PumpFun events,
 prints the first 10, then exits.
 
-Run: GEYSER_API_TOKEN=your_token python examples/pumpfun_quick_test.py
+Config (same as sol-parser-sdk-nodejs): ``GRPC_URL``, ``GRPC_TOKEN``; optional
+``.env`` in package root; CLI ``--grpc-url`` / ``-g``, ``--grpc-token`` / ``--token``.
+Legacy: ``GEYSER_ENDPOINT``, ``GEYSER_API_TOKEN``.
+
+Run:
+  python examples/pumpfun_quick_test.py
+  python examples/pumpfun_quick_test.py --grpc-url host:443 --grpc-token YOUR_TOKEN
 """
 
 import asyncio
@@ -16,22 +22,24 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from sol_parser import parse_logs_only
+from sol_parser.env_config import parse_grpc_credentials
 from sol_parser.grpc_client import YellowstoneGrpc
 from sol_parser.grpc_types import TransactionFilter, SubscribeCallbacks
-
-ENDPOINT = os.environ.get("GEYSER_ENDPOINT", "solana-yellowstone-grpc.publicnode.com:443")
-TOKEN = os.environ.get("GEYSER_API_TOKEN", "")
 
 PROGRAM_IDS = ["6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"]  # PumpFun
 
 
 async def main():
+    endpoint, token = parse_grpc_credentials(
+        sys.argv[1:],
+        default_endpoint="solana-yellowstone-grpc.publicnode.com:443",
+    )
     print("🚀 Quick Test - Subscribing to ALL PumpFun events...")
-    print(f"📡 Endpoint: {ENDPOINT}\n")
+    print(f"📡 Endpoint: {endpoint}\n")
 
-    client = YellowstoneGrpc(ENDPOINT)
-    if TOKEN:
-        client.set_x_token(TOKEN)
+    client = YellowstoneGrpc(endpoint)
+    if token:
+        client.set_x_token(token)
     await client.connect()
 
     event_count = 0

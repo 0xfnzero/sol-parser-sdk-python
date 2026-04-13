@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Union, List, Optional, Any, Generic, TypeVar
+from typing import Union, List, Optional, Any, Generic, TypeVar, Dict
 
 from .grpc_types import EventMetadata, EventType
 
@@ -46,7 +46,7 @@ class DexEvent:
         return self.type in (
             EventType.PUMP_FUN_TRADE, EventType.PUMP_FUN_BUY, EventType.PUMP_FUN_SELL,
             EventType.PUMP_FUN_BUY_EXACT_SOL_IN, EventType.PUMP_SWAP_BUY, EventType.PUMP_SWAP_SELL,
-            EventType.RAYDIUM_CLMM_SWAP, EventType.RAYDIUM_CPMM_SWAP,
+            EventType.RAYDIUM_AMM_V4_SWAP, EventType.RAYDIUM_CLMM_SWAP, EventType.RAYDIUM_CPMM_SWAP,
             EventType.ORCA_WHIRLPOOL_SWAP, EventType.METEORA_DLMM_SWAP,
             EventType.METEORA_POOLS_SWAP, EventType.METEORA_DAMM_V2_SWAP,
             EventType.BONK_TRADE,
@@ -142,6 +142,43 @@ class PumpFunCreateEvent(DexEventBase):
 
 
 @dataclass
+class PumpFunCreateV2TokenEvent(DexEventBase):
+    """PumpFun CreateV2（SPL-22 / Mayhem）；指令解析时从 accounts 填充。
+
+    ``observed_fee_recipient`` 由同笔交易中后续 Buy 的 fee recipient 回填（见 ``pumpfun_fee_enrich``）。
+    """
+
+    name: str = ""
+    symbol: str = ""
+    uri: str = ""
+    mint: str = ""
+    bonding_curve: str = ""
+    user: str = ""
+    creator: str = ""
+    timestamp: int = 0
+    virtual_token_reserves: int = 0
+    virtual_sol_reserves: int = 0
+    real_token_reserves: int = 0
+    token_total_supply: int = 0
+    token_program: str = ""
+    is_mayhem_mode: bool = False
+    is_cashback_enabled: bool = False
+    mint_authority: str = ""
+    associated_bonding_curve: str = ""
+    global_account: str = ""  # Rust `global` PumpFun global config
+    system_program: str = ""
+    associated_token_program: str = ""
+    mayhem_program_id: str = ""
+    global_params: str = ""
+    sol_vault: str = ""
+    mayhem_state: str = ""
+    mayhem_token_vault: str = ""
+    event_authority: str = ""
+    program: str = ""
+    observed_fee_recipient: str = ""
+
+
+@dataclass
 class PumpFunMigrateEvent(DexEventBase):
     """PumpFun 迁移事件"""
     user: str = ""
@@ -195,6 +232,7 @@ class PumpSwapBuyEvent(DexEventBase):
     cashback_fee_basis_points: int = 0
     cashback: int = 0
     is_cashback_coin: bool = False
+    is_pump_pool: bool = False
 
 
 @dataclass
@@ -225,6 +263,7 @@ class PumpSwapSellEvent(DexEventBase):
     coin_creator_fee: int = 0
     cashback_fee_basis_points: int = 0
     cashback: int = 0
+    is_pump_pool: bool = False
 
 
 @dataclass
@@ -293,6 +332,137 @@ class PumpSwapLiquidityRemovedEvent(DexEventBase):
     user_base_token_account: str = ""
     user_quote_token_account: str = ""
     user_pool_token_account: str = ""
+
+
+# ============================================================
+# Raydium AMM V4（legacy AMM）事件 — 与 dex_parsers Program data 布局一致
+# ============================================================
+
+_PLACEHOLDER_PK = "11111111111111111111111111111111"
+
+
+@dataclass
+class RaydiumAmmV4SwapEvent(DexEventBase):
+    """Raydium AMM V4 交换（swap_base_in / swap_base_out）"""
+    amm: str = ""
+    user_source_owner: str = ""
+    amount_in: int = 0
+    minimum_amount_out: int = 0
+    max_amount_in: int = 0
+    amount_out: int = 0
+    token_program: str = _PLACEHOLDER_PK
+    amm_authority: str = _PLACEHOLDER_PK
+    amm_open_orders: str = _PLACEHOLDER_PK
+    pool_coin_token_account: str = _PLACEHOLDER_PK
+    pool_pc_token_account: str = _PLACEHOLDER_PK
+    serum_program: str = _PLACEHOLDER_PK
+    serum_market: str = _PLACEHOLDER_PK
+    serum_bids: str = _PLACEHOLDER_PK
+    serum_asks: str = _PLACEHOLDER_PK
+    serum_event_queue: str = _PLACEHOLDER_PK
+    serum_coin_vault_account: str = _PLACEHOLDER_PK
+    serum_pc_vault_account: str = _PLACEHOLDER_PK
+    serum_vault_signer: str = _PLACEHOLDER_PK
+    user_source_token_account: str = _PLACEHOLDER_PK
+    user_destination_token_account: str = _PLACEHOLDER_PK
+
+
+@dataclass
+class RaydiumAmmV4DepositEvent(DexEventBase):
+    amm: str = ""
+    user_owner: str = ""
+    max_coin_amount: int = 0
+    max_pc_amount: int = 0
+    base_side: int = 0
+    token_program: str = _PLACEHOLDER_PK
+    amm_authority: str = _PLACEHOLDER_PK
+    amm_open_orders: str = _PLACEHOLDER_PK
+    amm_target_orders: str = _PLACEHOLDER_PK
+    lp_mint_address: str = _PLACEHOLDER_PK
+    pool_coin_token_account: str = _PLACEHOLDER_PK
+    pool_pc_token_account: str = _PLACEHOLDER_PK
+    serum_market: str = _PLACEHOLDER_PK
+    user_coin_token_account: str = _PLACEHOLDER_PK
+    user_pc_token_account: str = _PLACEHOLDER_PK
+    user_lp_token_account: str = _PLACEHOLDER_PK
+    serum_event_queue: str = _PLACEHOLDER_PK
+
+
+@dataclass
+class RaydiumAmmV4WithdrawEvent(DexEventBase):
+    amm: str = ""
+    user_owner: str = ""
+    amount: int = 0
+    token_program: str = _PLACEHOLDER_PK
+    amm_authority: str = _PLACEHOLDER_PK
+    amm_open_orders: str = _PLACEHOLDER_PK
+    amm_target_orders: str = _PLACEHOLDER_PK
+    lp_mint_address: str = _PLACEHOLDER_PK
+    pool_coin_token_account: str = _PLACEHOLDER_PK
+    pool_pc_token_account: str = _PLACEHOLDER_PK
+    pool_withdraw_queue: str = _PLACEHOLDER_PK
+    pool_temp_lp_token_account: str = _PLACEHOLDER_PK
+    serum_program: str = _PLACEHOLDER_PK
+    serum_market: str = _PLACEHOLDER_PK
+    serum_coin_vault_account: str = _PLACEHOLDER_PK
+    serum_pc_vault_account: str = _PLACEHOLDER_PK
+    serum_vault_signer: str = _PLACEHOLDER_PK
+    user_lp_token_account: str = _PLACEHOLDER_PK
+    user_coin_token_account: str = _PLACEHOLDER_PK
+    user_pc_token_account: str = _PLACEHOLDER_PK
+    serum_event_queue: str = _PLACEHOLDER_PK
+    serum_bids: str = _PLACEHOLDER_PK
+    serum_asks: str = _PLACEHOLDER_PK
+
+
+@dataclass
+class RaydiumAmmV4WithdrawPnlEvent(DexEventBase):
+    token_program: str = _PLACEHOLDER_PK
+    amm: str = ""
+    amm_config: str = _PLACEHOLDER_PK
+    amm_authority: str = _PLACEHOLDER_PK
+    amm_open_orders: str = _PLACEHOLDER_PK
+    pool_coin_token_account: str = _PLACEHOLDER_PK
+    pool_pc_token_account: str = _PLACEHOLDER_PK
+    coin_pnl_token_account: str = _PLACEHOLDER_PK
+    pc_pnl_token_account: str = _PLACEHOLDER_PK
+    pnl_owner: str = ""
+    amm_target_orders: str = _PLACEHOLDER_PK
+    serum_program: str = _PLACEHOLDER_PK
+    serum_market: str = _PLACEHOLDER_PK
+    serum_event_queue: str = _PLACEHOLDER_PK
+    serum_coin_vault_account: str = _PLACEHOLDER_PK
+    serum_pc_vault_account: str = _PLACEHOLDER_PK
+    serum_vault_signer: str = _PLACEHOLDER_PK
+
+
+@dataclass
+class RaydiumAmmV4Initialize2Event(DexEventBase):
+    nonce: int = 0
+    open_time: int = 0
+    init_pc_amount: int = 0
+    init_coin_amount: int = 0
+    token_program: str = _PLACEHOLDER_PK
+    spl_associated_token_account: str = _PLACEHOLDER_PK
+    system_program: str = _PLACEHOLDER_PK
+    rent: str = _PLACEHOLDER_PK
+    amm: str = ""
+    amm_authority: str = _PLACEHOLDER_PK
+    amm_open_orders: str = _PLACEHOLDER_PK
+    lp_mint: str = _PLACEHOLDER_PK
+    coin_mint: str = _PLACEHOLDER_PK
+    pc_mint: str = _PLACEHOLDER_PK
+    pool_coin_token_account: str = _PLACEHOLDER_PK
+    pool_pc_token_account: str = _PLACEHOLDER_PK
+    pool_withdraw_queue: str = _PLACEHOLDER_PK
+    amm_target_orders: str = _PLACEHOLDER_PK
+    pool_temp_lp: str = _PLACEHOLDER_PK
+    serum_program: str = _PLACEHOLDER_PK
+    serum_market: str = _PLACEHOLDER_PK
+    user_wallet: str = ""
+    user_token_coin: str = _PLACEHOLDER_PK
+    user_token_pc: str = _PLACEHOLDER_PK
+    user_lp_token_account: str = _PLACEHOLDER_PK
 
 
 # ============================================================
@@ -557,6 +727,17 @@ class MeteoraDlmmClaimFeeEvent(DexEventBase):
 # Meteora Pools 事件
 # ============================================================
 
+
+@dataclass
+class MeteoraPoolsSetPoolFeesEvent(DexEventBase):
+    """Meteora Pools 设置池子费率"""
+    trade_fee_numerator: int = 0
+    trade_fee_denominator: int = 0
+    owner_trade_fee_numerator: int = 0
+    owner_trade_fee_denominator: int = 0
+    pool: str = ""
+
+
 @dataclass
 class MeteoraPoolsSwapEvent(DexEventBase):
     """Meteora Pools 交换事件"""
@@ -723,6 +904,7 @@ class BonkPoolCreateEvent(DexEventBase):
     """Bonk 创建池子事件"""
     pool_state: str = ""
     creator: str = ""
+    base_mint_param: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -741,12 +923,18 @@ class BonkMigrateAmmEvent(DexEventBase):
 TypedDexEvent = Union[
     PumpFunTradeEvent,
     PumpFunCreateEvent,
+    PumpFunCreateV2TokenEvent,
     PumpFunMigrateEvent,
     PumpSwapBuyEvent,
     PumpSwapSellEvent,
     PumpSwapCreatePoolEvent,
     PumpSwapLiquidityAddedEvent,
     PumpSwapLiquidityRemovedEvent,
+    RaydiumAmmV4SwapEvent,
+    RaydiumAmmV4DepositEvent,
+    RaydiumAmmV4WithdrawEvent,
+    RaydiumAmmV4WithdrawPnlEvent,
+    RaydiumAmmV4Initialize2Event,
     RaydiumClmmSwapEvent,
     RaydiumClmmIncreaseLiquidityEvent,
     RaydiumClmmDecreaseLiquidityEvent,
@@ -768,6 +956,7 @@ TypedDexEvent = Union[
     MeteoraDlmmCreatePositionEvent,
     MeteoraDlmmClosePositionEvent,
     MeteoraDlmmClaimFeeEvent,
+    MeteoraPoolsSetPoolFeesEvent,
     MeteoraPoolsSwapEvent,
     MeteoraPoolsAddLiquidityEvent,
     MeteoraPoolsRemoveLiquidityEvent,
@@ -815,6 +1004,8 @@ def _get_int(m: dict, key: str) -> int:
     v = m.get(key, 0)
     if isinstance(v, int):
         return v
+    if isinstance(v, str) and v.isdigit():
+        return int(v)
     return 0
 
 
@@ -828,6 +1019,11 @@ def _get_list(m: dict, key: str) -> List[int]:
     if isinstance(v, (list, tuple)):
         return [int(x) for x in v]
     return []
+
+
+def _get_dict_any(m: dict, key: str) -> Optional[Dict[str, Any]]:
+    v = m.get(key)
+    return v if isinstance(v, dict) else None
 
 
 def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
@@ -898,7 +1094,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             creator_vault=_get_str(data, "creator_vault"),
         )
     
-    if event_type in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
+    if event_type == EventType.PUMP_FUN_CREATE:
         return PumpFunCreateEvent(
             metadata=meta,
             name=_get_str(data, "name"),
@@ -916,6 +1112,40 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             token_program=_get_str(data, "token_program"),
             is_mayhem_mode=_get_bool(data, "is_mayhem_mode"),
             is_cashback_enabled=_get_bool(data, "is_cashback_enabled"),
+        )
+
+    if event_type == EventType.PUMP_FUN_CREATE_V2:
+        g = _get_str(data, "global") or _get_str(data, "global_account")
+        return PumpFunCreateV2TokenEvent(
+            metadata=meta,
+            name=_get_str(data, "name"),
+            symbol=_get_str(data, "symbol"),
+            uri=_get_str(data, "uri"),
+            mint=_get_str(data, "mint"),
+            bonding_curve=_get_str(data, "bonding_curve"),
+            user=_get_str(data, "user"),
+            creator=_get_str(data, "creator"),
+            timestamp=_get_int(data, "timestamp"),
+            virtual_token_reserves=_get_int(data, "virtual_token_reserves"),
+            virtual_sol_reserves=_get_int(data, "virtual_sol_reserves"),
+            real_token_reserves=_get_int(data, "real_token_reserves"),
+            token_total_supply=_get_int(data, "token_total_supply"),
+            token_program=_get_str(data, "token_program"),
+            is_mayhem_mode=_get_bool(data, "is_mayhem_mode"),
+            is_cashback_enabled=_get_bool(data, "is_cashback_enabled"),
+            mint_authority=_get_str(data, "mint_authority"),
+            associated_bonding_curve=_get_str(data, "associated_bonding_curve"),
+            global_account=g,
+            system_program=_get_str(data, "system_program"),
+            associated_token_program=_get_str(data, "associated_token_program"),
+            mayhem_program_id=_get_str(data, "mayhem_program_id"),
+            global_params=_get_str(data, "global_params"),
+            sol_vault=_get_str(data, "sol_vault"),
+            mayhem_state=_get_str(data, "mayhem_state"),
+            mayhem_token_vault=_get_str(data, "mayhem_token_vault"),
+            event_authority=_get_str(data, "event_authority"),
+            program=_get_str(data, "program"),
+            observed_fee_recipient=_get_str(data, "observed_fee_recipient"),
         )
     
     if event_type == EventType.PUMP_FUN_MIGRATE:
@@ -969,6 +1199,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             cashback_fee_basis_points=_get_int(data, "cashback_fee_basis_points"),
             cashback=_get_int(data, "cashback"),
             is_cashback_coin=_get_bool(data, "is_cashback_coin"),
+            is_pump_pool=_get_bool(data, "is_pump_pool"),
         )
     
     if event_type == EventType.PUMP_SWAP_SELL:
@@ -999,6 +1230,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             coin_creator_fee=_get_int(data, "coin_creator_fee"),
             cashback_fee_basis_points=_get_int(data, "cashback_fee_basis_points"),
             cashback=_get_int(data, "cashback"),
+            is_pump_pool=_get_bool(data, "is_pump_pool"),
         )
     
     if event_type == EventType.PUMP_SWAP_CREATE_POOL:
@@ -1068,7 +1300,168 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             user_quote_token_account=_get_str(data, "user_quote_token_account"),
             user_pool_token_account=_get_str(data, "user_pool_token_account"),
         )
-    
+
+    # Meteora DAMM v2 / Raydium / Orca — 指令级占位（与 instructions.py 一致）
+    if event_type == EventType.METEORA_DAMM_V2_SWAP:
+        return MeteoraDammV2SwapEvent(metadata=meta, pool=_get_str(data, "pool"))
+    if event_type == EventType.METEORA_DAMM_V2_ADD_LIQUIDITY:
+        return MeteoraDammV2AddLiquidityEvent(metadata=meta, pool=_get_str(data, "pool"))
+    if event_type == EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY:
+        return MeteoraDammV2RemoveLiquidityEvent(metadata=meta, pool=_get_str(data, "pool"))
+    if event_type == EventType.METEORA_DAMM_V2_CREATE_POSITION:
+        return MeteoraDammV2CreatePositionEvent(metadata=meta, pool=_get_str(data, "pool"))
+    if event_type == EventType.METEORA_DAMM_V2_CLOSE_POSITION:
+        return MeteoraDammV2ClosePositionEvent(metadata=meta, pool=_get_str(data, "pool"))
+    if event_type == EventType.METEORA_DAMM_V2_INITIALIZE_POOL:
+        return MeteoraDammV2InitializePoolEvent(metadata=meta, pool=_get_str(data, "pool"))
+
+    if event_type == EventType.RAYDIUM_CLMM_SWAP:
+        return RaydiumClmmSwapEvent(
+            metadata=meta,
+            pool_state=_get_str(data, "pool_state"),
+            sender=_get_str(data, "sender"),
+            token_account_0=_get_str(data, "token_account_0"),
+            token_account_1=_get_str(data, "token_account_1"),
+            amount_0=_get_int(data, "amount_0"),
+            amount_1=_get_int(data, "amount_1"),
+            zero_for_one=_get_bool(data, "zero_for_one"),
+            sqrt_price_x64=_get_str(data, "sqrt_price_x64"),
+            liquidity=_get_str(data, "liquidity"),
+            transfer_fee_0=_get_int(data, "transfer_fee_0"),
+            transfer_fee_1=_get_int(data, "transfer_fee_1"),
+            tick=_get_int(data, "tick"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY:
+        return RaydiumClmmIncreaseLiquidityEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            position_nft_mint=_get_str(data, "position_nft_mint"),
+            user=_get_str(data, "user"),
+            liquidity=_get_str(data, "liquidity"),
+            amount0_max=_get_int(data, "amount0_max"),
+            amount1_max=_get_int(data, "amount1_max"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY:
+        return RaydiumClmmDecreaseLiquidityEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            position_nft_mint=_get_str(data, "position_nft_mint"),
+            user=_get_str(data, "user"),
+            liquidity=_get_str(data, "liquidity"),
+            amount0_min=_get_int(data, "amount0_min"),
+            amount1_min=_get_int(data, "amount1_min"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_CREATE_POOL:
+        return RaydiumClmmCreatePoolEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            creator=_get_str(data, "creator"),
+            token_0_mint=_get_str(data, "token_0_mint"),
+            token_1_mint=_get_str(data, "token_1_mint"),
+            tick_spacing=_get_int(data, "tick_spacing"),
+            fee_rate=_get_int(data, "fee_rate"),
+            sqrt_price_x64=_get_str(data, "sqrt_price_x64"),
+            open_time=_get_int(data, "open_time"),
+        )
+
+    if event_type == EventType.RAYDIUM_CPMM_SWAP:
+        return RaydiumCpmmSwapEvent(
+            metadata=meta,
+            pool_id=_get_str(data, "pool_id"),
+            input_amount=_get_int(data, "input_amount"),
+            output_amount=_get_int(data, "output_amount"),
+            input_vault_before=_get_int(data, "input_vault_before"),
+            output_vault_before=_get_int(data, "output_vault_before"),
+            input_transfer_fee=_get_int(data, "input_transfer_fee"),
+            output_transfer_fee=_get_int(data, "output_transfer_fee"),
+            base_input=_get_bool(data, "base_input"),
+        )
+    if event_type == EventType.RAYDIUM_CPMM_DEPOSIT:
+        return RaydiumCpmmDepositEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            user=_get_str(data, "user"),
+            lp_token_amount=_get_int(data, "lp_token_amount"),
+            token0_amount=_get_int(data, "token0_amount"),
+            token1_amount=_get_int(data, "token1_amount"),
+        )
+    if event_type == EventType.RAYDIUM_CPMM_WITHDRAW:
+        return RaydiumCpmmWithdrawEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            user=_get_str(data, "user"),
+            lp_token_amount=_get_int(data, "lp_token_amount"),
+            token0_amount=_get_int(data, "token0_amount"),
+            token1_amount=_get_int(data, "token1_amount"),
+        )
+
+    if event_type == EventType.RAYDIUM_AMM_V4_SWAP:
+        return RaydiumAmmV4SwapEvent(
+            metadata=meta,
+            amm=_get_str(data, "amm"),
+            user_source_owner=_get_str(data, "user_source_owner"),
+            amount_in=_get_int(data, "amount_in"),
+            minimum_amount_out=_get_int(data, "minimum_amount_out"),
+            max_amount_in=_get_int(data, "max_amount_in"),
+            amount_out=_get_int(data, "amount_out"),
+            token_program=_get_str(data, "token_program"),
+            amm_authority=_get_str(data, "amm_authority"),
+            amm_open_orders=_get_str(data, "amm_open_orders"),
+            pool_coin_token_account=_get_str(data, "pool_coin_token_account"),
+            pool_pc_token_account=_get_str(data, "pool_pc_token_account"),
+            serum_program=_get_str(data, "serum_program"),
+            serum_market=_get_str(data, "serum_market"),
+            serum_bids=_get_str(data, "serum_bids"),
+            serum_asks=_get_str(data, "serum_asks"),
+            serum_event_queue=_get_str(data, "serum_event_queue"),
+            serum_coin_vault_account=_get_str(data, "serum_coin_vault_account"),
+            serum_pc_vault_account=_get_str(data, "serum_pc_vault_account"),
+            serum_vault_signer=_get_str(data, "serum_vault_signer"),
+            user_source_token_account=_get_str(data, "user_source_token_account"),
+            user_destination_token_account=_get_str(data, "user_destination_token_account"),
+        )
+
+    if event_type == EventType.ORCA_WHIRLPOOL_SWAP:
+        return OrcaWhirlpoolSwapEvent(
+            metadata=meta,
+            whirlpool=_get_str(data, "whirlpool"),
+            a_to_b=_get_bool(data, "a_to_b"),
+            pre_sqrt_price=_get_str(data, "pre_sqrt_price"),
+            post_sqrt_price=_get_str(data, "post_sqrt_price"),
+            input_amount=_get_int(data, "input_amount"),
+            output_amount=_get_int(data, "output_amount"),
+            input_transfer_fee=_get_int(data, "input_transfer_fee"),
+            output_transfer_fee=_get_int(data, "output_transfer_fee"),
+            lp_fee=_get_int(data, "lp_fee"),
+            protocol_fee=_get_int(data, "protocol_fee"),
+        )
+    if event_type == EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED:
+        return OrcaWhirlpoolLiquidityIncreasedEvent(
+            metadata=meta,
+            whirlpool=_get_str(data, "whirlpool"),
+            position=_get_str(data, "position"),
+            tick_lower_index=_get_int(data, "tick_lower_index"),
+            tick_upper_index=_get_int(data, "tick_upper_index"),
+            liquidity=_get_str(data, "liquidity"),
+            token_a_amount=_get_int(data, "token_a_amount"),
+            token_b_amount=_get_int(data, "token_b_amount"),
+            token_a_transfer_fee=_get_int(data, "token_a_transfer_fee"),
+            token_b_transfer_fee=_get_int(data, "token_b_transfer_fee"),
+        )
+    if event_type == EventType.ORCA_WHIRLPOOL_LIQUIDITY_DECREASED:
+        return OrcaWhirlpoolLiquidityDecreasedEvent(
+            metadata=meta,
+            whirlpool=_get_str(data, "whirlpool"),
+            position=_get_str(data, "position"),
+            tick_lower_index=_get_int(data, "tick_lower_index"),
+            tick_upper_index=_get_int(data, "tick_upper_index"),
+            liquidity=_get_str(data, "liquidity"),
+            token_a_amount=_get_int(data, "token_a_amount"),
+            token_b_amount=_get_int(data, "token_b_amount"),
+            token_a_transfer_fee=_get_int(data, "token_a_transfer_fee"),
+            token_b_transfer_fee=_get_int(data, "token_b_transfer_fee"),
+        )
+
     # Bonk events
     if event_type == EventType.BONK_TRADE:
         return BonkTradeEvent(
@@ -1087,6 +1480,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             metadata=meta,
             pool_state=_get_str(data, "pool_state"),
             creator=_get_str(data, "creator"),
+            base_mint_param=_get_dict_any(data, "base_mint_param"),
         )
     
     if event_type == EventType.BONK_MIGRATE_AMM:
@@ -1099,5 +1493,20 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         )
     
     # Add more event type conversions as needed...
-    
+
     return None
+
+
+def legacy_dict_to_dex_event(d: dict) -> Optional[DexEvent]:
+    """将单键 legacy dict ``{ EventType.value: payload }`` 转为 :class:`DexEvent`（供指令解析等路径）。"""
+    if not d:
+        return None
+    typed = to_typed_event(d)
+    if typed is None:
+        return None
+    key = next(iter(d))
+    try:
+        et = EventType(key)
+    except ValueError:
+        return None
+    return DexEvent(type=et, data=typed)

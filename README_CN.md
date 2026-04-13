@@ -1,6 +1,6 @@
 <div align="center">
     <h1>⚡ Sol Parser SDK - Python</h1>
-    <h3><em>高性能 Solana DEX 事件解析器，专为 Python 设计</em></h3>
+    <h3><em>高性能 Solana DEX 事件解析（Python / asyncio）</em></h3>
 </div>
 
 <p align="center">
@@ -8,8 +8,8 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/0xfnzero/sol-parser-sdk-python">
-        <img src="https://img.shields.io/badge/pypi-sol--parser--sdk--python-3776AB.svg" alt="PyPI">
+    <a href="https://pypi.org/project/sol-parser-sdk-python/">
+        <img src="https://img.shields.io/pypi/v/sol-parser-sdk-python.svg" alt="PyPI">
     </a>
     <a href="https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/LICENSE">
         <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
@@ -32,226 +32,205 @@
 
 ---
 
-## 📦 SDK 版本
+## 其他语言 SDK
 
-本 SDK 提供多种语言版本：
-
-| 语言 | 仓库 | 描述 |
-|------|------|------|
-| **Rust** | [sol-parser-sdk](https://github.com/0xfnzero/sol-parser-sdk) | 超低延迟，SIMD 优化 |
-| **Node.js** | [sol-parser-sdk-nodejs](https://github.com/0xfnzero/sol-parser-sdk-nodejs) | TypeScript/JavaScript，Node.js 支持 |
-| **Python** | [sol-parser-sdk-python](https://github.com/0xfnzero/sol-parser-sdk-python) | 原生 async/await 支持 |
-| **Go** | [sol-parser-sdk-golang](https://github.com/0xfnzero/sol-parser-sdk-golang) | 并发安全，goroutine 支持 |
+| 语言 | 仓库 |
+|------|------|
+| Rust | [sol-parser-sdk](https://github.com/0xfnzero/sol-parser-sdk) |
+| Node.js | [sol-parser-sdk-nodejs](https://github.com/0xfnzero/sol-parser-sdk-nodejs) |
+| Python | [sol-parser-sdk-python](https://github.com/0xfnzero/sol-parser-sdk-python) |
+| Go | [sol-parser-sdk-golang](https://github.com/0xfnzero/sol-parser-sdk-golang) |
 
 ---
 
-## 📊 性能亮点
+## 怎么用
 
-### ⚡ 实时解析
-- **零延迟** 基于日志的事件解析
-- **gRPC 流式传输** 支持 Yellowstone/Geyser 协议
-- **原生 async/await** 支持 asyncio 异步编程
-- **多协议** 单次订阅同时监听多个 DEX
+### 1. 安装
 
-### 🏗️ 支持的协议
-- ✅ **PumpFun** - Meme 代币交易
-- ✅ **PumpSwap** - PumpFun 交换协议
-- ✅ **Raydium AMM V4** - 自动做市商
-- ✅ **Raydium CLMM** - 集中流动性
-- ✅ **Raydium CPMM** - 集中池
-- ✅ **Orca Whirlpool** - 集中流动性 AMM
-- ✅ **Meteora DAMM V2** - 动态 AMM
-- ✅ **Meteora DLMM** - 动态流动性做市商
-- ✅ **Bonk Launchpad** - 代币发射平台
+**PyPI**
 
----
+```bash
+pip install sol-parser-sdk-python
+```
 
-## 🔥 快速开始
-
-### 安装
+**源码**
 
 ```bash
 git clone https://github.com/0xfnzero/sol-parser-sdk-python
 cd sol-parser-sdk-python
 pip install -e .
-pip install grpcio grpcio-tools protobuf base58
+pip install grpcio grpcio-tools protobuf base58 python-dotenv
 ```
 
-### 运行示例
+### 2. 环境变量（Yellowstone gRPC 示例）
+
+在**包根目录**（与 `pyproject.toml` 同级）：
 
 ```bash
-# PumpFun 交易过滤（Buy/Sell/BuyExactSolIn/Create）
-GEYSER_API_TOKEN=your_token python examples/pumpfun_trade_filter.py
-
-# PumpSwap 超低延迟，附带性能指标
-GEYSER_API_TOKEN=your_token python examples/pumpswap_low_latency.py
-
-# 同时订阅所有协议
-GEYSER_API_TOKEN=your_token python examples/multi_protocol_grpc.py
+cp .env.example .env
+# 填写 GRPC_URL、GRPC_TOKEN
 ```
 
-### 示例列表
+在该目录下运行示例，以便加载 `.env`（与 Node 包行为一致）。
 
-| 描述 | 运行命令 | 源码 |
-|------|----------|------|
-| **PumpFun** | | |
-| PumpFun 交易过滤，附带延迟指标 | `python examples/pumpfun_trade_filter.py` | [examples/pumpfun_trade_filter.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_trade_filter.py) |
-| **PumpSwap** | | |
-| PumpSwap 超低延迟，含统计 | `python examples/pumpswap_low_latency.py` | [examples/pumpswap_low_latency.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_low_latency.py) |
-| **多协议** | | |
-| 同时订阅所有 DEX 协议 | `python examples/multi_protocol_grpc.py` | [examples/multi_protocol_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/multi_protocol_grpc.py) |
+**命令行覆盖：** `--grpc-url` / `-g`、`--grpc-token` / `--token`（亦支持 `--grpc-url=https://host:443`）。**旧名：** `GEYSER_ENDPOINT` / `GEYSER_API_TOKEN`。**优先级：** 已在 shell 里 `export` 的变量优先于 `.env`；`python-dotenv` 不会覆盖已有环境变量。
 
-### 基本用法
+辅助函数：`sol_parser.env_config`（`parse_grpc_credentials`、`require_grpc_env`、`parse_shredstream_url` 等），亦可从 `sol_parser` 直接导入。
+
+### 3. 冒烟
+
+```bash
+python examples/pumpfun_quick_test.py
+```
+
+需要 `GRPC_URL` 以及多数提供商要求的 `GRPC_TOKEN`（写在 `.env` 或环境中），也可用命令行传入，见步骤 2。
+
+### 4. 最小 gRPC 订阅示例
 
 ```python
 import asyncio
 import os
-import base58
 
-from sol_parser.grpc_client import GrpcClient
-from sol_parser.grpc_types import TransactionFilter
-from sol_parser.unified_parser import parse_logs_only
-
-ENDPOINT = "https://solana-yellowstone-grpc.publicnode.com:443"
-X_TOKEN = os.environ.get("GEYSER_API_TOKEN", "")
+from sol_parser import parse_logs_only
+from sol_parser.grpc_client import YellowstoneGrpc
+from sol_parser.grpc_types import TransactionFilter, SubscribeCallbacks
 
 async def main():
-    client = GrpcClient(ENDPOINT, X_TOKEN)
+    endpoint = (
+        os.environ.get("GRPC_URL", "").strip()
+        or os.environ.get("GEYSER_ENDPOINT", "solana-yellowstone-grpc.publicnode.com:443")
+    )
+    token = os.environ.get("GRPC_TOKEN", "").strip() or os.environ.get("GEYSER_API_TOKEN", "")
+
+    client = YellowstoneGrpc(endpoint)
+    if token:
+        client.set_x_token(token)
+    await client.connect()
 
     filter_ = TransactionFilter(
         account_include=[
             "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",  # PumpFun
             "pAMMBay6oceH9fJKBRdGP4LmT4saRGfEE7xmrCaGWpZ",  # PumpSwap
         ],
+        account_exclude=[],
+        account_required=[],
         vote=False,
         failed=False,
     )
 
-    async def on_update(update):
-        tx = update.transaction
-        if tx is None or tx.transaction is None:
+    def on_update(update):
+        if update.transaction is None or update.transaction.transaction is None:
             return
-
-        tx_info = tx.transaction
+        tx_info = update.transaction.transaction
+        slot = update.transaction.slot
         logs = tx_info.log_messages
         if not logs:
             return
-
-        sig = base58.b58encode(tx_info.signature).decode()
-        events = parse_logs_only(logs, sig, tx.slot, None)
-
+        sig = tx_info.signature.hex()
+        events = parse_logs_only(logs, sig, slot, None)
         for ev in events:
-            ev_type = type(ev).__name__
-            print(f"[{ev_type}] {ev}")
+            print(ev)
 
-    await client.subscribe_transactions(filter_, on_update)
+    sub = await client.subscribe_transactions(
+        filter_,
+        SubscribeCallbacks(on_update=on_update, on_error=print, on_end=lambda: None),
+    )
+    print("subscribed", sub.id)
+
+    try:
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        pass
+    await client.disconnect()
 
 asyncio.run(main())
 ```
 
----
+更轻量：仅用日志时用 `parse_logs_only`（无需完整线格式交易）。
 
-## 🏗️ 支持的协议与事件
+### 5. ShredStream（HTTP，不是 Yellowstone gRPC）
 
-### 事件类型
-每个协议均支持：
-- 📈 **交易/兑换事件** - 买入/卖出交易
-- 💧 **流动性事件** - 存入/提取
-- 🏊 **池子事件** - 池子创建/初始化
-- 🎯 **仓位事件** - 开仓/平仓（CLMM）
-
-### PumpFun 事件
-- `PumpFunBuy` - 买入代币
-- `PumpFunSell` - 卖出代币
-- `PumpFunBuyExactSolIn` - 指定 SOL 数量买入
-- `PumpFunCreate` - 创建新代币
-- `PumpFunTrade` - 通用交易（兜底）
-
-### PumpSwap 事件
-- `PumpSwapBuy` - 通过池子买入代币
-- `PumpSwapSell` - 通过池子卖出代币
-- `PumpSwapCreatePool` - 创建流动性池
-- `PumpSwapLiquidityAdded` - 添加流动性
-- `PumpSwapLiquidityRemoved` - 移除流动性
-
-### Raydium 事件
-- `RaydiumAmmV4Swap` - AMM V4 兑换
-- `RaydiumClmmSwap` - CLMM 兑换
-- `RaydiumCpmmSwap` - CPMM 兑换
-
-### Orca 事件
-- `OrcaWhirlpoolSwap` - Whirlpool 兑换
-
-### Meteora 事件
-- `MeteoraDammV2Swap` - DAMM V2 兑换
-- `MeteoraDammV2AddLiquidity` - 添加流动性
-- `MeteoraDammV2RemoveLiquidity` - 移除流动性
-- `MeteoraDammV2CreatePosition` - 创建仓位
-- `MeteoraDammV2ClosePosition` - 关闭仓位
-
-### Bonk 事件
-- `BonkTrade` - Bonk Launchpad 交易
+Node 版提供 ShredStream HTTP 客户端。**Python** 侧提供与 Node 相同的配置方式（`parse_shredstream_url`：`SHREDSTREAM_URL` / `SHRED_URL`，`--url` / `-u` / `--endpoint=`）；原生 ShredStream 客户端后续可能补充。**不要**用 `GRPC_URL` 配 ShredStream。
 
 ---
 
-## 📁 项目结构
+## 示例列表
+
+在**包根目录**执行，`pip install -e .` 之后。运行：`python examples/<文件>.py`。
+
+| 描述 | 运行命令 | 源码 |
+|------|----------|------|
+| **PumpFun** | | |
+| PumpFun 交易过滤 | `python examples/pumpfun_trade_filter.py` | [pumpfun_trade_filter.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_trade_filter.py) |
+| PumpFun 事件 + 性能指标 | `python examples/pumpfun_with_metrics.py` | [pumpfun_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_with_metrics.py) |
+| PumpFun 快速连接测试 | `python examples/pumpfun_quick_test.py` | [pumpfun_quick_test.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_quick_test.py) |
+| **PumpSwap** | | |
+| PumpSwap 超低延迟 | `python examples/pumpswap_low_latency.py` | [pumpswap_low_latency.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_low_latency.py) |
+| PumpSwap 事件 + 性能指标 | `python examples/pumpswap_with_metrics.py` | [pumpswap_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_with_metrics.py) |
+| **Meteora DAMM** | | |
+| Meteora DAMM V2 事件 | `python examples/meteora_damm_grpc.py` | [meteora_damm_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/meteora_damm_grpc.py) |
+| **多协议** | | |
+| 同时订阅所有 DEX 协议 | `python examples/multi_protocol_grpc.py` | [multi_protocol_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/multi_protocol_grpc.py) |
+| **工具** | | |
+| 按签名解析交易（HTTP RPC，非 gRPC）。`.env` 或环境中 `TX_SIGNATURE` / `RPC_URL`，或 `--sig` / `--rpc`。 | `python examples/parse_tx_by_signature.py` | [parse_tx_by_signature.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/parse_tx_by_signature.py) |
+
+**环境变量：** gRPC 示例需要 **`GRPC_URL`**、**`GRPC_TOKEN`**（或旧名 `GEYSER_*`）。详见 **`.env.example`**。
+
+---
+
+## 协议
+
+PumpFun、PumpSwap、Raydium AMM V4 / CLMM / CPMM、Orca Whirlpool、Meteora DAMM V2 / DLMM、Bonk Launchpad（见 `sol_parser/`）。
+
+---
+
+## 常用 API
+
+- `parse_logs_only` — 从 gRPC 日志消息解析 DEX 事件。
+- `YellowstoneGrpc` — 异步 Yellowstone 客户端（`connect`、`subscribe_transactions`、`disconnect`）。
+- `parse_grpc_credentials` / `require_grpc_env` — 加载 `.env` + 环境变量 + 命令行（与 [sol-parser-sdk-nodejs](https://github.com/0xfnzero/sol-parser-sdk-nodejs) 的 `grpc_env` 对齐）。
+
+---
+
+## 项目结构
 
 ```
 sol-parser-sdk-python/
 ├── sol_parser/
-│   ├── grpc_client.py          # GrpcClient（异步连接与订阅）
-│   ├── grpc_types.py           # TransactionFilter、TransactionUpdate 等
-│   ├── unified_parser.py       # parse_logs_only、parse_transaction_events
-│   ├── optimized_matcher.py    # 日志解析（所有协议）
+│   ├── grpc_client.py          # YellowstoneGrpc（异步连接 / 订阅）
+│   ├── env_config.py           # GRPC_URL、.env、命令行（与 Node 对齐）
+│   ├── grpc_types.py           # TransactionFilter、SubscribeCallbacks…
+│   ├── parser.py               # parse_logs_only…
 │   ├── geyser_pb2.py           # 生成的 proto（Yellowstone）
-│   ├── geyser_pb2_grpc.py      # 生成的 gRPC 存根
-│   ├── solana_storage_pb2.py   # 生成的 proto（Solana 存储）
-│   └── ...
+│   └── …
 ├── examples/
 │   ├── pumpfun_trade_filter.py
-│   ├── pumpswap_low_latency.py
-│   └── multi_protocol_grpc.py
+│   ├── pumpfun_quick_test.py
+│   └── …
+├── .env.example
 └── pyproject.toml
 ```
 
 ---
 
-## 🔧 高级用法
+## 开发
 
-### 自定义 gRPC 端点
-
-```python
-import os
-
-endpoint = os.environ.get("GEYSER_ENDPOINT", "https://solana-yellowstone-grpc.publicnode.com:443")
-token = os.environ.get("GEYSER_API_TOKEN", "")
-client = GrpcClient(endpoint, token)
-```
-
-### 异步定时统计
-
-```python
-import asyncio
-
-total_events = 0
-
-async def stats_reporter():
-    while True:
-        await asyncio.sleep(10)
-        print(f"过去 10 秒总事件数: {total_events}")
-
-asyncio.create_task(stats_reporter())
+```bash
+pip install -e ".[dev]"
+pytest tests/
 ```
 
 ---
 
-## 📄 许可证
+## 许可证
 
-MIT License
+MIT — https://github.com/0xfnzero/sol-parser-sdk-python
 
-## 📞 联系我们
+---
 
-- **仓库**: https://github.com/0xfnzero/sol-parser-sdk-python
-- **官网**: https://fnzero.dev/
-- **Telegram**: https://t.me/fnzero_group
-- **Discord**: https://discord.gg/vuazbGkqQE
+## 联系我们
+
+- **仓库**: https://github.com/0xfnzero/sol-parser-sdk-python  
+- **官网**: https://fnzero.dev/  
+- **Telegram**: https://t.me/fnzero_group  
+- **Discord**: https://discord.gg/vuazbGkqQE  

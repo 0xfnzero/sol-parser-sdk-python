@@ -6,6 +6,7 @@ Subscribe to multiple DEX protocols simultaneously:
 PumpFun, PumpSwap, Raydium, Orca, Meteora, Bonk
 
 Run: python examples/multi_protocol_grpc.py
+Config: ``GRPC_URL`` / ``GRPC_TOKEN``, ``.env``, or CLI ``--grpc-url`` / ``--grpc-token``.
 """
 
 import asyncio
@@ -17,11 +18,9 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from sol_parser import parse_logs_only
+from sol_parser.env_config import parse_grpc_credentials
 from sol_parser.grpc_client import YellowstoneGrpc
 from sol_parser.grpc_types import TransactionFilter, SubscribeCallbacks
-
-ENDPOINT = os.environ.get("GEYSER_ENDPOINT", "solana-yellowstone-grpc.publicnode.com:443")
-TOKEN = os.environ.get("GEYSER_API_TOKEN", "")
 
 PROGRAM_IDS = [
     "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",  # PumpFun
@@ -49,14 +48,18 @@ async def stats_reporter():
 
 
 async def main():
+    endpoint, token = parse_grpc_credentials(
+        sys.argv[1:],
+        default_endpoint="solana-yellowstone-grpc.publicnode.com:443",
+    )
     print("🚀 Multi-Protocol gRPC Example")
     print("================================\n")
-    print(f"📡 Endpoint: {ENDPOINT}")
+    print(f"📡 Endpoint: {endpoint}")
     print(f"📊 Protocols: PumpFun, PumpSwap, Raydium, Orca, Meteora\n")
 
-    client = YellowstoneGrpc(ENDPOINT)
-    if TOKEN:
-        client.set_x_token(TOKEN)
+    client = YellowstoneGrpc(endpoint)
+    if token:
+        client.set_x_token(token)
 
     await client.connect()
     asyncio.create_task(stats_reporter())

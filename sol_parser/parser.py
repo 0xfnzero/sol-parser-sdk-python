@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base58
 import base64
 import struct
 import time
 from typing import Any, Callable, Dict, List, Optional
 
 from .dex_parsers import DexEvent, dispatch_program_data, parse_trade_from_data
+from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
 
 
 def _disc8(bs: bytes) -> int:
@@ -62,12 +64,13 @@ def parse_log_optimized(
 ) -> Optional[DexEvent]:
     """与 Go `ParseLogOptimized` 对齐；`event_type_filter` 预留与 TS 一致，当前未使用。"""
     _ = event_type_filter
+    grpc = int(time.time() * 1_000_000) if grpc_recv_us is None else grpc_recv_us
+    bt = 0 if block_time_us is None else block_time_us
     buf = decode_program_data_line(log)
     if not buf:
         return None
     disc = _disc8(buf[:8])
     data = buf[8:]
-    grpc = int(time.time() * 1_000_000) if grpc_recv_us is None else grpc_recv_us
     meta = _meta(signature, slot, tx_index, block_time_us, grpc, recent_blockhash)
     return dispatch_program_data(disc, data, buf, meta, is_created_buy)
 
@@ -104,6 +107,7 @@ def parse_logs_only(
         ev = parse_log_unified(log, signature, slot, block_time_us)
         if ev:
             out.append(ev)
+    enrich_create_v2_observed_fee_recipient(out)
     return out
 
 
@@ -206,9 +210,17 @@ __all__ = [
     "DexEvent",
     "decode_program_data_line",
     "dispatch_program_data",
+    "parse_log",
     "parse_log_unified",
     "parse_log_optimized",
     "parse_logs_only",
+    "parse_logs_streaming",
+    "parse_transaction_events",
+    "parse_transaction_events_streaming",
+    "parse_transaction_with_listener",
+    "parse_transaction_with_streaming_listener",
+    "EventListener",
+    "StreamingEventListener",
     "parse_trade_from_data",
     "warmup_parser",
 ]

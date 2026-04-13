@@ -7,7 +7,7 @@ Demonstrates how to:
 - Filter specific event types: Swap, AddLiquidity, RemoveLiquidity, CreatePosition, ClosePosition
 - Display event details with latency metrics
 
-Run: GEYSER_API_TOKEN=your_token python examples/meteora_damm_grpc.py
+Run: python examples/meteora_damm_grpc.py  (with ``GRPC_URL`` / ``GRPC_TOKEN`` or ``.env``)
 """
 
 import asyncio
@@ -18,11 +18,9 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from sol_parser import parse_logs_only
+from sol_parser.env_config import parse_grpc_credentials
 from sol_parser.grpc_client import YellowstoneGrpc
 from sol_parser.grpc_types import TransactionFilter, SubscribeCallbacks
-
-ENDPOINT = os.environ.get("GEYSER_ENDPOINT", "solana-yellowstone-grpc.publicnode.com:443")
-TOKEN = os.environ.get("GEYSER_API_TOKEN", "")
 
 # Meteora DAMM V2 program ID
 PROGRAM_IDS = ["cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG"]
@@ -40,14 +38,18 @@ def now_us() -> int:
 async def main():
     global event_count, swap_count, add_liquidity_count, remove_liquidity_count
 
+    endpoint, token = parse_grpc_credentials(
+        sys.argv[1:],
+        default_endpoint="solana-yellowstone-grpc.publicnode.com:443",
+    )
     print("🚀 Meteora DAMM gRPC Streaming Example")
     print("========================================\n")
-    print(f"📡 Endpoint: {ENDPOINT}")
+    print(f"📡 Endpoint: {endpoint}")
     print(f"🎯 Program: {PROGRAM_IDS[0]}\n")
 
-    client = YellowstoneGrpc(ENDPOINT)
-    if TOKEN:
-        client.set_x_token(TOKEN)
+    client = YellowstoneGrpc(endpoint)
+    if token:
+        client.set_x_token(token)
     await client.connect()
 
     def on_update(update):

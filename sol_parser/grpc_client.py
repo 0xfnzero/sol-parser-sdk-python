@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from typing import Dict, Optional, Callable, Any, AsyncGenerator
+from typing import Dict, List, Optional, Callable, Any, AsyncGenerator
 from dataclasses import dataclass
 
 import grpc
@@ -78,6 +78,55 @@ class YellowstoneGrpc:
         self._channel: Optional[aio.Channel] = None
         self._client: Optional[Any] = None
         self._lock = asyncio.Lock()
+
+    @classmethod
+    def new(cls, endpoint: str, token: Optional[str] = None) -> YellowstoneGrpc:
+        """对齐 Rust ``YellowstoneGrpc::new``。"""
+        from .parser import warmup_parser
+
+        warmup_parser()
+        inst = cls(endpoint)
+        if token:
+            inst.set_x_token(token)
+        return inst
+
+    @classmethod
+    def new_with_config(
+        cls, endpoint: str, token: Optional[str], config: ClientConfig
+    ) -> YellowstoneGrpc:
+        """对齐 Rust ``YellowstoneGrpc::new_with_config``。"""
+        from .parser import warmup_parser
+
+        warmup_parser()
+        inst = cls(endpoint, config)
+        if token:
+            inst.set_x_token(token)
+        return inst
+
+    async def subscribe_dex_events(
+        self,
+        transaction_filters: List[TransactionFilter],
+        account_filters: List[Any],
+        event_type_filter: Optional[Any] = None,
+    ) -> Any:
+        """对齐 Rust API 名称：完整多路合并订阅尚未实现；请使用 ``connect`` + ``subscribe_transactions``。"""
+        _ = transaction_filters
+        _ = account_filters
+        _ = event_type_filter
+        raise NotImplementedError(
+            "subscribe_dex_events: 请使用 connect() 与 subscribe_transactions()；"
+            "多过滤器请在业务层合并为 TransactionFilter"
+        )
+
+    async def update_subscription(
+        self,
+        transaction_filters: List[TransactionFilter],
+        account_filters: List[Any],
+    ) -> None:
+        """对齐 Rust 名称：动态更新需重建流。"""
+        _ = transaction_filters
+        _ = account_filters
+        raise NotImplementedError("请取消订阅后重新 subscribe_transactions")
 
     def set_x_token(self, token: str) -> None:
         """设置 X-Token 认证"""

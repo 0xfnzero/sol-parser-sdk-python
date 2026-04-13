@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "no_program_data_line",
+      "log": "Program log: noop",
+      "signature": "1111111111111111111111111111111111111111111111111111111111111111",
+      "slot": 123,
+      "block_time_us": null,
+      "expect_event": null
+    }
+  ]
+}

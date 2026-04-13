@@ -5,7 +5,13 @@ from __future__ import annotations
 import struct
 import sys
 
-from .dex_parsers import DLMM_SWAP, _u128le_int, parse_dlmm_from_program_data, parse_orca_traded_from_data
+from .dex_parsers import (
+    DLMM_SWAP,
+    _u128le_int,
+    parse_dlmm_from_program_data,
+    parse_orca_traded_from_data,
+)
+from .event_types import MeteoraDlmmSwapEvent, OrcaWhirlpoolSwapEvent
 
 
 def verify_u128_le_decimal() -> int:
@@ -50,11 +56,11 @@ def verify_orca_swap_sqrt_decimal_strings() -> int:
     tail = b"".join((0).to_bytes(8, "little") for _ in range(6))
     data = whirlpool + b"\x00" + pre + post + tail
     ev = parse_orca_traded_from_data(data, meta)
-    if ev is None:
+    if ev is None or not isinstance(ev.data, OrcaWhirlpoolSwapEvent):
         print("[u128-parity] Orca 合成载荷解析失败", file=sys.stderr)
         return 1
-    inner = ev.get("OrcaWhirlpoolSwap") or {}
-    if inner.get("pre_sqrt_price") != "1000" or inner.get("post_sqrt_price") != "2000":
+    inner = ev.data
+    if inner.pre_sqrt_price != "1000" or inner.post_sqrt_price != "2000":
         print(f"[u128-parity] Orca sqrt 字段不符: {inner!r}", file=sys.stderr)
         return 1
     print("[u128-parity] OK：OrcaWhirlpoolSwap u128 字段为十进制字符串")
@@ -82,11 +88,11 @@ def verify_dlmm_swap_fee_bps_decimal_string() -> int:
     )
     buf = struct.pack("<Q", DLMM_SWAP) + data
     ev = parse_dlmm_from_program_data(buf, meta)
-    if ev is None:
+    if ev is None or not isinstance(ev.data, MeteoraDlmmSwapEvent):
         print("[u128-parity] DLMM 合成载荷解析失败", file=sys.stderr)
         return 1
-    inner = ev.get("MeteoraDlmmSwap") or {}
-    if inner.get("fee_bps") != str(fee_bps_val):
+    inner = ev.data
+    if inner.fee_bps != str(fee_bps_val):
         print(f"[u128-parity] DLMM fee_bps 不符: {inner!r}", file=sys.stderr)
         return 1
     print("[u128-parity] OK：MeteoraDlmmSwap fee_bps 为十进制字符串")

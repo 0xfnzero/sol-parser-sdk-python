@@ -17,6 +17,8 @@ from .event_types import (
     DexEvent, PumpFunTradeEvent, PumpFunCreateEvent, PumpFunMigrateEvent,
     PumpSwapBuyEvent, PumpSwapSellEvent, PumpSwapCreatePoolEvent,
     PumpSwapLiquidityAddedEvent, PumpSwapLiquidityRemovedEvent,
+    RaydiumAmmV4SwapEvent, RaydiumAmmV4DepositEvent, RaydiumAmmV4WithdrawEvent,
+    RaydiumAmmV4WithdrawPnlEvent, RaydiumAmmV4Initialize2Event,
     RaydiumClmmSwapEvent, RaydiumClmmIncreaseLiquidityEvent,
     RaydiumClmmDecreaseLiquidityEvent, RaydiumClmmCreatePoolEvent,
     RaydiumClmmCollectFeeEvent, RaydiumCpmmSwapEvent, RaydiumCpmmDepositEvent,
@@ -25,11 +27,12 @@ from .event_types import (
     MeteoraDlmmSwapEvent, MeteoraDlmmAddLiquidityEvent, MeteoraDlmmRemoveLiquidityEvent,
     MeteoraDlmmInitializePoolEvent, MeteoraDlmmInitializeBinArrayEvent,
     MeteoraDlmmCreatePositionEvent, MeteoraDlmmClosePositionEvent,
-    MeteoraDlmmClaimFeeEvent, MeteoraPoolsSwapEvent, MeteoraPoolsAddLiquidityEvent,
-    MeteoraPoolsRemoveLiquidityEvent, MeteoraPoolsBootstrapLiquidityEvent,
-    MeteoraPoolsPoolCreatedEvent, MeteoraDammV2SwapEvent, MeteoraDammV2CreatePositionEvent,
-    MeteoraDammV2ClosePositionEvent, MeteoraDammV2AddLiquidityEvent,
-    MeteoraDammV2RemoveLiquidityEvent, MeteoraDammV2InitializePoolEvent,
+    MeteoraDlmmClaimFeeEvent, MeteoraPoolsSetPoolFeesEvent, MeteoraPoolsSwapEvent,
+    MeteoraPoolsAddLiquidityEvent, MeteoraPoolsRemoveLiquidityEvent,
+    MeteoraPoolsBootstrapLiquidityEvent, MeteoraPoolsPoolCreatedEvent, MeteoraDammV2SwapEvent,
+    MeteoraDammV2CreatePositionEvent, MeteoraDammV2ClosePositionEvent,
+    MeteoraDammV2AddLiquidityEvent, MeteoraDammV2RemoveLiquidityEvent,
+    MeteoraDammV2InitializePoolEvent,
     BonkTradeEvent, BonkPoolCreateEvent, BonkMigrateAmmEvent,
 )
 
@@ -453,31 +456,18 @@ def parse_clmm_collect_from_data(data: bytes, meta: dict) -> DexEvent:
 # --- Raydium AMM ---
 
 
-def _amm_swap_ev(amm: str, user: str, ai: int, mo: int, mai: int, ao: int) -> dict:
-    return {
-        "metadata": None,
-        "amm": amm,
-        "user_source_owner": user,
-        "amount_in": ai,
-        "minimum_amount_out": mo,
-        "max_amount_in": mai,
-        "amount_out": ao,
-        "token_program": Z,
-        "amm_authority": Z,
-        "amm_open_orders": Z,
-        "pool_coin_token_account": Z,
-        "pool_pc_token_account": Z,
-        "serum_program": Z,
-        "serum_market": Z,
-        "serum_bids": Z,
-        "serum_asks": Z,
-        "serum_event_queue": Z,
-        "serum_coin_vault_account": Z,
-        "serum_pc_vault_account": Z,
-        "serum_vault_signer": Z,
-        "user_source_token_account": Z,
-        "user_destination_token_account": Z,
-    }
+def _amm_swap_event(
+    meta: dict, amm: str, user: str, ai: int, mo: int, mai: int, ao: int
+) -> RaydiumAmmV4SwapEvent:
+    return RaydiumAmmV4SwapEvent(
+        metadata=_make_meta(meta),
+        amm=amm,
+        user_source_owner=user,
+        amount_in=ai,
+        minimum_amount_out=mo,
+        max_amount_in=mai,
+        amount_out=ao,
+    )
 
 
 def parse_amm_swap_in_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -491,9 +481,10 @@ def parse_amm_swap_in_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     ai = _u64le(data, o)
     o += 8
     mo = _u64le(data, o)
-    ev = _amm_swap_ev(amm, user, ai, mo, 0, 0)
-    ev["metadata"] = meta
-    return {"RaydiumAmmV4Swap": ev}
+    return DexEvent(
+        type=EventType.RAYDIUM_AMM_V4_SWAP,
+        data=_amm_swap_event(meta, amm, user, ai, mo, 0, 0),
+    )
 
 
 def parse_amm_swap_out_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -507,9 +498,10 @@ def parse_amm_swap_out_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     mai = _u64le(data, o)
     o += 8
     ao = _u64le(data, o)
-    ev = _amm_swap_ev(amm, user, 0, 0, mai, ao)
-    ev["metadata"] = meta
-    return {"RaydiumAmmV4Swap": ev}
+    return DexEvent(
+        type=EventType.RAYDIUM_AMM_V4_SWAP,
+        data=_amm_swap_event(meta, amm, user, 0, 0, mai, ao),
+    )
 
 
 def parse_amm_deposit_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -525,28 +517,17 @@ def parse_amm_deposit_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     mp = _u64le(data, o)
     o += 8
     bs = _u64le(data, o)
-    return {
-        "RaydiumAmmV4Deposit": {
-            "metadata": meta,
-            "amm": amm,
-            "user_owner": user,
-            "max_coin_amount": mc,
-            "max_pc_amount": mp,
-            "base_side": bs,
-            "token_program": Z,
-            "amm_authority": Z,
-            "amm_open_orders": Z,
-            "amm_target_orders": Z,
-            "lp_mint_address": Z,
-            "pool_coin_token_account": Z,
-            "pool_pc_token_account": Z,
-            "serum_market": Z,
-            "user_coin_token_account": Z,
-            "user_pc_token_account": Z,
-            "user_lp_token_account": Z,
-            "serum_event_queue": Z,
-        }
-    }
+    return DexEvent(
+        type=EventType.RAYDIUM_AMM_V4_DEPOSIT,
+        data=RaydiumAmmV4DepositEvent(
+            metadata=_make_meta(meta),
+            amm=amm,
+            user_owner=user,
+            max_coin_amount=mc,
+            max_pc_amount=mp,
+            base_side=bs,
+        ),
+    )
 
 
 def parse_amm_withdraw_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -558,34 +539,15 @@ def parse_amm_withdraw_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     user = _pub(data, o)
     o += 32
     amt = _u64le(data, o)
-    return {
-        "RaydiumAmmV4Withdraw": {
-            "metadata": meta,
-            "amm": amm,
-            "user_owner": user,
-            "amount": amt,
-            "token_program": Z,
-            "amm_authority": Z,
-            "amm_open_orders": Z,
-            "amm_target_orders": Z,
-            "lp_mint_address": Z,
-            "pool_coin_token_account": Z,
-            "pool_pc_token_account": Z,
-            "pool_withdraw_queue": Z,
-            "pool_temp_lp_token_account": Z,
-            "serum_program": Z,
-            "serum_market": Z,
-            "serum_coin_vault_account": Z,
-            "serum_pc_vault_account": Z,
-            "serum_vault_signer": Z,
-            "user_lp_token_account": Z,
-            "user_coin_token_account": Z,
-            "user_pc_token_account": Z,
-            "serum_event_queue": Z,
-            "serum_bids": Z,
-            "serum_asks": Z,
-        }
-    }
+    return DexEvent(
+        type=EventType.RAYDIUM_AMM_V4_WITHDRAW,
+        data=RaydiumAmmV4WithdrawEvent(
+            metadata=_make_meta(meta),
+            amm=amm,
+            user_owner=user,
+            amount=amt,
+        ),
+    )
 
 
 def parse_amm_withdraw_pnl_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -595,28 +557,14 @@ def parse_amm_withdraw_pnl_from_data(data: bytes, meta: dict) -> Optional[DexEve
     amm = _pub(data, o)
     o += 32
     pnl_owner = _pub(data, o)
-    return {
-        "RaydiumAmmV4WithdrawPnl": {
-            "metadata": meta,
-            "token_program": Z,
-            "amm": amm,
-            "amm_config": Z,
-            "amm_authority": Z,
-            "amm_open_orders": Z,
-            "pool_coin_token_account": Z,
-            "pool_pc_token_account": Z,
-            "coin_pnl_token_account": Z,
-            "pc_pnl_token_account": Z,
-            "pnl_owner": pnl_owner,
-            "amm_target_orders": Z,
-            "serum_program": Z,
-            "serum_market": Z,
-            "serum_event_queue": Z,
-            "serum_coin_vault_account": Z,
-            "serum_pc_vault_account": Z,
-            "serum_vault_signer": Z,
-        }
-    }
+    return DexEvent(
+        type=EventType.RAYDIUM_AMM_V4_WITHDRAW_PNL,
+        data=RaydiumAmmV4WithdrawPnlEvent(
+            metadata=_make_meta(meta),
+            amm=amm,
+            pnl_owner=pnl_owner,
+        ),
+    )
 
 
 def parse_amm_init2_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -634,36 +582,18 @@ def parse_amm_init2_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     ipc = _u64le(data, o)
     o += 8
     ic = _u64le(data, o)
-    return {
-        "RaydiumAmmV4Initialize2": {
-            "metadata": meta,
-            "nonce": nonce,
-            "open_time": ot,
-            "init_pc_amount": ipc,
-            "init_coin_amount": ic,
-            "token_program": Z,
-            "spl_associated_token_account": Z,
-            "system_program": Z,
-            "rent": Z,
-            "amm": amm,
-            "amm_authority": Z,
-            "amm_open_orders": Z,
-            "lp_mint": Z,
-            "coin_mint": Z,
-            "pc_mint": Z,
-            "pool_coin_token_account": Z,
-            "pool_pc_token_account": Z,
-            "pool_withdraw_queue": Z,
-            "amm_target_orders": Z,
-            "pool_temp_lp": Z,
-            "serum_program": Z,
-            "serum_market": Z,
-            "user_wallet": user,
-            "user_token_coin": Z,
-            "user_token_pc": Z,
-            "user_lp_token_account": Z,
-        }
-    }
+    return DexEvent(
+        type=EventType.RAYDIUM_AMM_V4_INITIALIZE2,
+        data=RaydiumAmmV4Initialize2Event(
+            metadata=_make_meta(meta),
+            nonce=nonce,
+            open_time=ot,
+            init_pc_amount=ipc,
+            init_coin_amount=ic,
+            amm=amm,
+            user_wallet=user,
+        ),
+    )
 
 
 # --- Raydium CPMM ---
@@ -680,19 +610,16 @@ def parse_cpmm_swap_in_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     ao = _u64le(data, o)
     o += 8
     bi = _bool(data, o)
-    return {
-        "RaydiumCpmmSwap": {
-            "metadata": meta,
-            "pool_id": pool,
-            "input_amount": ai,
-            "output_amount": ao,
-            "input_vault_before": 0,
-            "output_vault_before": 0,
-            "input_transfer_fee": 0,
-            "output_transfer_fee": 0,
-            "base_input": bi,
-        }
-    }
+    return DexEvent(
+        type=EventType.RAYDIUM_CPMM_SWAP,
+        data=RaydiumCpmmSwapEvent(
+            metadata=_make_meta(meta),
+            pool_id=pool,
+            input_amount=ai,
+            output_amount=ao,
+            base_input=bi,
+        ),
+    )
 
 
 def parse_cpmm_swap_out_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -707,19 +634,16 @@ def parse_cpmm_swap_out_from_data(data: bytes, meta: dict) -> Optional[DexEvent]
     ai = _u64le(data, o)
     o += 8
     bo = _bool(data, o)
-    return {
-        "RaydiumCpmmSwap": {
-            "metadata": meta,
-            "pool_id": pool,
-            "input_amount": ai,
-            "output_amount": ao,
-            "base_input": not bo,
-            "input_vault_before": 0,
-            "output_vault_before": 0,
-            "input_transfer_fee": 0,
-            "output_transfer_fee": 0,
-        }
-    }
+    return DexEvent(
+        type=EventType.RAYDIUM_CPMM_SWAP,
+        data=RaydiumCpmmSwapEvent(
+            metadata=_make_meta(meta),
+            pool_id=pool,
+            input_amount=ai,
+            output_amount=ao,
+            base_input=not bo,
+        ),
+    )
 
 
 def parse_cpmm_deposit_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -735,16 +659,17 @@ def parse_cpmm_deposit_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     t0 = _u64le(data, o)
     o += 8
     t1 = _u64le(data, o)
-    return {
-        "RaydiumCpmmDeposit": {
-            "metadata": meta,
-            "pool": pool,
-            "user": user,
-            "lp_token_amount": lp,
-            "token0_amount": t0,
-            "token1_amount": t1,
-        }
-    }
+    return DexEvent(
+        type=EventType.RAYDIUM_CPMM_DEPOSIT,
+        data=RaydiumCpmmDepositEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            user=user,
+            lp_token_amount=lp,
+            token0_amount=t0,
+            token1_amount=t1,
+        ),
+    )
 
 
 def parse_cpmm_withdraw_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -760,16 +685,17 @@ def parse_cpmm_withdraw_from_data(data: bytes, meta: dict) -> Optional[DexEvent]
     t0 = _u64le(data, o)
     o += 8
     t1 = _u64le(data, o)
-    return {
-        "RaydiumCpmmWithdraw": {
-            "metadata": meta,
-            "pool": pool,
-            "user": user,
-            "lp_token_amount": lp,
-            "token0_amount": t0,
-            "token1_amount": t1,
-        }
-    }
+    return DexEvent(
+        type=EventType.RAYDIUM_CPMM_WITHDRAW,
+        data=RaydiumCpmmWithdrawEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            user=user,
+            lp_token_amount=lp,
+            token0_amount=t0,
+            token1_amount=t1,
+        ),
+    )
 
 
 # --- Orca ---
@@ -798,21 +724,22 @@ def parse_orca_traded_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     lpf = _u64le(data, o)
     o += 8
     pf = _u64le(data, o)
-    return {
-        "OrcaWhirlpoolSwap": {
-            "metadata": meta,
-            "whirlpool": w,
-            "a_to_b": atb,
-            "pre_sqrt_price": pre,
-            "post_sqrt_price": post,
-            "input_amount": ia,
-            "output_amount": oa,
-            "input_transfer_fee": itf,
-            "output_transfer_fee": otf,
-            "lp_fee": lpf,
-            "protocol_fee": pf,
-        }
-    }
+    return DexEvent(
+        type=EventType.ORCA_WHIRLPOOL_SWAP,
+        data=OrcaWhirlpoolSwapEvent(
+            metadata=_make_meta(meta),
+            whirlpool=w,
+            a_to_b=atb,
+            pre_sqrt_price=pre,
+            post_sqrt_price=post,
+            input_amount=ia,
+            output_amount=oa,
+            input_transfer_fee=itf,
+            output_transfer_fee=otf,
+            lp_fee=lpf,
+            protocol_fee=pf,
+        ),
+    )
 
 
 def parse_orca_liq_inc_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -836,20 +763,21 @@ def parse_orca_liq_inc_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     taf = _u64le(data, o)
     o += 8
     tbf = _u64le(data, o)
-    return {
-        "OrcaWhirlpoolLiquidityIncreased": {
-            "metadata": meta,
-            "whirlpool": w,
-            "position": p,
-            "tick_lower_index": tl,
-            "tick_upper_index": tu,
-            "liquidity": liq,
-            "token_a_amount": ta,
-            "token_b_amount": tb,
-            "token_a_transfer_fee": taf,
-            "token_b_transfer_fee": tbf,
-        }
-    }
+    return DexEvent(
+        type=EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED,
+        data=OrcaWhirlpoolLiquidityIncreasedEvent(
+            metadata=_make_meta(meta),
+            whirlpool=w,
+            position=p,
+            tick_lower_index=tl,
+            tick_upper_index=tu,
+            liquidity=liq,
+            token_a_amount=ta,
+            token_b_amount=tb,
+            token_a_transfer_fee=taf,
+            token_b_transfer_fee=tbf,
+        ),
+    )
 
 
 def parse_orca_liq_dec_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -873,20 +801,21 @@ def parse_orca_liq_dec_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     taf = _u64le(data, o)
     o += 8
     tbf = _u64le(data, o)
-    return {
-        "OrcaWhirlpoolLiquidityDecreased": {
-            "metadata": meta,
-            "whirlpool": w,
-            "position": p,
-            "tick_lower_index": tl,
-            "tick_upper_index": tu,
-            "liquidity": liq,
-            "token_a_amount": ta,
-            "token_b_amount": tb,
-            "token_a_transfer_fee": taf,
-            "token_b_transfer_fee": tbf,
-        }
-    }
+    return DexEvent(
+        type=EventType.ORCA_WHIRLPOOL_LIQUIDITY_DECREASED,
+        data=OrcaWhirlpoolLiquidityDecreasedEvent(
+            metadata=_make_meta(meta),
+            whirlpool=w,
+            position=p,
+            tick_lower_index=tl,
+            tick_upper_index=tu,
+            liquidity=liq,
+            token_a_amount=ta,
+            token_b_amount=tb,
+            token_a_transfer_fee=taf,
+            token_b_transfer_fee=tbf,
+        ),
+    )
 
 
 def parse_orca_pool_init_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -912,21 +841,22 @@ def parse_orca_pool_init_from_data(data: bytes, meta: dict) -> Optional[DexEvent
     db = _u8(data, o)
     o += 1
     isp = str(_u128le_int(data, o))
-    return {
-        "OrcaWhirlpoolPoolInitialized": {
-            "metadata": meta,
-            "whirlpool": w,
-            "whirlpools_config": cfg,
-            "token_mint_a": ma,
-            "token_mint_b": mb,
-            "tick_spacing": ts,
-            "token_program_a": tpa,
-            "token_program_b": tpb,
-            "decimals_a": da,
-            "decimals_b": db,
-            "initial_sqrt_price": isp,
-        }
-    }
+    return DexEvent(
+        type=EventType.ORCA_WHIRLPOOL_POOL_INITIALIZED,
+        data=OrcaWhirlpoolPoolInitializedEvent(
+            metadata=_make_meta(meta),
+            whirlpool=w,
+            whirlpools_config=cfg,
+            token_mint_a=ma,
+            token_mint_b=mb,
+            tick_spacing=ts,
+            token_program_a=tpa,
+            token_program_b=tpb,
+            decimals_a=da,
+            decimals_b=db,
+            initial_sqrt_price=isp,
+        ),
+    )
 
 
 # --- Meteora Pools ---
@@ -936,44 +866,47 @@ def parse_meteora_swap_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     if len(data) < 8 * 5:
         return None
     ox = [0]
-    return {
-        "MeteoraPoolsSwap": {
-            "metadata": meta,
-            "in_amount": _u64_at(data, ox),
-            "out_amount": _u64_at(data, ox),
-            "trade_fee": _u64_at(data, ox),
-            "admin_fee": _u64_at(data, ox),
-            "host_fee": _u64_at(data, ox),
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_POOLS_SWAP,
+        data=MeteoraPoolsSwapEvent(
+            metadata=_make_meta(meta),
+            in_amount=_u64_at(data, ox),
+            out_amount=_u64_at(data, ox),
+            trade_fee=_u64_at(data, ox),
+            admin_fee=_u64_at(data, ox),
+            host_fee=_u64_at(data, ox),
+        ),
+    )
 
 
 def parse_meteora_add_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     if len(data) < 24:
         return None
     ox = [0]
-    return {
-        "MeteoraPoolsAddLiquidity": {
-            "metadata": meta,
-            "lp_mint_amount": _u64_at(data, ox),
-            "token_a_amount": _u64_at(data, ox),
-            "token_b_amount": _u64_at(data, ox),
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_POOLS_ADD_LIQUIDITY,
+        data=MeteoraPoolsAddLiquidityEvent(
+            metadata=_make_meta(meta),
+            lp_mint_amount=_u64_at(data, ox),
+            token_a_amount=_u64_at(data, ox),
+            token_b_amount=_u64_at(data, ox),
+        ),
+    )
 
 
 def parse_meteora_remove_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     if len(data) < 24:
         return None
     ox = [0]
-    return {
-        "MeteoraPoolsRemoveLiquidity": {
-            "metadata": meta,
-            "lp_unmint_amount": _u64_at(data, ox),
-            "token_a_out_amount": _u64_at(data, ox),
-            "token_b_out_amount": _u64_at(data, ox),
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_POOLS_REMOVE_LIQUIDITY,
+        data=MeteoraPoolsRemoveLiquidityEvent(
+            metadata=_make_meta(meta),
+            lp_unmint_amount=_u64_at(data, ox),
+            token_a_out_amount=_u64_at(data, ox),
+            token_b_out_amount=_u64_at(data, ox),
+        ),
+    )
 
 
 def parse_meteora_bootstrap_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -984,15 +917,16 @@ def parse_meteora_bootstrap_from_data(data: bytes, meta: dict) -> Optional[DexEv
     ta = _u64_at(data, ox)
     tb = _u64_at(data, ox)
     pl = _pub(data, ox[0])
-    return {
-        "MeteoraPoolsBootstrapLiquidity": {
-            "metadata": meta,
-            "lp_mint_amount": lp,
-            "token_a_amount": ta,
-            "token_b_amount": tb,
-            "pool": pl,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_POOLS_BOOTSTRAP_LIQUIDITY,
+        data=MeteoraPoolsBootstrapLiquidityEvent(
+            metadata=_make_meta(meta),
+            lp_mint_amount=lp,
+            token_a_amount=ta,
+            token_b_amount=tb,
+            pool=pl,
+        ),
+    )
 
 
 def parse_meteora_pool_created_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1008,16 +942,17 @@ def parse_meteora_pool_created_from_data(data: bytes, meta: dict) -> Optional[De
     pt = _u8(data, o)
     o += 1
     pl = _pub(data, o)
-    return {
-        "MeteoraPoolsPoolCreated": {
-            "metadata": meta,
-            "lp_mint": lm,
-            "token_a_mint": ta,
-            "token_b_mint": tb,
-            "pool_type": pt,
-            "pool": pl,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_POOLS_POOL_CREATED,
+        data=MeteoraPoolsPoolCreatedEvent(
+            metadata=_make_meta(meta),
+            lp_mint=lm,
+            token_a_mint=ta,
+            token_b_mint=tb,
+            pool_type=pt,
+            pool=pl,
+        ),
+    )
 
 
 def parse_meteora_pools_set_pool_fees_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1033,16 +968,17 @@ def parse_meteora_pools_set_pool_fees_from_data(data: bytes, meta: dict) -> Opti
     ofd = _u64le(data, o)
     o += 8
     pool = _pub(data, o)
-    return {
-        "MeteoraPoolsSetPoolFees": {
-            "metadata": meta,
-            "trade_fee_numerator": tfn,
-            "trade_fee_denominator": tfd,
-            "owner_trade_fee_numerator": ofn,
-            "owner_trade_fee_denominator": ofd,
-            "pool": pool,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_POOLS_SET_POOL_FEES,
+        data=MeteoraPoolsSetPoolFeesEvent(
+            metadata=_make_meta(meta),
+            trade_fee_numerator=tfn,
+            trade_fee_denominator=tfd,
+            owner_trade_fee_numerator=ofn,
+            owner_trade_fee_denominator=ofd,
+            pool=pool,
+        ),
+    )
 
 
 # --- Meteora DAMM (Swap / Swap2 only，与 Go/TS 一致) ---
@@ -1106,30 +1042,31 @@ def _parse_damm_swap(data: bytes, meta: dict) -> Optional[DexEvent]:
     o += 8
     o += 8
     ct = _u64le(data, o)
-    return {
-        "MeteoraDammV2Swap": {
-            "metadata": meta,
-            "pool": pool,
-            "trade_direction": td,
-            "has_referral": hr,
-            "amount_in": ai,
-            "minimum_amount_out": mo,
-            "output_amount": oa,
-            "next_sqrt_price": nsp,
-            "lp_fee": lpf,
-            "protocol_fee": pf,
-            "partner_fee": 0,
-            "referral_fee": rf,
-            "actual_amount_in": aai,
-            "current_timestamp": ct,
-            "token_a_vault": Z,
-            "token_b_vault": Z,
-            "token_a_mint": Z,
-            "token_b_mint": Z,
-            "token_a_program": Z,
-            "token_b_program": Z,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_SWAP,
+        data=MeteoraDammV2SwapEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            trade_direction=td,
+            has_referral=hr,
+            amount_in=ai,
+            minimum_amount_out=mo,
+            output_amount=oa,
+            next_sqrt_price=nsp,
+            lp_fee=lpf,
+            protocol_fee=pf,
+            partner_fee=0,
+            referral_fee=rf,
+            actual_amount_in=aai,
+            current_timestamp=ct,
+            token_a_vault=Z,
+            token_b_vault=Z,
+            token_a_mint=Z,
+            token_b_mint=Z,
+            token_a_program=Z,
+            token_b_program=Z,
+        ),
+    )
 
 
 def _parse_damm_swap2(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1166,30 +1103,31 @@ def _parse_damm_swap2(data: bytes, meta: dict) -> Optional[DexEvent]:
     o += 8
     ct = _u64le(data, o)
     ai, mo = (a0, a1) if sm == 0 else (a1, a0)
-    return {
-        "MeteoraDammV2Swap": {
-            "metadata": meta,
-            "pool": pool,
-            "trade_direction": td,
-            "has_referral": hr,
-            "amount_in": ai,
-            "minimum_amount_out": mo,
-            "output_amount": oa,
-            "next_sqrt_price": nsp,
-            "lp_fee": lpf,
-            "protocol_fee": pf,
-            "partner_fee": 0,
-            "referral_fee": rf,
-            "actual_amount_in": ifi,
-            "current_timestamp": ct,
-            "token_a_vault": Z,
-            "token_b_vault": Z,
-            "token_a_mint": Z,
-            "token_b_mint": Z,
-            "token_a_program": Z,
-            "token_b_program": Z,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_SWAP,
+        data=MeteoraDammV2SwapEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            trade_direction=td,
+            has_referral=hr,
+            amount_in=ai,
+            minimum_amount_out=mo,
+            output_amount=oa,
+            next_sqrt_price=nsp,
+            lp_fee=lpf,
+            protocol_fee=pf,
+            partner_fee=0,
+            referral_fee=rf,
+            actual_amount_in=ifi,
+            current_timestamp=ct,
+            token_a_vault=Z,
+            token_b_vault=Z,
+            token_a_mint=Z,
+            token_b_mint=Z,
+            token_a_program=Z,
+            token_b_program=Z,
+        ),
+    )
 
 
 def _parse_damm_create_position(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1203,15 +1141,16 @@ def _parse_damm_create_position(data: bytes, meta: dict) -> Optional[DexEvent]:
     position = _pub(data, o)
     o += 32
     nft = _pub(data, o)
-    return {
-        "MeteoraDammV2CreatePosition": {
-            "metadata": meta,
-            "pool": pool,
-            "owner": owner,
-            "position": position,
-            "position_nft_mint": nft,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_CREATE_POSITION,
+        data=MeteoraDammV2CreatePositionEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            owner=owner,
+            position=position,
+            position_nft_mint=nft,
+        ),
+    )
 
 
 def _parse_damm_close_position(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1225,15 +1164,16 @@ def _parse_damm_close_position(data: bytes, meta: dict) -> Optional[DexEvent]:
     position = _pub(data, o)
     o += 32
     nft = _pub(data, o)
-    return {
-        "MeteoraDammV2ClosePosition": {
-            "metadata": meta,
-            "pool": pool,
-            "owner": owner,
-            "position": position,
-            "position_nft_mint": nft,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_CLOSE_POSITION,
+        data=MeteoraDammV2ClosePositionEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            owner=owner,
+            position=position,
+            position_nft_mint=nft,
+        ),
+    )
 
 
 def _parse_damm_add_liquidity(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1259,21 +1199,22 @@ def _parse_damm_add_liquidity(data: bytes, meta: dict) -> Optional[DexEvent]:
     tota = _u64le(data, o)
     o += 8
     totb = _u64le(data, o)
-    return {
-        "MeteoraDammV2AddLiquidity": {
-            "metadata": meta,
-            "pool": pool,
-            "position": position,
-            "owner": owner,
-            "liquidity_delta": ld,
-            "token_a_amount_threshold": tat,
-            "token_b_amount_threshold": tbt,
-            "token_a_amount": ta,
-            "token_b_amount": tb,
-            "total_amount_a": tota,
-            "total_amount_b": totb,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
+        data=MeteoraDammV2AddLiquidityEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            position=position,
+            owner=owner,
+            liquidity_delta=ld,
+            token_a_amount_threshold=tat,
+            token_b_amount_threshold=tbt,
+            token_a_amount=ta,
+            token_b_amount=tb,
+            total_amount_a=tota,
+            total_amount_b=totb,
+        ),
+    )
 
 
 def _parse_damm_dynamic_fee(data: bytes, o: int) -> Optional[tuple[dict, int]]:
@@ -1388,32 +1329,33 @@ def _parse_damm_initialize_pool(data: bytes, meta: dict) -> Optional[DexEvent]:
     totb = _u64le(data, o)
     o += 8
     pt = _u8(data, o)
-    return {
-        "MeteoraDammV2InitializePool": {
-            "metadata": meta,
-            "pool": pool,
-            "token_a_mint": tam,
-            "token_b_mint": tbm,
-            "creator": creator,
-            "payer": payer,
-            "alpha_vault": av,
-            "pool_fees": fees,
-            "sqrt_min_price": smin,
-            "sqrt_max_price": smax,
-            "activation_type": act,
-            "collect_fee_mode": cfm,
-            "liquidity": liq,
-            "sqrt_price": sqrt_p,
-            "activation_point": ap,
-            "token_a_flag": taf,
-            "token_b_flag": tbf,
-            "token_a_amount": tau,
-            "token_b_amount": tbu,
-            "total_amount_a": tota,
-            "total_amount_b": totb,
-            "pool_type": pt,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
+        data=MeteoraDammV2InitializePoolEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            token_a_mint=tam,
+            token_b_mint=tbm,
+            creator=creator,
+            payer=payer,
+            alpha_vault=av,
+            pool_fees=fees,
+            sqrt_min_price=smin,
+            sqrt_max_price=smax,
+            activation_type=act,
+            collect_fee_mode=cfm,
+            liquidity=liq,
+            sqrt_price=sqrt_p,
+            activation_point=ap,
+            token_a_flag=taf,
+            token_b_flag=tbf,
+            token_a_amount=tau,
+            token_b_amount=tbu,
+            total_amount_a=tota,
+            total_amount_b=totb,
+            pool_type=pt,
+        ),
+    )
 
 
 def _parse_damm_remove_liquidity(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1435,19 +1377,20 @@ def _parse_damm_remove_liquidity(data: bytes, meta: dict) -> Optional[DexEvent]:
     ta = _u64le(data, o)
     o += 8
     tb = _u64le(data, o)
-    return {
-        "MeteoraDammV2RemoveLiquidity": {
-            "metadata": meta,
-            "pool": pool,
-            "position": position,
-            "owner": owner,
-            "liquidity_delta": ld,
-            "token_a_amount_threshold": tat,
-            "token_b_amount_threshold": tbt,
-            "token_a_amount": ta,
-            "token_b_amount": tb,
-        }
-    }
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
+        data=MeteoraDammV2RemoveLiquidityEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            position=position,
+            owner=owner,
+            liquidity_delta=ld,
+            token_a_amount_threshold=tat,
+            token_b_amount_threshold=tbt,
+            token_a_amount=ta,
+            token_b_amount=tb,
+        ),
+    )
 
 
 # --- Bonk ---
@@ -1483,18 +1426,19 @@ def _parse_bonk_trade(data: bytes, meta: dict) -> Optional[DexEvent]:
     o += 1
     ex_in = _bool(data, o)
     d = "Buy" if is_buy else "Sell"
-    return {
-        "BonkTrade": {
-            "metadata": meta,
-            "pool_state": pool,
-            "user": user,
-            "amount_in": ai,
-            "amount_out": ao,
-            "is_buy": is_buy,
-            "trade_direction": d,
-            "exact_in": ex_in,
-        }
-    }
+    return DexEvent(
+        type=EventType.BONK_TRADE,
+        data=BonkTradeEvent(
+            metadata=_make_meta(meta),
+            pool_state=pool,
+            user=user,
+            amount_in=ai,
+            amount_out=ao,
+            is_buy=is_buy,
+            trade_direction=d,
+            exact_in=ex_in,
+        ),
+    )
 
 
 def _parse_bonk_pool_create(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1504,14 +1448,15 @@ def _parse_bonk_pool_create(data: bytes, meta: dict) -> Optional[DexEvent]:
     pool = _pub(data, o)
     o += 32 + 32 + 32
     creator = _pub(data, o)
-    return {
-        "BonkPoolCreate": {
-            "metadata": meta,
-            "base_mint_param": {"symbol": "BONK", "name": "Bonk Pool", "uri": "https://bonk.com", "decimals": 5},
-            "pool_state": pool,
-            "creator": creator,
-        }
-    }
+    return DexEvent(
+        type=EventType.BONK_POOL_CREATE,
+        data=BonkPoolCreateEvent(
+            metadata=_make_meta(meta),
+            base_mint_param={"symbol": "BONK", "name": "Bonk Pool", "uri": "https://bonk.com", "decimals": 5},
+            pool_state=pool,
+            creator=creator,
+        ),
+    )
 
 
 def _parse_bonk_migrate_amm(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1525,15 +1470,16 @@ def _parse_bonk_migrate_amm(data: bytes, meta: dict) -> Optional[DexEvent]:
     user = _pub(data, o)
     o += 32
     liq = _u64le(data, o)
-    return {
-        "BonkMigrateAmm": {
-            "metadata": meta,
-            "old_pool": old_p,
-            "new_pool": new_p,
-            "user": user,
-            "liquidity_amount": liq,
-        }
-    }
+    return DexEvent(
+        type=EventType.BONK_MIGRATE_AMM,
+        data=BonkMigrateAmmEvent(
+            metadata=_make_meta(meta),
+            old_pool=old_p,
+            new_pool=new_p,
+            user=user,
+            liquidity_amount=liq,
+        ),
+    )
 
 
 # --- PumpSwap ---
@@ -1620,7 +1566,11 @@ def parse_ps_buy_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     ev["cashback_fee_basis_points"] = cb_bps
     ev["cashback"] = cb
     ev["is_cashback_coin"] = cb_bps > 0
-    return {"PumpSwapBuy": ev}
+    md = ev.pop("metadata", meta)
+    return DexEvent(
+        type=EventType.PUMP_SWAP_BUY,
+        data=PumpSwapBuyEvent(metadata=_make_meta(md), **ev),
+    )
 
 
 def parse_ps_sell_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1679,7 +1629,11 @@ def parse_ps_sell_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
         cash = _u64le(data, 360)
     ev["cashback_fee_basis_points"] = cash_bps
     ev["cashback"] = cash
-    return {"PumpSwapSell": ev}
+    md = ev.pop("metadata", meta)
+    return DexEvent(
+        type=EventType.PUMP_SWAP_SELL,
+        data=PumpSwapSellEvent(metadata=_make_meta(md), **ev),
+    )
 
 
 def parse_ps_create_pool_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1743,7 +1697,11 @@ def parse_ps_create_pool_from_data(data: bytes, meta: dict) -> Optional[DexEvent
     ev["user_quote_token_account"] = uqa
     ev["coin_creator"] = cc
     ev["is_mayhem_mode"] = len(data) > 325 and _bool(data, 325)
-    return {"PumpSwapCreatePool": ev}
+    md = ev.pop("metadata", meta)
+    return DexEvent(
+        type=EventType.PUMP_SWAP_CREATE_POOL,
+        data=PumpSwapCreatePoolEvent(metadata=_make_meta(md), **ev),
+    )
 
 
 def parse_ps_add_liq_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1769,27 +1727,28 @@ def parse_ps_add_liq_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
         o += 32
         return s
 
-    return {
-        "PumpSwapLiquidityAdded": {
-            "metadata": meta,
-            "timestamp": ri(),
-            "lp_token_amount_out": rd(),
-            "max_base_amount_in": rd(),
-            "max_quote_amount_in": rd(),
-            "user_base_token_reserves": rd(),
-            "user_quote_token_reserves": rd(),
-            "pool_base_token_reserves": rd(),
-            "pool_quote_token_reserves": rd(),
-            "base_amount_in": rd(),
-            "quote_amount_in": rd(),
-            "lp_mint_supply": rd(),
-            "pool": rp(),
-            "user": rp(),
-            "user_base_token_account": rp(),
-            "user_quote_token_account": rp(),
-            "user_pool_token_account": rp(),
-        }
-    }
+    return DexEvent(
+        type=EventType.PUMP_SWAP_LIQUIDITY_ADDED,
+        data=PumpSwapLiquidityAddedEvent(
+            metadata=_make_meta(meta),
+            timestamp=ri(),
+            lp_token_amount_out=rd(),
+            max_base_amount_in=rd(),
+            max_quote_amount_in=rd(),
+            user_base_token_reserves=rd(),
+            user_quote_token_reserves=rd(),
+            pool_base_token_reserves=rd(),
+            pool_quote_token_reserves=rd(),
+            base_amount_in=rd(),
+            quote_amount_in=rd(),
+            lp_mint_supply=rd(),
+            pool=rp(),
+            user=rp(),
+            user_base_token_account=rp(),
+            user_quote_token_account=rp(),
+            user_pool_token_account=rp(),
+        ),
+    )
 
 
 def parse_ps_remove_liq_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1815,27 +1774,28 @@ def parse_ps_remove_liq_from_data(data: bytes, meta: dict) -> Optional[DexEvent]
         o += 32
         return s
 
-    return {
-        "PumpSwapLiquidityRemoved": {
-            "metadata": meta,
-            "timestamp": ri(),
-            "lp_token_amount_in": rd(),
-            "min_base_amount_out": rd(),
-            "min_quote_amount_out": rd(),
-            "user_base_token_reserves": rd(),
-            "user_quote_token_reserves": rd(),
-            "pool_base_token_reserves": rd(),
-            "pool_quote_token_reserves": rd(),
-            "base_amount_out": rd(),
-            "quote_amount_out": rd(),
-            "lp_mint_supply": rd(),
-            "pool": rp(),
-            "user": rp(),
-            "user_base_token_account": rp(),
-            "user_quote_token_account": rp(),
-            "user_pool_token_account": rp(),
-        }
-    }
+    return DexEvent(
+        type=EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
+        data=PumpSwapLiquidityRemovedEvent(
+            metadata=_make_meta(meta),
+            timestamp=ri(),
+            lp_token_amount_in=rd(),
+            min_base_amount_out=rd(),
+            min_quote_amount_out=rd(),
+            user_base_token_reserves=rd(),
+            user_quote_token_reserves=rd(),
+            pool_base_token_reserves=rd(),
+            pool_quote_token_reserves=rd(),
+            base_amount_out=rd(),
+            quote_amount_out=rd(),
+            lp_mint_supply=rd(),
+            pool=rp(),
+            user=rp(),
+            user_base_token_account=rp(),
+            user_quote_token_account=rp(),
+            user_pool_token_account=rp(),
+        ),
+    )
 
 
 # --- Meteora DLMM ---
@@ -1880,22 +1840,23 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
         fbps = str(_u128le_int(data, o))
         o += 16
         hf = _u64le(data, o)
-        return {
-            "MeteoraDlmmSwap": {
-                "metadata": meta,
-                "pool": pool,
-                "from": frm,
-                "start_bin_id": sb,
-                "end_bin_id": eb,
-                "amount_in": ai,
-                "amount_out": ao,
-                "swap_for_y": sy,
-                "fee": fee,
-                "protocol_fee": pf,
-                "fee_bps": fbps,
-                "host_fee": hf,
-            }
-        }
+        return DexEvent(
+            type=EventType.METEORA_DLMM_SWAP,
+            data=MeteoraDlmmSwapEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                from_addr=frm,
+                start_bin_id=sb,
+                end_bin_id=eb,
+                amount_in=ai,
+                amount_out=ao,
+                swap_for_y=sy,
+                fee=fee,
+                protocol_fee=pf,
+                fee_bps=fbps,
+                host_fee=hf,
+            ),
+        )
     if d == DLMM_ADD_LIQ:
         if len(data) < 32 + 32 + 32 + 8 + 8 + 4:
             return None
@@ -1911,16 +1872,17 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
         a1 = _u64le(data, o)
         o += 8
         ab = _i32le(data, o)
-        return {
-            "MeteoraDlmmAddLiquidity": {
-                "metadata": meta,
-                "pool": pool,
-                "from": frm,
-                "position": pos,
-                "amounts": [a0, a1],
-                "active_bin_id": ab,
-            }
-        }
+        return DexEvent(
+            type=EventType.METEORA_DLMM_ADD_LIQUIDITY,
+            data=MeteoraDlmmAddLiquidityEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                from_addr=frm,
+                position=pos,
+                amounts=[a0, a1],
+                active_bin_id=ab,
+            ),
+        )
     if d == DLMM_REMOVE_LIQ:
         if len(data) < 32 + 32 + 32 + 8 + 8 + 4:
             return None
@@ -1936,16 +1898,17 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
         a1 = _u64le(data, o)
         o += 8
         ab = _i32le(data, o)
-        return {
-            "MeteoraDlmmRemoveLiquidity": {
-                "metadata": meta,
-                "pool": pool,
-                "from": frm,
-                "position": pos,
-                "amounts": [a0, a1],
-                "active_bin_id": ab,
-            }
-        }
+        return DexEvent(
+            type=EventType.METEORA_DLMM_REMOVE_LIQUIDITY,
+            data=MeteoraDlmmRemoveLiquidityEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                from_addr=frm,
+                position=pos,
+                amounts=[a0, a1],
+                active_bin_id=ab,
+            ),
+        )
     if d == DLMM_INIT_POOL:
         if len(data) < 32 + 32 + 4 + 2:
             return None
@@ -1957,15 +1920,16 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
         ab = _i32le(data, o)
         o += 4
         bs = _u16le(data, o)
-        return {
-            "MeteoraDlmmInitializePool": {
-                "metadata": meta,
-                "pool": pool,
-                "creator": creator,
-                "active_bin_id": ab,
-                "bin_step": bs,
-            }
-        }
+        return DexEvent(
+            type=EventType.METEORA_DLMM_INITIALIZE_POOL,
+            data=MeteoraDlmmInitializePoolEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                creator=creator,
+                active_bin_id=ab,
+                bin_step=bs,
+            ),
+        )
     if d == DLMM_INIT_BIN:
         if len(data) < 32 + 32 + 8:
             return None
@@ -1975,14 +1939,15 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
         ba = _pub(data, o)
         o += 32
         idx = _u64le(data, o)
-        return {
-            "MeteoraDlmmInitializeBinArray": {
-                "metadata": meta,
-                "pool": pool,
-                "bin_array": ba,
-                "index": idx,
-            }
-        }
+        return DexEvent(
+            type=EventType.METEORA_DLMM_INITIALIZE_BIN_ARRAY,
+            data=MeteoraDlmmInitializeBinArrayEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                bin_array=ba,
+                index=int(idx),
+            ),
+        )
     if d == DLMM_CREATE_POS:
         if len(data) < 32 + 32 + 32 + 4 + 4:
             return None
@@ -1996,16 +1961,17 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
         lb = _i32le(data, o)
         o += 4
         w = _u32le(data, o)
-        return {
-            "MeteoraDlmmCreatePosition": {
-                "metadata": meta,
-                "pool": pool,
-                "position": pos,
-                "owner": owner,
-                "lower_bin_id": lb,
-                "width": w,
-            }
-        }
+        return DexEvent(
+            type=EventType.METEORA_DLMM_CREATE_POSITION,
+            data=MeteoraDlmmCreatePositionEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                position=pos,
+                owner=owner,
+                lower_bin_id=lb,
+                width=w,
+            ),
+        )
     if d == DLMM_CLOSE_POS:
         if len(data) < 32 + 32 + 32:
             return None
@@ -2015,14 +1981,15 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
         pos = _pub(data, o)
         o += 32
         owner = _pub(data, o)
-        return {
-            "MeteoraDlmmClosePosition": {
-                "metadata": meta,
-                "pool": pool,
-                "position": pos,
-                "owner": owner,
-            }
-        }
+        return DexEvent(
+            type=EventType.METEORA_DLMM_CLOSE_POSITION,
+            data=MeteoraDlmmClosePositionEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                position=pos,
+                owner=owner,
+            ),
+        )
     if d == DLMM_CLAIM_FEE:
         if len(data) < 32 + 32 + 32 + 8 + 8:
             return None
@@ -2036,16 +2003,17 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
         fx = _u64le(data, o)
         o += 8
         fy = _u64le(data, o)
-        return {
-            "MeteoraDlmmClaimFee": {
-                "metadata": meta,
-                "pool": pool,
-                "position": pos,
-                "owner": owner,
-                "fee_x": fx,
-                "fee_y": fy,
-            }
-        }
+        return DexEvent(
+            type=EventType.METEORA_DLMM_CLAIM_FEE,
+            data=MeteoraDlmmClaimFeeEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                position=pos,
+                owner=owner,
+                fee_x=fx,
+                fee_y=fy,
+            ),
+        )
     return None
 
 

@@ -6,17 +6,21 @@ import struct
 from typing import Optional, List
 
 from .grpc_types import EventTypeFilter, EventType, EventMetadata
-from .dex_parsers import DexEvent, Z
+from .dex_parsers import Z
+from .event_types import DexEvent, PumpFunCreateEvent, PumpFunCreateV2TokenEvent, legacy_dict_to_dex_event
 
-# 程序 ID 常量
-PUMPFUN_PROGRAM_ID         = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
-PUMPSWAP_PROGRAM_ID        = "pAMMBay6oceH9fJKBRdGP4LmT4saRGfEE7xmrCaGWpZ"
-METEORA_DAMM_V2_PROGRAM_ID = "cpamdpZCGKUy5JxQXB2MWgCm3hcnGjEJbYTJgfm4E8a"
-RAYDIUM_CLMM_PROGRAM_ID    = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
-RAYDIUM_CPMM_PROGRAM_ID    = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
-RAYDIUM_AMM_V4_PROGRAM_ID  = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
-ORCA_WHIRLPOOL_PROGRAM_ID  = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
-BONK_LAUNCHPAD_PROGRAM_ID  = "LanCh3hDdY7M6x8urBSLJhsQBgPNGKHNqJqGwzAEmBm"
+# 程序 ID 常量（与 Rust ``instr::program_ids`` 一致，用于 inner / outer 路由）
+PUMPFUN_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+PUMPSWAP_PROGRAM_ID = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
+METEORA_DAMM_V2_PROGRAM_ID = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG"
+RAYDIUM_CLMM_PROGRAM_ID = "CAMMCzo5YL8w4VFF8KVHrK22GGUQpMDdHFWF5LCATdCR"
+RAYDIUM_CPMM_PROGRAM_ID = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+RAYDIUM_AMM_V4_PROGRAM_ID = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+ORCA_WHIRLPOOL_PROGRAM_ID = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
+METEORA_POOLS_PROGRAM_ID = "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB"
+METEORA_DLMM_PROGRAM_ID = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
+BONK_LAUNCHPAD_PROGRAM_ID = "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1"
+PUMPSWAP_FEES_PROGRAM_ID = "pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ"
 
 
 def _d(*xs: int) -> int:
@@ -217,26 +221,27 @@ def _parse_pumpfun_create(data: bytes, accounts: List[str], meta: EventMetadata)
         import base58
         creator = base58.b58encode(data[offset:offset + 32]).decode('ascii')
 
-    return {
-        "PumpFunCreate": {
-            "metadata": meta,
-            "name": name,
-            "symbol": symbol,
-            "uri": uri,
-            "mint": _get_account_safe(accounts, 0),
-            "bonding_curve": _get_account_safe(accounts, 2),
-            "user": _get_account_safe(accounts, 7),
-            "creator": creator,
-            "token_program": Z,
-            "timestamp": 0,
-            "virtual_token_reserves": 0,
-            "virtual_sol_reserves": 0,
-            "real_token_reserves": 0,
-            "token_total_supply": 0,
-            "is_mayhem_mode": False,
-            "is_cashback_enabled": False,
-        }
-    }
+    return DexEvent(
+        type=EventType.PUMP_FUN_CREATE,
+        data=PumpFunCreateEvent(
+            metadata=meta,
+            name=name,
+            symbol=symbol,
+            uri=uri,
+            mint=_get_account_safe(accounts, 0),
+            bonding_curve=_get_account_safe(accounts, 2),
+            user=_get_account_safe(accounts, 7),
+            creator=creator,
+            token_program=Z,
+            timestamp=0,
+            virtual_token_reserves=0,
+            virtual_sol_reserves=0,
+            real_token_reserves=0,
+            token_total_supply=0,
+            is_mayhem_mode=False,
+            is_cashback_enabled=False,
+        ),
+    )
 
 
 def _parse_pumpfun_create_v2(data: bytes, accounts: List[str], meta: EventMetadata) -> Optional[DexEvent]:
@@ -271,38 +276,40 @@ def _parse_pumpfun_create_v2(data: bytes, accounts: List[str], meta: EventMetada
         import base58
         creator = base58.b58encode(data[offset:offset + 32]).decode('ascii')
 
-    return {
-        "PumpFunCreateV2": {
-            "metadata": meta,
-            "name": name,
-            "symbol": symbol,
-            "uri": uri,
-            "mint": _get_account_safe(accounts, 0),
-            "mint_authority": _get_account_safe(accounts, 1),
-            "bonding_curve": _get_account_safe(accounts, 2),
-            "associated_bonding_curve": _get_account_safe(accounts, 3),
-            "global": _get_account_safe(accounts, 4),
-            "user": _get_account_safe(accounts, 5),
-            "system_program": _get_account_safe(accounts, 6),
-            "token_program": _get_account_safe(accounts, 7),
-            "associated_token_program": _get_account_safe(accounts, 8),
-            "mayhem_program_id": _get_account_safe(accounts, 9),
-            "global_params": _get_account_safe(accounts, 10),
-            "sol_vault": _get_account_safe(accounts, 11),
-            "mayhem_state": _get_account_safe(accounts, 12),
-            "mayhem_token_vault": _get_account_safe(accounts, 13),
-            "event_authority": _get_account_safe(accounts, 14),
-            "program": _get_account_safe(accounts, 15),
-            "creator": creator,
-            "timestamp": 0,
-            "virtual_token_reserves": 0,
-            "virtual_sol_reserves": 0,
-            "real_token_reserves": 0,
-            "token_total_supply": 0,
-            "is_mayhem_mode": False,
-            "is_cashback_enabled": False,
-        }
-    }
+    return DexEvent(
+        type=EventType.PUMP_FUN_CREATE_V2,
+        data=PumpFunCreateV2TokenEvent(
+            metadata=meta,
+            name=name,
+            symbol=symbol,
+            uri=uri,
+            mint=_get_account_safe(accounts, 0),
+            mint_authority=_get_account_safe(accounts, 1),
+            bonding_curve=_get_account_safe(accounts, 2),
+            associated_bonding_curve=_get_account_safe(accounts, 3),
+            global_account=_get_account_safe(accounts, 4),
+            user=_get_account_safe(accounts, 5),
+            system_program=_get_account_safe(accounts, 6),
+            token_program=_get_account_safe(accounts, 7),
+            associated_token_program=_get_account_safe(accounts, 8),
+            mayhem_program_id=_get_account_safe(accounts, 9),
+            global_params=_get_account_safe(accounts, 10),
+            sol_vault=_get_account_safe(accounts, 11),
+            mayhem_state=_get_account_safe(accounts, 12),
+            mayhem_token_vault=_get_account_safe(accounts, 13),
+            event_authority=_get_account_safe(accounts, 14),
+            program=_get_account_safe(accounts, 15),
+            creator=creator,
+            timestamp=0,
+            virtual_token_reserves=0,
+            virtual_sol_reserves=0,
+            real_token_reserves=0,
+            token_total_supply=0,
+            is_mayhem_mode=False,
+            is_cashback_enabled=False,
+            observed_fee_recipient="",
+        ),
+    )
 
 
 def parse_pumpswap_instruction(
@@ -322,9 +329,9 @@ def parse_pumpswap_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if discriminator == _DISC_PUMPSWAP_BUY:
-        return {"PumpSwapBuy": {"metadata": meta}}
+        return legacy_dict_to_dex_event({"PumpSwapBuy": {"metadata": meta}})
     if discriminator == _DISC_PUMPSWAP_SELL:
-        return {"PumpSwapSell": {"metadata": meta}}
+        return legacy_dict_to_dex_event({"PumpSwapSell": {"metadata": meta}})
 
     return None
 
@@ -346,17 +353,17 @@ def parse_meteora_damm_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if discriminator in (_DISC_DAMM_SWAP, _DISC_DAMM_SWAP2):
-        return {"MeteoraDammV2Swap": {"metadata": meta}}
+        return legacy_dict_to_dex_event({"MeteoraDammV2Swap": {"metadata": meta}})
     if discriminator == _DISC_DAMM_ADD_LIQ:
-        return {"MeteoraDammV2AddLiquidity": {"metadata": meta}}
+        return legacy_dict_to_dex_event({"MeteoraDammV2AddLiquidity": {"metadata": meta}})
     if discriminator == _DISC_DAMM_REM_LIQ:
-        return {"MeteoraDammV2RemoveLiquidity": {"metadata": meta}}
+        return legacy_dict_to_dex_event({"MeteoraDammV2RemoveLiquidity": {"metadata": meta}})
     if discriminator == _DISC_DAMM_CREATE:
-        return {"MeteoraDammV2CreatePosition": {"metadata": meta}}
+        return legacy_dict_to_dex_event({"MeteoraDammV2CreatePosition": {"metadata": meta}})
     if discriminator == _DISC_DAMM_CLOSE:
-        return {"MeteoraDammV2ClosePosition": {"metadata": meta}}
+        return legacy_dict_to_dex_event({"MeteoraDammV2ClosePosition": {"metadata": meta}})
     if discriminator == _DISC_DAMM_INIT:
-        return {"MeteoraDammV2InitializePool": {"metadata": meta}}
+        return legacy_dict_to_dex_event({"MeteoraDammV2InitializePool": {"metadata": meta}})
 
     return None
 
@@ -378,7 +385,7 @@ def parse_raydium_clmm_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if discriminator == _DISC_CLMM_SWAP:
-        return {"RaydiumClmmSwap": {
+        return legacy_dict_to_dex_event({"RaydiumClmmSwap": {
             "metadata": meta,
             "pool_state": _get_account_safe(accounts, 2),
             "sender": _get_account_safe(accounts, 0),
@@ -386,31 +393,31 @@ def parse_raydium_clmm_instruction(
             "amount_0": 0, "amount_1": 0, "zero_for_one": False,
             "sqrt_price_x64": "0", "liquidity": "0",
             "transfer_fee_0": 0, "transfer_fee_1": 0, "tick": 0,
-        }}
+        }})
     if discriminator == _DISC_CLMM_INC_LIQ:
-        return {"RaydiumClmmIncreaseLiquidity": {
+        return legacy_dict_to_dex_event({"RaydiumClmmIncreaseLiquidity": {
             "metadata": meta,
             "pool": _get_account_safe(accounts, 3),
             "position_nft_mint": Z,
             "user": _get_account_safe(accounts, 0),
             "liquidity": "0", "amount0_max": 0, "amount1_max": 0,
-        }}
+        }})
     if discriminator == _DISC_CLMM_DEC_LIQ:
-        return {"RaydiumClmmDecreaseLiquidity": {
+        return legacy_dict_to_dex_event({"RaydiumClmmDecreaseLiquidity": {
             "metadata": meta,
             "pool": _get_account_safe(accounts, 3),
             "position_nft_mint": Z,
             "user": _get_account_safe(accounts, 0),
             "liquidity": "0", "amount0_min": 0, "amount1_min": 0,
-        }}
+        }})
     if discriminator == _DISC_CLMM_CREATE:
-        return {"RaydiumClmmCreatePool": {
+        return legacy_dict_to_dex_event({"RaydiumClmmCreatePool": {
             "metadata": meta,
             "pool": _get_account_safe(accounts, 4),
             "creator": _get_account_safe(accounts, 0),
             "token_0_mint": Z, "token_1_mint": Z,
             "tick_spacing": 0, "fee_rate": 0, "sqrt_price_x64": "0", "open_time": 0,
-        }}
+        }})
 
     return None
 
@@ -432,28 +439,28 @@ def parse_raydium_cpmm_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if discriminator == _DISC_CPMM_SWAP:
-        return {"RaydiumCpmmSwap": {
+        return legacy_dict_to_dex_event({"RaydiumCpmmSwap": {
             "metadata": meta,
             "pool_id": _get_account_safe(accounts, 2),
             "input_amount": 0, "output_amount": 0,
             "input_vault_before": 0, "output_vault_before": 0,
             "input_transfer_fee": 0, "output_transfer_fee": 0,
             "base_input": True,
-        }}
+        }})
     if discriminator == _DISC_CPMM_DEP:
-        return {"RaydiumCpmmDeposit": {
+        return legacy_dict_to_dex_event({"RaydiumCpmmDeposit": {
             "metadata": meta,
             "pool": _get_account_safe(accounts, 2),
             "user": _get_account_safe(accounts, 0),
             "lp_token_amount": 0, "token0_amount": 0, "token1_amount": 0,
-        }}
+        }})
     if discriminator == _DISC_CPMM_WIT:
-        return {"RaydiumCpmmWithdraw": {
+        return legacy_dict_to_dex_event({"RaydiumCpmmWithdraw": {
             "metadata": meta,
             "pool": _get_account_safe(accounts, 2),
             "user": _get_account_safe(accounts, 0),
             "lp_token_amount": 0, "token0_amount": 0, "token1_amount": 0,
-        }}
+        }})
 
     return None
 
@@ -475,7 +482,7 @@ def parse_raydium_amm_v4_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if instr_type in (9, 11):  # SwapBaseIn / SwapBaseOut
-        return {"RaydiumAmmV4Swap": {
+        return legacy_dict_to_dex_event({"RaydiumAmmV4Swap": {
             "metadata": meta,
             "amm": _get_account_safe(accounts, 1),
             "user_source_owner": _get_account_safe(accounts, 17),
@@ -489,7 +496,7 @@ def parse_raydium_amm_v4_instruction(
             "serum_vault_signer": Z,
             "user_source_token_account": Z,
             "user_destination_token_account": Z,
-        }}
+        }})
 
     return None
 
@@ -511,7 +518,7 @@ def parse_orca_whirlpool_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if discriminator == _DISC_ORCA_SWAP:
-        return {"OrcaWhirlpoolSwap": {
+        return legacy_dict_to_dex_event({"OrcaWhirlpoolSwap": {
             "metadata": meta,
             "whirlpool": _get_account_safe(accounts, 2),
             "a_to_b": True,
@@ -519,9 +526,9 @@ def parse_orca_whirlpool_instruction(
             "input_amount": 0, "output_amount": 0,
             "input_transfer_fee": 0, "output_transfer_fee": 0,
             "lp_fee": 0, "protocol_fee": 0,
-        }}
+        }})
     if discriminator == _DISC_ORCA_INC_LIQ:
-        return {"OrcaWhirlpoolLiquidityIncreased": {
+        return legacy_dict_to_dex_event({"OrcaWhirlpoolLiquidityIncreased": {
             "metadata": meta,
             "whirlpool": _get_account_safe(accounts, 1),
             "position": _get_account_safe(accounts, 3),
@@ -529,9 +536,9 @@ def parse_orca_whirlpool_instruction(
             "liquidity": "0",
             "token_a_amount": 0, "token_b_amount": 0,
             "token_a_transfer_fee": 0, "token_b_transfer_fee": 0,
-        }}
+        }})
     if discriminator == _DISC_ORCA_DEC_LIQ:
-        return {"OrcaWhirlpoolLiquidityDecreased": {
+        return legacy_dict_to_dex_event({"OrcaWhirlpoolLiquidityDecreased": {
             "metadata": meta,
             "whirlpool": _get_account_safe(accounts, 1),
             "position": _get_account_safe(accounts, 3),
@@ -539,7 +546,7 @@ def parse_orca_whirlpool_instruction(
             "liquidity": "0",
             "token_a_amount": 0, "token_b_amount": 0,
             "token_a_transfer_fee": 0, "token_b_transfer_fee": 0,
-        }}
+        }})
 
     return None
 
@@ -561,20 +568,20 @@ def parse_bonk_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if discriminator == _DISC_BONK_TRADE:
-        return {"BonkTrade": {
+        return legacy_dict_to_dex_event({"BonkTrade": {
             "metadata": meta,
             "pool_state": _get_account_safe(accounts, 1),
             "user": _get_account_safe(accounts, 0),
             "amount_in": 0, "amount_out": 0,
             "is_buy": True, "trade_direction": "Buy", "exact_in": True,
-        }}
+        }})
     if discriminator == _DISC_BONK_POOL_CREATE:
-        return {"BonkPoolCreate": {
+        return legacy_dict_to_dex_event({"BonkPoolCreate": {
             "metadata": meta,
             "base_mint_param": {"symbol": "BONK", "name": "Bonk Pool", "uri": "https://bonk.com", "decimals": 5},
             "pool_state": _get_account_safe(accounts, 1),
             "creator": _get_account_safe(accounts, 8),
-        }}
+        }})
 
     return None
 

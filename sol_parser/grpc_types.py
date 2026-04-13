@@ -228,6 +228,44 @@ class ClientConfig:
         """返回默认客户端配置"""
         return ClientConfig()
 
+    @staticmethod
+    def low_latency() -> ClientConfig:
+        """对齐 Rust ``ClientConfig::low_latency``"""
+        return ClientConfig(
+            enable_metrics=False,
+            connection_timeout_ms=5000,
+            request_timeout_ms=10000,
+            enable_tls=True,
+            max_retries=1,
+            retry_delay_ms=100,
+            max_concurrent_streams=200,
+            keep_alive_interval_ms=10000,
+            keep_alive_timeout_ms=2000,
+            buffer_size=16384,
+            order_mode=OrderMode.UNORDERED,
+            order_timeout_ms=50,
+            micro_batch_us=50,
+        )
+
+    @staticmethod
+    def high_throughput() -> ClientConfig:
+        """对齐 Rust ``ClientConfig::high_throughput``"""
+        return ClientConfig(
+            enable_metrics=True,
+            connection_timeout_ms=10000,
+            request_timeout_ms=30000,
+            enable_tls=True,
+            max_retries=5,
+            retry_delay_ms=2000,
+            max_concurrent_streams=500,
+            keep_alive_interval_ms=60000,
+            keep_alive_timeout_ms=10000,
+            buffer_size=32768,
+            order_mode=OrderMode.UNORDERED,
+            order_timeout_ms=200,
+            micro_batch_us=200,
+        )
+
 
 @dataclass
 class TransactionFilter:
@@ -243,6 +281,23 @@ class TransactionFilter:
     def new() -> TransactionFilter:
         """创建新的交易过滤器"""
         return TransactionFilter()
+
+    @staticmethod
+    def from_program_ids(program_ids: List[str]) -> TransactionFilter:
+        """对齐 Rust ``TransactionFilter::from_program_ids``"""
+        return TransactionFilter(account_include=list(program_ids))
+
+    def include_account(self, account: str) -> TransactionFilter:
+        self.account_include.append(account)
+        return self
+
+    def exclude_account(self, account: str) -> TransactionFilter:
+        self.account_exclude.append(account)
+        return self
+
+    def require_account(self, account: str) -> TransactionFilter:
+        self.account_required.append(account)
+        return self
 
 
 class EventTypeFilter:
@@ -377,6 +432,66 @@ class SubscribeRequestFilterAccountsFilter:
     datasize: Optional[int] = None
     token_account_state: Optional[bool] = None
     lamports: Optional[SubscribeRequestFilterAccountsFilterLamports] = None
+
+
+@dataclass
+class AccountFilter:
+    """账户订阅过滤器（对齐 Rust ``grpc/types::AccountFilter``，用于 ``subscribe_builder``）"""
+
+    account: List[str] = field(default_factory=list)
+    owner: List[str] = field(default_factory=list)
+    filters: List[SubscribeRequestFilterAccountsFilter] = field(default_factory=list)
+
+    @staticmethod
+    def new() -> AccountFilter:
+        return AccountFilter()
+
+    def add_account(self, account: str) -> AccountFilter:
+        self.account.append(account)
+        return self
+
+    def add_owner(self, owner: str) -> AccountFilter:
+        self.owner.append(owner)
+        return self
+
+    def add_filter(self, f: SubscribeRequestFilterAccountsFilter) -> AccountFilter:
+        self.filters.append(f)
+        return self
+
+    @staticmethod
+    def from_program_owners(program_ids: List[str]) -> AccountFilter:
+        return AccountFilter(owner=list(program_ids))
+
+
+class Protocol(str, Enum):
+    """DEX 协议枚举（对齐 Rust ``grpc/types::Protocol``）"""
+
+    PUMP_FUN = "PumpFun"
+    PUMP_SWAP = "PumpSwap"
+    BONK = "Bonk"
+    RAYDIUM_CPMM = "RaydiumCpmm"
+    RAYDIUM_CLMM = "RaydiumClmm"
+    RAYDIUM_AMM_V4 = "RaydiumAmmV4"
+    METEORA_DAMM_V2 = "MeteoraDammV2"
+
+
+@dataclass
+class SlotFilter:
+    """Slot 范围过滤（对齐 Rust ``SlotFilter``）"""
+
+    min_slot: Optional[int] = None
+    max_slot: Optional[int] = None
+
+    @staticmethod
+    def new() -> SlotFilter:
+        return SlotFilter()
+
+
+def account_filter_memcmp(offset: int, bs: bytes) -> SubscribeRequestFilterAccountsFilter:
+    """对齐 Rust ``account_filter_memcmp``：用于 ``AccountFilter.filters``。"""
+    return SubscribeRequestFilterAccountsFilter(
+        memcmp=SubscribeRequestFilterAccountsFilterMemcmp(offset=offset, bytes=bs)
+    )
 
 
 @dataclass

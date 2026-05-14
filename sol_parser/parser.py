@@ -6,11 +6,18 @@ import struct
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-from .dex_parsers import DexEvent, dispatch_program_data, parse_trade_from_data
+from .dex_parsers import (
+    DexEvent,
+    apply_event_type_filter,
+    dispatch_program_data,
+    event_type_for_discriminator,
+    filter_allows_unknown_log_event,
+    parse_trade_from_data,
+)
 
 if TYPE_CHECKING:
     from .grpc_types import SubscribeUpdateTransactionInfo
-from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
+from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
 
 def _disc8(bs: bytes) -> int:
@@ -65,17 +72,25 @@ def parse_log_optimized(
     is_created_buy: bool = False,
     recent_blockhash: str = "",
 ) -> Optional[DexEvent]:
-    """与 Go `ParseLogOptimized` 对齐；`event_type_filter` 预留与 TS 一致，当前未使用。"""
-    _ = event_type_filter
+    """单次 base64 decode 后按 discriminator 做 early filter，再按实际事件类型二次过滤。"""
     grpc = int(time.time() * 1_000_000) if grpc_recv_us is None else grpc_recv_us
-    bt = 0 if block_time_us is None else block_time_us
     buf = decode_program_data_line(log)
     if not buf:
         return None
     disc = _disc8(buf[:8])
+    if event_type_filter is not None:
+        event_type = event_type_for_discriminator(disc)
+        if event_type is not None:
+            if not event_type_filter.should_include(event_type):
+                return None
+        elif not filter_allows_unknown_log_event(event_type_filter):
+            return None
     data = buf[8:]
     meta = _meta(signature, slot, tx_index, block_time_us, grpc, recent_blockhash)
-    return dispatch_program_data(disc, data, buf, meta, is_created_buy)
+    return apply_event_type_filter(
+        dispatch_program_data(disc, data, buf, meta, is_created_buy),
+        event_type_filter,
+    )
 
 
 def parse_log_unified(
@@ -148,7 +163,7 @@ def parse_logs_only(
         ev = parse_log_unified(log, signature, slot, block_time_us, tx_index=resolved_tx_index)
         if ev:
             out.append(ev)
-    enrich_create_v2_observed_fee_recipient(out)
+    enrich_pumpfun_same_tx_post_merge(out)
     if subscribe_tx_info is not None:
         from .grpc_instruction_parser import enrich_dex_events_with_subscribe_tx_info
 

@@ -1,6 +1,6 @@
 """
 校验本包 `dex_parsers.dispatch_program_data` 与 Go matcher 是否覆盖
-`sol-parser-sdk-ts/scripts/program-log-discriminators.json` 中的字节序列。
+Node/TS 快照 `scripts/program-log-discriminators.json` 中的字节序列。
 
 用法（在仓库内任意目录均可，依赖 `__file__` 定位）::
 
@@ -25,12 +25,17 @@ def _comma_seq(arr: list[int]) -> str:
 
 def main() -> int:
     root = _repo_root()
-    snap_path = root / "sol-parser-sdk-ts/scripts/program-log-discriminators.json"
+    snap_candidates = [
+        root / "sol-parser-sdk-nodejs/scripts/program-log-discriminators.json",
+        root / "sol-parser-sdk-ts/scripts/program-log-discriminators.json",
+    ]
+    snap_path = next((p for p in snap_candidates if p.is_file()), None)
     py_path = root / "sol-parser-sdk-python/sol_parser/dex_parsers.py"
     go_dir = root / "sol-parser-sdk-golang/solparser"
 
-    if not snap_path.is_file():
-        print(f"[verify-discriminators] 缺少快照: {snap_path}", file=sys.stderr)
+    if snap_path is None:
+        joined = ", ".join(str(p) for p in snap_candidates)
+        print(f"[verify-discriminators] 缺少快照，已检查: {joined}", file=sys.stderr)
         return 1
     if not py_path.is_file():
         print(f"[verify-discriminators] 缺少: {py_path}", file=sys.stderr)
@@ -64,7 +69,7 @@ def main() -> int:
 
     if failed:
         print(
-            "[verify-discriminators] 请同步 TS scripts/program-log-discriminators.json、"
+            "[verify-discriminators] 请同步 Node/TS scripts/program-log-discriminators.json、"
             "Go matcher 与 Python dex_parsers。",
             file=sys.stderr,
         )

@@ -15,8 +15,10 @@ from . import rpc_wallet
 from . import utils as acc_utils
 
 # 程序 ID（与 Rust ``accounts/program_ids`` / ``instr/program_ids`` 一致）
+PUMPFUN_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
 PUMPSWAP_PROGRAM_ID = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
 
+_DISC_PUMPFUN_GLOBAL = bytes([167, 232, 232, 177, 200, 108, 114, 127])
 _DISC_GLOBAL_CONFIG = bytes([149, 8, 156, 202, 160, 252, 176, 217])
 _DISC_POOL = bytes([241, 154, 109, 4, 17, 177, 109, 188])
 _DISC_NONCE = bytes([1, 0, 0, 0, 1, 0, 0, 0])
@@ -24,6 +26,7 @@ _DISC_NONCE = bytes([1, 0, 0, 0, 1, 0, 0, 0])
 MINT_SIZE = 82
 TOKEN_ACCOUNT_SIZE = 165
 NONCE_ACCOUNT_SIZE = 80
+PUMPFUN_GLOBAL_BODY = 1021
 GLOBAL_CONFIG_BODY = 634
 POOL_BODY = 244
 
@@ -34,6 +37,10 @@ NONCE_AUTHORITY_OFFSET = 8
 NONCE_NONCE_OFFSET = 40
 
 EMPTY_PUBKEY = ""
+
+
+def _account_event(event_type: EventType, data: dict) -> DexEvent:
+    return DexEvent(type=event_type, data=data)
 
 
 @dataclass
@@ -85,6 +92,7 @@ def parse_account_unified(
                 EventType.TOKEN_ACCOUNT,
                 EventType.TOKEN_INFO,
                 EventType.NONCE_ACCOUNT,
+                EventType.ACCOUNT_PUMP_FUN_GLOBAL,
                 EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
                 EventType.ACCOUNT_PUMP_SWAP_POOL,
             }
@@ -96,6 +104,12 @@ def parse_account_unified(
             EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG
         ) or event_type_filter.should_include(EventType.ACCOUNT_PUMP_SWAP_POOL):
             ev = _parse_pumpswap_account(account, metadata)
+            if ev is not None:
+                return ev
+
+    if account.owner == PUMPFUN_PROGRAM_ID and event_type_filter is not None:
+        if event_type_filter.should_include(EventType.ACCOUNT_PUMP_FUN_GLOBAL):
+            ev = _parse_pumpfun_account(account, metadata)
             if ev is not None:
                 return ev
 
@@ -119,10 +133,17 @@ def _parse_pumpswap_account(account: AccountData, metadata: EventMetadata) -> Op
     return None
 
 
+def _parse_pumpfun_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    if acc_utils.has_discriminator(account.data, _DISC_PUMPFUN_GLOBAL):
+        return parse_pumpfun_global(account, metadata)
+    return None
+
+
 def _parse_mint_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
     data = account.data
-    return {
-        "TokenInfo": {
+    return _account_event(
+        EventType.TOKEN_INFO,
+        {
             "metadata": metadata,
             "pubkey": account.pubkey,
             "executable": account.executable,
@@ -131,14 +152,15 @@ def _parse_mint_fast(account: AccountData, metadata: EventMetadata) -> Optional[
             "rent_epoch": account.rent_epoch,
             "supply": struct.unpack_from("<Q", data, SUPPLY_OFFSET)[0],
             "decimals": data[DECIMALS_OFFSET],
-        }
-    }
+        },
+    )
 
 
 def _parse_token_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
     data = account.data
-    return {
-        "TokenAccount": {
+    return _account_event(
+        EventType.TOKEN_ACCOUNT,
+        {
             "metadata": metadata,
             "pubkey": account.pubkey,
             "executable": account.executable,
@@ -146,16 +168,17 @@ def _parse_token_fast(account: AccountData, metadata: EventMetadata) -> Optional
             "owner": account.owner,
             "rent_epoch": account.rent_epoch,
             "amount": struct.unpack_from("<Q", data, AMOUNT_OFFSET)[0],
-        }
-    }
+        },
+    )
 
 
 def _parse_nonce_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
     data = account.data
     authority = base58_encode_32(data[NONCE_AUTHORITY_OFFSET : NONCE_AUTHORITY_OFFSET + 32])
     nonce = base58_encode_32(data[NONCE_NONCE_OFFSET : NONCE_NONCE_OFFSET + 32])
-    return {
-        "NonceAccount": {
+    return _account_event(
+        EventType.NONCE_ACCOUNT,
+        {
             "metadata": metadata,
             "pubkey": account.pubkey,
             "executable": account.executable,
@@ -164,8 +187,86 @@ def _parse_nonce_fast(account: AccountData, metadata: EventMetadata) -> Optional
             "rent_epoch": account.rent_epoch,
             "nonce": nonce,
             "authority": authority,
-        }
-    }
+        },
+    )
+
+
+def _parse_pumpfun_global_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    data = account.data[8:]
+    o = 0
+    initialized = data[o] != 0
+    o += 1
+    authority = read_pubkey_fast(data, o)
+    o += 32
+    fee_recipient = read_pubkey_fast(data, o)
+    o += 32
+    initial_virtual_token_reserves = read_u64_fast(data, o)
+    o += 8
+    initial_virtual_sol_reserves = read_u64_fast(data, o)
+    o += 8
+    initial_real_token_reserves = read_u64_fast(data, o)
+    o += 8
+    token_total_supply = read_u64_fast(data, o)
+    o += 8
+    fee_basis_points = read_u64_fast(data, o)
+    o += 8
+    withdraw_authority = read_pubkey_fast(data, o)
+    o += 32
+    enable_migrate = data[o] != 0
+    o += 1
+    pool_migration_fee = read_u64_fast(data, o)
+    o += 8
+    creator_fee_basis_points = read_u64_fast(data, o)
+    o += 8
+    fee_recipients = []
+    for _ in range(8):
+        fee_recipients.append(read_pubkey_fast(data, o))
+        o += 32
+    set_creator_authority = read_pubkey_fast(data, o)
+    o += 32
+    admin_set_creator_authority = read_pubkey_fast(data, o)
+    o += 32
+    create_v2_enabled = data[o] != 0
+    o += 1
+    whitelist_pda = read_pubkey_fast(data, o)
+    o += 32
+    reserved_fee_recipient = read_pubkey_fast(data, o)
+    o += 32
+    mayhem_mode_enabled = data[o] != 0
+    o += 1
+    reserved_fee_recipients = []
+    for _ in range(7):
+        reserved_fee_recipients.append(read_pubkey_fast(data, o))
+        o += 32
+    return _account_event(
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL,
+        {
+            "metadata": metadata,
+            "pubkey": account.pubkey,
+            "global": {
+                "initialized": initialized,
+                "authority": authority,
+                "fee_recipient": fee_recipient,
+                "initial_virtual_token_reserves": initial_virtual_token_reserves,
+                "initial_virtual_sol_reserves": initial_virtual_sol_reserves,
+                "initial_real_token_reserves": initial_real_token_reserves,
+                "token_total_supply": token_total_supply,
+                "fee_basis_points": fee_basis_points,
+                "withdraw_authority": withdraw_authority,
+                "enable_migrate": enable_migrate,
+                "pool_migration_fee": pool_migration_fee,
+                "creator_fee_basis_points": creator_fee_basis_points,
+                "fee_recipients": fee_recipients,
+                "set_creator_authority": set_creator_authority,
+                "admin_set_creator_authority": admin_set_creator_authority,
+                "create_v2_enabled": create_v2_enabled,
+                "whitelist_pda": whitelist_pda,
+                "reserved_fee_recipient": reserved_fee_recipient,
+                "mayhem_mode_enabled": mayhem_mode_enabled,
+                "reserved_fee_recipients": reserved_fee_recipients,
+            },
+        },
+    )
 
 
 def _parse_pumpswap_global_config_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
@@ -209,8 +310,9 @@ def _parse_pumpswap_global_config_fast(account: AccountData, metadata: EventMeta
         read_pubkey_fast(data, o + 160),
         read_pubkey_fast(data, o + 192),
     ]
-    return {
-        "PumpSwapGlobalConfigAccount": {
+    return _account_event(
+        EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
+        {
             "metadata": metadata,
             "pubkey": account.pubkey,
             "config": {
@@ -226,8 +328,8 @@ def _parse_pumpswap_global_config_fast(account: AccountData, metadata: EventMeta
                 "mayhem_mode_enabled": mayhem,
                 "reserved_fee_recipients": reserved_list,
             },
-        }
-    }
+        },
+    )
 
 
 def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
@@ -250,8 +352,9 @@ def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> 
     o += 32
     is_mayhem = data[o] != 0
     is_cashback = data[o + 1] != 0
-    return {
-        "PumpSwapPoolAccount": {
+    return _account_event(
+        EventType.ACCOUNT_PUMP_SWAP_POOL,
+        {
             "metadata": metadata,
             "pubkey": account.pubkey,
             "pool": {
@@ -268,8 +371,8 @@ def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> 
                 "is_mayhem_mode": is_mayhem,
                 "is_cashback_coin": is_cashback,
             },
-        }
-    }
+        },
+    )
 
 
 def parse_token_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
@@ -286,6 +389,14 @@ def parse_nonce_account(account: AccountData, metadata: EventMetadata) -> Option
     if not has_discriminator(account.data, _DISC_NONCE):
         return None
     return _parse_nonce_fast(account, metadata)
+
+
+def parse_pumpfun_global(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    if len(account.data) < 8 + PUMPFUN_GLOBAL_BODY:
+        return None
+    if not has_discriminator(account.data, _DISC_PUMPFUN_GLOBAL):
+        return None
+    return _parse_pumpfun_global_fast(account, metadata)
 
 
 def is_nonce_account(data: bytes) -> bool:
@@ -316,6 +427,10 @@ def is_pool_account(data: bytes) -> bool:
     return has_discriminator(data, _DISC_POOL)
 
 
+def is_pumpfun_global_account(data: bytes) -> bool:
+    return has_discriminator(data, _DISC_PUMPFUN_GLOBAL)
+
+
 base58_encode = base58_encode_32
 read_pubkey = read_pubkey_fast
 read_u64_le = read_u64_fast
@@ -329,12 +444,15 @@ __all__ = [
     "parse_account_unified",
     "parse_token_account",
     "parse_nonce_account",
+    "parse_pumpfun_global",
     "is_nonce_account",
+    "is_pumpfun_global_account",
     "parse_pumpswap_global_config",
     "parse_pumpswap_pool",
     "is_global_config_account",
     "is_pool_account",
     "has_discriminator",
+    "PUMPFUN_PROGRAM_ID",
     "PUMPSWAP_PROGRAM_ID",
     "rpc_resolve_user_wallet_pubkey",
     "user_wallet_pubkey_for_onchain_account",

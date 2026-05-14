@@ -19,7 +19,7 @@ from .grpc_types import (
 from .inner_instruction_parser import parse_inner_instruction
 from .instructions import parse_instruction_unified
 from .merger import merge_dex_events
-from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
+from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
 
 def collect_program_invokes(msg: Any, meta: Any) -> Dict[bytes, List[Tuple[int, int]]]:
@@ -138,7 +138,7 @@ def merge_instruction_events(
     """对齐 Rust ``merge_instruction_events``。"""
     if not events:
         return []
-    events = sorted(events, key=lambda x: (x[0], x[1] if x[1] is not None else (1 << 30)))
+    events = sorted(events, key=lambda x: (x[0], 0 if x[1] is None else 1 + x[1]))
     result: List[DexEvent] = []
     pending_outer: Optional[Tuple[int, DexEvent]] = None
 
@@ -189,6 +189,8 @@ def parse_instructions_enhanced_from_subscribe_tx_info(
     info: SubscribeUpdateTransactionInfo,
     slot: int,
     filter: Optional[EventTypeFilter] = None,
+    block_time_us: Optional[int] = None,
+    grpc_recv_us: Optional[int] = None,
 ) -> List[DexEvent]:
     """从 ``grpc_client`` 转换后的 ``SubscribeUpdateTransactionInfo``（raw 字节）解析指令事件。"""
     try:
@@ -206,7 +208,7 @@ def parse_instructions_enhanced_from_subscribe_tx_info(
     if not msg.account_keys and not msg.instructions:
         return []
     return parse_instructions_enhanced_from_parsed(
-        msg, meta, sig, slot, int(info.index), None, None, filter, tx
+        msg, meta, sig, slot, int(info.index), block_time_us, grpc_recv_us, filter, tx
     )
 
 
@@ -298,7 +300,7 @@ def parse_instructions_enhanced_from_parsed(
                 result.append((int(outer_idx), j, ev))
 
     merged = merge_instruction_events(result)
-    enrich_create_v2_observed_fee_recipient(merged)
+    enrich_pumpfun_same_tx_post_merge(merged)
 
     invokes_str: Dict[str, List[Tuple[int, int]]] = {
         base58.b58encode(k).decode("ascii"): v for k, v in invokes_raw.items()

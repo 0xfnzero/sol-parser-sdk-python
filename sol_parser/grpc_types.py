@@ -49,6 +49,16 @@ class EventType(str, Enum):
     PUMP_FUN_CREATE_V2 = "PumpFunCreateV2"
     PUMP_FUN_COMPLETE = "PumpFunComplete"
     PUMP_FUN_MIGRATE = "PumpFunMigrate"
+    PUMP_FEES_CREATE_FEE_SHARING_CONFIG = "PumpFeesCreateFeeSharingConfig"
+    PUMP_FEES_INITIALIZE_FEE_CONFIG = "PumpFeesInitializeFeeConfig"
+    PUMP_FEES_RESET_FEE_SHARING_CONFIG = "PumpFeesResetFeeSharingConfig"
+    PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY = "PumpFeesRevokeFeeSharingAuthority"
+    PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY = "PumpFeesTransferFeeSharingAuthority"
+    PUMP_FEES_UPDATE_ADMIN = "PumpFeesUpdateAdmin"
+    PUMP_FEES_UPDATE_FEE_CONFIG = "PumpFeesUpdateFeeConfig"
+    PUMP_FEES_UPDATE_FEE_SHARES = "PumpFeesUpdateFeeShares"
+    PUMP_FEES_UPSERT_FEE_TIERS = "PumpFeesUpsertFeeTiers"
+    PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR = "PumpFunMigrateBondingCurveCreator"
     # PumpSwap
     PUMP_SWAP_TRADE = "PumpSwapTrade"
     PUMP_SWAP_BUY = "PumpSwapBuy"
@@ -108,6 +118,7 @@ class EventType(str, Enum):
     TOKEN_ACCOUNT = "TokenAccount"
     TOKEN_INFO = "TokenInfo"
     NONCE_ACCOUNT = "NonceAccount"
+    ACCOUNT_PUMP_FUN_GLOBAL = "AccountPumpFunGlobal"
     ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG = "AccountPumpSwapGlobalConfig"
     ACCOUNT_PUMP_SWAP_POOL = "AccountPumpSwapPool"
 
@@ -130,6 +141,16 @@ def all_event_types() -> List[EventType]:
         EventType.PUMP_FUN_CREATE_V2,
         EventType.PUMP_FUN_COMPLETE,
         EventType.PUMP_FUN_MIGRATE,
+        EventType.PUMP_FEES_CREATE_FEE_SHARING_CONFIG,
+        EventType.PUMP_FEES_INITIALIZE_FEE_CONFIG,
+        EventType.PUMP_FEES_RESET_FEE_SHARING_CONFIG,
+        EventType.PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY,
+        EventType.PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY,
+        EventType.PUMP_FEES_UPDATE_ADMIN,
+        EventType.PUMP_FEES_UPDATE_FEE_CONFIG,
+        EventType.PUMP_FEES_UPDATE_FEE_SHARES,
+        EventType.PUMP_FEES_UPSERT_FEE_TIERS,
+        EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
         # PumpSwap
         EventType.PUMP_SWAP_TRADE,
         EventType.PUMP_SWAP_BUY,
@@ -189,6 +210,7 @@ def all_event_types() -> List[EventType]:
         EventType.TOKEN_ACCOUNT,
         EventType.TOKEN_INFO,
         EventType.NONCE_ACCOUNT,
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL,
         EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
         EventType.ACCOUNT_PUMP_SWAP_POOL,
     ]
@@ -316,9 +338,6 @@ class IncludeOnlyFilter(EventTypeFilter):
         self.include_only = include_only
 
     def should_include(self, event_type: EventType) -> bool:
-        # 空列表表示包含所有类型
-        if not self.include_only:
-            return True
         if event_type in self.include_only:
             return True
         # PumpFunTrade 包含 PumpFunBuy, PumpFunSell, PumpFunBuyExactSolIn
@@ -353,6 +372,27 @@ def event_type_filter_exclude(types: List[EventType]) -> EventTypeFilter:
     return ExcludeFilter(types)
 
 
+def _event_type_filter_includes_any(filter: EventTypeFilter, types: List[EventType]) -> bool:
+    if isinstance(filter, IncludeOnlyFilter):
+        return any(t in types for t in filter.include_only)
+    if isinstance(filter, ExcludeFilter):
+        return not any(t in types for t in filter.exclude_types)
+    return any(filter.should_include(t) for t in types)
+
+
+PUMP_FEES_EVENT_TYPES = [
+    EventType.PUMP_FEES_CREATE_FEE_SHARING_CONFIG,
+    EventType.PUMP_FEES_INITIALIZE_FEE_CONFIG,
+    EventType.PUMP_FEES_RESET_FEE_SHARING_CONFIG,
+    EventType.PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY,
+    EventType.PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY,
+    EventType.PUMP_FEES_UPDATE_ADMIN,
+    EventType.PUMP_FEES_UPDATE_FEE_CONFIG,
+    EventType.PUMP_FEES_UPDATE_FEE_SHARES,
+    EventType.PUMP_FEES_UPSERT_FEE_TIERS,
+]
+
+
 def event_type_filter_includes_pumpfun(filter: EventTypeFilter) -> bool:
     """判断过滤器是否包含 PumpFun 相关类型"""
     pumpfun_types = [
@@ -364,8 +404,24 @@ def event_type_filter_includes_pumpfun(filter: EventTypeFilter) -> bool:
         EventType.PUMP_FUN_CREATE_V2,
         EventType.PUMP_FUN_COMPLETE,
         EventType.PUMP_FUN_MIGRATE,
+        EventType.PUMP_FEES_CREATE_FEE_SHARING_CONFIG,
+        EventType.PUMP_FEES_INITIALIZE_FEE_CONFIG,
+        EventType.PUMP_FEES_RESET_FEE_SHARING_CONFIG,
+        EventType.PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY,
+        EventType.PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY,
+        EventType.PUMP_FEES_UPDATE_ADMIN,
+        EventType.PUMP_FEES_UPDATE_FEE_CONFIG,
+        EventType.PUMP_FEES_UPDATE_FEE_SHARES,
+        EventType.PUMP_FEES_UPSERT_FEE_TIERS,
+        EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL,
     ]
-    return any(filter.should_include(t) for t in pumpfun_types)
+    return _event_type_filter_includes_any(filter, pumpfun_types)
+
+
+def event_type_filter_includes_pump_fees(filter: EventTypeFilter) -> bool:
+    """判断过滤器是否包含 Pump Fees 相关类型"""
+    return _event_type_filter_includes_any(filter, PUMP_FEES_EVENT_TYPES)
 
 
 def event_type_filter_includes_pumpswap(filter: EventTypeFilter) -> bool:
@@ -377,7 +433,7 @@ def event_type_filter_includes_pumpswap(filter: EventTypeFilter) -> bool:
         EventType.PUMP_SWAP_LIQUIDITY_ADDED,
         EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
     ]
-    return any(filter.should_include(t) for t in pumpswap_types)
+    return _event_type_filter_includes_any(filter, pumpswap_types)
 
 
 def event_type_filter_includes_meteora_damm_v2(filter: EventTypeFilter) -> bool:
@@ -390,19 +446,57 @@ def event_type_filter_includes_meteora_damm_v2(filter: EventTypeFilter) -> bool:
         EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
         EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
     ]
-    return any(filter.should_include(t) for t in meteora_types)
+    return _event_type_filter_includes_any(filter, meteora_types)
 
 
 def event_type_filter_allows_instruction_parsing(include_only: List[EventType]) -> bool:
     """判断过滤器是否允许指令解析"""
     ix_types = [
+        EventType.PUMP_FUN_TRADE,
+        EventType.PUMP_FUN_BUY,
+        EventType.PUMP_FUN_SELL,
+        EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
+        EventType.PUMP_FUN_CREATE,
+        EventType.PUMP_FUN_CREATE_V2,
         EventType.PUMP_FUN_MIGRATE,
+        EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL,
+        *PUMP_FEES_EVENT_TYPES,
+        EventType.PUMP_SWAP_BUY,
+        EventType.PUMP_SWAP_SELL,
+        EventType.PUMP_SWAP_CREATE_POOL,
+        EventType.PUMP_SWAP_LIQUIDITY_ADDED,
+        EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
         EventType.METEORA_DAMM_V2_SWAP,
         EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
         EventType.METEORA_DAMM_V2_CREATE_POSITION,
         EventType.METEORA_DAMM_V2_CLOSE_POSITION,
         EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
         EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
+        EventType.RAYDIUM_CLMM_SWAP,
+        EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
+        EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
+        EventType.RAYDIUM_CLMM_CREATE_POOL,
+        EventType.RAYDIUM_CLMM_OPEN_POSITION,
+        EventType.RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT,
+        EventType.RAYDIUM_CLMM_CLOSE_POSITION,
+        EventType.RAYDIUM_CLMM_COLLECT_FEE,
+        EventType.RAYDIUM_CPMM_SWAP,
+        EventType.RAYDIUM_CPMM_DEPOSIT,
+        EventType.RAYDIUM_CPMM_WITHDRAW,
+        EventType.RAYDIUM_CPMM_INITIALIZE,
+        EventType.RAYDIUM_AMM_V4_SWAP,
+        EventType.RAYDIUM_AMM_V4_DEPOSIT,
+        EventType.RAYDIUM_AMM_V4_WITHDRAW,
+        EventType.RAYDIUM_AMM_V4_WITHDRAW_PNL,
+        EventType.RAYDIUM_AMM_V4_INITIALIZE2,
+        EventType.ORCA_WHIRLPOOL_SWAP,
+        EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED,
+        EventType.ORCA_WHIRLPOOL_LIQUIDITY_DECREASED,
+        EventType.ORCA_WHIRLPOOL_POOL_INITIALIZED,
+        EventType.BONK_TRADE,
+        EventType.BONK_POOL_CREATE,
+        EventType.BONK_MIGRATE_AMM,
     ]
     return any(t in include_only for t in ix_types)
 

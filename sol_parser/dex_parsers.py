@@ -15,6 +15,12 @@ import base58
 from .grpc_types import EventType, EventMetadata
 from .event_types import (
     DexEvent, PumpFunTradeEvent, PumpFunCreateEvent, PumpFunMigrateEvent,
+    PumpFeesShareholder, PumpFeesFees, PumpFeesFeeTier,
+    PumpFeesCreateFeeSharingConfigEvent, PumpFeesInitializeFeeConfigEvent,
+    PumpFeesResetFeeSharingConfigEvent, PumpFeesRevokeFeeSharingAuthorityEvent,
+    PumpFeesTransferFeeSharingAuthorityEvent, PumpFeesUpdateAdminEvent,
+    PumpFeesUpdateFeeConfigEvent, PumpFeesUpdateFeeSharesEvent, PumpFeesUpsertFeeTiersEvent,
+    PumpFunMigrateBondingCurveCreatorEvent,
     PumpSwapBuyEvent, PumpSwapSellEvent, PumpSwapCreatePoolEvent,
     PumpSwapLiquidityAddedEvent, PumpSwapLiquidityRemovedEvent,
     RaydiumAmmV4SwapEvent, RaydiumAmmV4DepositEvent, RaydiumAmmV4WithdrawEvent,
@@ -100,6 +106,16 @@ def _u64_at(b: bytes, o: List[int]) -> int:
 PUMP_TRADE = _d(189, 219, 127, 211, 78, 230, 97, 238)
 PUMP_CREATE = _d(27, 114, 169, 77, 222, 235, 99, 118)
 PUMP_MIGRATE = _d(189, 233, 93, 185, 92, 148, 234, 148)
+PUMP_MIGRATE_BONDING_CURVE_CREATOR = _d(155, 167, 104, 220, 213, 108, 243, 3)
+PUMP_FEES_CREATE_FEE_SHARING_CONFIG = _d(133, 105, 170, 200, 184, 116, 251, 88)
+PUMP_FEES_INITIALIZE_FEE_CONFIG = _d(89, 138, 244, 230, 10, 56, 226, 126)
+PUMP_FEES_RESET_FEE_SHARING_CONFIG = _d(203, 204, 151, 226, 120, 55, 214, 243)
+PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY = _d(114, 23, 101, 60, 14, 190, 153, 62)
+PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY = _d(124, 143, 198, 245, 77, 184, 8, 236)
+PUMP_FEES_UPDATE_ADMIN = _d(225, 152, 171, 87, 246, 63, 66, 234)
+PUMP_FEES_UPDATE_FEE_CONFIG = _d(90, 23, 65, 35, 62, 244, 188, 208)
+PUMP_FEES_UPDATE_FEE_SHARES = _d(21, 186, 196, 184, 91, 228, 225, 203)
+PUMP_FEES_UPSERT_FEE_TIERS = _d(171, 89, 169, 187, 122, 186, 33, 204)
 
 
 def _make_meta(meta: dict) -> EventMetadata:
@@ -208,11 +224,11 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexE
         creator_vault=Z,
     )
     
-    if ix_name == "buy":
+    if ix_name in ("buy", "buy_v2"):
         return DexEvent(type=EventType.PUMP_FUN_BUY, data=event_data)
-    if ix_name == "sell":
+    if ix_name in ("sell", "sell_v2"):
         return DexEvent(type=EventType.PUMP_FUN_SELL, data=event_data)
-    if ix_name == "buy_exact_sol_in":
+    if ix_name in ("buy_exact_sol_in", "buy_exact_quote_in_v2"):
         return DexEvent(type=EventType.PUMP_FUN_BUY_EXACT_SOL_IN, data=event_data)
     return DexEvent(type=EventType.PUMP_FUN_TRADE, data=event_data)
 
@@ -306,6 +322,355 @@ def parse_migrate_from_data(data: bytes, meta: dict) -> DexEvent:
             bonding_curve=bc,
             timestamp=ts,
             pool=pool,
+        ),
+    )
+
+
+def _read_fees_at(data: bytes, o: List[int]) -> Optional[PumpFeesFees]:
+    if o[0] + 24 > len(data):
+        return None
+    lp_fee_bps = _u64_at(data, o)
+    protocol_fee_bps = _u64_at(data, o)
+    creator_fee_bps = _u64_at(data, o)
+    return PumpFeesFees(
+        lp_fee_bps=lp_fee_bps,
+        protocol_fee_bps=protocol_fee_bps,
+        creator_fee_bps=creator_fee_bps,
+    )
+
+
+def read_pump_fees_shareholders_vec(data: bytes, o: List[int]) -> Optional[List[PumpFeesShareholder]]:
+    if o[0] + 4 > len(data):
+        return None
+    n = _u32le(data, o[0])
+    o[0] += 4
+    if n > 64:
+        return None
+    out: List[PumpFeesShareholder] = []
+    for _ in range(n):
+        if o[0] + 34 > len(data):
+            return None
+        address = _pub(data, o[0])
+        o[0] += 32
+        share_bps = _u16le(data, o[0])
+        o[0] += 2
+        out.append(PumpFeesShareholder(address=address, share_bps=share_bps))
+    return out
+
+
+def read_pump_fees_fee_tiers_vec(data: bytes, o: List[int]) -> Optional[List[PumpFeesFeeTier]]:
+    if o[0] + 4 > len(data):
+        return None
+    n = _u32le(data, o[0])
+    o[0] += 4
+    if n > 64:
+        return None
+    out: List[PumpFeesFeeTier] = []
+    for _ in range(n):
+        if o[0] + 16 > len(data):
+            return None
+        threshold = _u128le_int(data, o[0])
+        o[0] += 16
+        fees = _read_fees_at(data, o)
+        if fees is None:
+            return None
+        out.append(PumpFeesFeeTier(market_cap_lamports_threshold=threshold, fees=fees))
+    return out
+
+
+def _read_option_pubkey_at(data: bytes, o: List[int]) -> Optional[str]:
+    if o[0] >= len(data):
+        return None
+    tag = _u8(data, o[0])
+    o[0] += 1
+    if tag == 0:
+        return ""
+    if tag != 1 or o[0] + 32 > len(data):
+        return None
+    v = _pub(data, o[0])
+    o[0] += 32
+    return v
+
+
+def _read_config_status_at(data: bytes, o: List[int]) -> Optional[str]:
+    if o[0] >= len(data):
+        return None
+    tag = _u8(data, o[0])
+    o[0] += 1
+    if tag == 0:
+        return "Paused"
+    if tag == 1:
+        return "Active"
+    return None
+
+
+def parse_migrate_bonding_curve_creator_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 8 + 32 * 5:
+        return DexEvent()
+    o = 0
+    ts = _i64le(data, o)
+    o += 8
+    mint = _pub(data, o)
+    o += 32
+    bonding_curve = _pub(data, o)
+    o += 32
+    sharing_config = _pub(data, o)
+    o += 32
+    old_creator = _pub(data, o)
+    o += 32
+    new_creator = _pub(data, o)
+    return DexEvent(
+        type=EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
+        data=PumpFunMigrateBondingCurveCreatorEvent(
+            metadata=_make_meta(meta),
+            timestamp=ts,
+            mint=mint,
+            bonding_curve=bonding_curve,
+            sharing_config=sharing_config,
+            old_creator=old_creator,
+            new_creator=new_creator,
+        ),
+    )
+
+
+def parse_pump_fees_create_fee_sharing_config_from_data(data: bytes, meta: dict) -> DexEvent:
+    o = [0]
+    if len(data) < 8 + 32 * 4 + 1 + 4 + 1:
+        return DexEvent()
+    ts = _i64le(data, o[0])
+    o[0] += 8
+    mint = _pub(data, o[0])
+    o[0] += 32
+    bonding_curve = _pub(data, o[0])
+    o[0] += 32
+    pool = _read_option_pubkey_at(data, o)
+    if pool is None:
+        return DexEvent()
+    sharing_config = _pub(data, o[0])
+    o[0] += 32
+    admin = _pub(data, o[0])
+    o[0] += 32
+    shareholders = read_pump_fees_shareholders_vec(data, o)
+    if shareholders is None:
+        return DexEvent()
+    status = _read_config_status_at(data, o)
+    if status is None or o[0] != len(data):
+        return DexEvent()
+    return DexEvent(
+        type=EventType.PUMP_FEES_CREATE_FEE_SHARING_CONFIG,
+        data=PumpFeesCreateFeeSharingConfigEvent(
+            metadata=_make_meta(meta),
+            timestamp=ts,
+            mint=mint,
+            bonding_curve=bonding_curve,
+            pool=pool,
+            sharing_config=sharing_config,
+            admin=admin,
+            initial_shareholders=shareholders,
+            status=status,
+        ),
+    )
+
+
+def parse_pump_fees_initialize_fee_config_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) != 8 + 32 + 32:
+        return DexEvent()
+    o = 0
+    ts = _i64le(data, o)
+    o += 8
+    admin = _pub(data, o)
+    o += 32
+    fee_config = _pub(data, o)
+    return DexEvent(
+        type=EventType.PUMP_FEES_INITIALIZE_FEE_CONFIG,
+        data=PumpFeesInitializeFeeConfigEvent(
+            metadata=_make_meta(meta), timestamp=ts, admin=admin, fee_config=fee_config
+        ),
+    )
+
+
+def parse_pump_fees_reset_fee_sharing_config_from_data(data: bytes, meta: dict) -> DexEvent:
+    o = [0]
+    if len(data) < 8 + 32 * 4 + 4 + 4:
+        return DexEvent()
+    ts = _i64le(data, o[0])
+    o[0] += 8
+    mint = _pub(data, o[0])
+    o[0] += 32
+    sharing_config = _pub(data, o[0])
+    o[0] += 32
+    old_admin = _pub(data, o[0])
+    o[0] += 32
+    old_shareholders = read_pump_fees_shareholders_vec(data, o)
+    if old_shareholders is None:
+        return DexEvent()
+    new_admin = _pub(data, o[0])
+    o[0] += 32
+    new_shareholders = read_pump_fees_shareholders_vec(data, o)
+    if new_shareholders is None or o[0] != len(data):
+        return DexEvent()
+    return DexEvent(
+        type=EventType.PUMP_FEES_RESET_FEE_SHARING_CONFIG,
+        data=PumpFeesResetFeeSharingConfigEvent(
+            metadata=_make_meta(meta),
+            timestamp=ts,
+            mint=mint,
+            sharing_config=sharing_config,
+            old_admin=old_admin,
+            old_shareholders=old_shareholders,
+            new_admin=new_admin,
+            new_shareholders=new_shareholders,
+        ),
+    )
+
+
+def parse_pump_fees_revoke_fee_sharing_authority_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) != 8 + 32 * 3:
+        return DexEvent()
+    o = 0
+    ts = _i64le(data, o)
+    o += 8
+    mint = _pub(data, o)
+    o += 32
+    sharing_config = _pub(data, o)
+    o += 32
+    admin = _pub(data, o)
+    return DexEvent(
+        type=EventType.PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY,
+        data=PumpFeesRevokeFeeSharingAuthorityEvent(
+            metadata=_make_meta(meta), timestamp=ts, mint=mint, sharing_config=sharing_config, admin=admin
+        ),
+    )
+
+
+def parse_pump_fees_transfer_fee_sharing_authority_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) != 8 + 32 * 4:
+        return DexEvent()
+    o = 0
+    ts = _i64le(data, o)
+    o += 8
+    mint = _pub(data, o)
+    o += 32
+    sharing_config = _pub(data, o)
+    o += 32
+    old_admin = _pub(data, o)
+    o += 32
+    new_admin = _pub(data, o)
+    return DexEvent(
+        type=EventType.PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY,
+        data=PumpFeesTransferFeeSharingAuthorityEvent(
+            metadata=_make_meta(meta),
+            timestamp=ts,
+            mint=mint,
+            sharing_config=sharing_config,
+            old_admin=old_admin,
+            new_admin=new_admin,
+        ),
+    )
+
+
+def parse_pump_fees_update_admin_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) != 8 + 32 + 32:
+        return DexEvent()
+    o = 0
+    ts = _i64le(data, o)
+    o += 8
+    old_admin = _pub(data, o)
+    o += 32
+    new_admin = _pub(data, o)
+    return DexEvent(
+        type=EventType.PUMP_FEES_UPDATE_ADMIN,
+        data=PumpFeesUpdateAdminEvent(
+            metadata=_make_meta(meta), timestamp=ts, old_admin=old_admin, new_admin=new_admin
+        ),
+    )
+
+
+def parse_pump_fees_update_fee_config_from_data(data: bytes, meta: dict) -> DexEvent:
+    o = [0]
+    if len(data) < 8 + 32 + 32 + 4 + 24:
+        return DexEvent()
+    ts = _i64le(data, o[0])
+    o[0] += 8
+    admin = _pub(data, o[0])
+    o[0] += 32
+    fee_config = _pub(data, o[0])
+    o[0] += 32
+    fee_tiers = read_pump_fees_fee_tiers_vec(data, o)
+    if fee_tiers is None:
+        return DexEvent()
+    flat_fees = _read_fees_at(data, o)
+    if flat_fees is None or o[0] != len(data):
+        return DexEvent()
+    return DexEvent(
+        type=EventType.PUMP_FEES_UPDATE_FEE_CONFIG,
+        data=PumpFeesUpdateFeeConfigEvent(
+            metadata=_make_meta(meta),
+            timestamp=ts,
+            admin=admin,
+            fee_config=fee_config,
+            fee_tiers=fee_tiers,
+            flat_fees=flat_fees,
+        ),
+    )
+
+
+def parse_pump_fees_update_fee_shares_from_data(data: bytes, meta: dict) -> DexEvent:
+    o = [0]
+    if len(data) < 8 + 32 * 3 + 4:
+        return DexEvent()
+    ts = _i64le(data, o[0])
+    o[0] += 8
+    mint = _pub(data, o[0])
+    o[0] += 32
+    sharing_config = _pub(data, o[0])
+    o[0] += 32
+    admin = _pub(data, o[0])
+    o[0] += 32
+    shareholders = read_pump_fees_shareholders_vec(data, o)
+    if shareholders is None or o[0] != len(data):
+        return DexEvent()
+    return DexEvent(
+        type=EventType.PUMP_FEES_UPDATE_FEE_SHARES,
+        data=PumpFeesUpdateFeeSharesEvent(
+            metadata=_make_meta(meta),
+            timestamp=ts,
+            mint=mint,
+            sharing_config=sharing_config,
+            admin=admin,
+            bonding_curve=Z,
+            pump_creator_vault=Z,
+            new_shareholders=shareholders,
+        ),
+    )
+
+
+def parse_pump_fees_upsert_fee_tiers_from_data(data: bytes, meta: dict) -> DexEvent:
+    o = [0]
+    if len(data) < 8 + 32 + 32 + 4 + 1:
+        return DexEvent()
+    ts = _i64le(data, o[0])
+    o[0] += 8
+    admin = _pub(data, o[0])
+    o[0] += 32
+    fee_config = _pub(data, o[0])
+    o[0] += 32
+    fee_tiers = read_pump_fees_fee_tiers_vec(data, o)
+    if fee_tiers is None or o[0] >= len(data):
+        return DexEvent()
+    offset = _u8(data, o[0])
+    o[0] += 1
+    if o[0] != len(data):
+        return DexEvent()
+    return DexEvent(
+        type=EventType.PUMP_FEES_UPSERT_FEE_TIERS,
+        data=PumpFeesUpsertFeeTiersEvent(
+            metadata=_make_meta(meta),
+            timestamp=ts,
+            admin=admin,
+            fee_config=fee_config,
+            fee_tiers=fee_tiers,
+            offset=offset,
         ),
     )
 
@@ -2017,6 +2382,89 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
     return None
 
 
+# --- 日志过滤（与优化 matcher 的 early-filter / actual-type filter 对齐） ---
+
+_LOG_DISCRIMINATOR_EVENT_TYPES = {
+    PUMP_CREATE: EventType.PUMP_FUN_CREATE,
+    PUMP_TRADE: EventType.PUMP_FUN_TRADE,
+    PUMP_MIGRATE: EventType.PUMP_FUN_MIGRATE,
+    PUMP_MIGRATE_BONDING_CURVE_CREATOR: EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
+    PUMP_FEES_CREATE_FEE_SHARING_CONFIG: EventType.PUMP_FEES_CREATE_FEE_SHARING_CONFIG,
+    PUMP_FEES_INITIALIZE_FEE_CONFIG: EventType.PUMP_FEES_INITIALIZE_FEE_CONFIG,
+    PUMP_FEES_RESET_FEE_SHARING_CONFIG: EventType.PUMP_FEES_RESET_FEE_SHARING_CONFIG,
+    PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY: EventType.PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY,
+    PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY: EventType.PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY,
+    PUMP_FEES_UPDATE_ADMIN: EventType.PUMP_FEES_UPDATE_ADMIN,
+    PUMP_FEES_UPDATE_FEE_CONFIG: EventType.PUMP_FEES_UPDATE_FEE_CONFIG,
+    PUMP_FEES_UPDATE_FEE_SHARES: EventType.PUMP_FEES_UPDATE_FEE_SHARES,
+    PUMP_FEES_UPSERT_FEE_TIERS: EventType.PUMP_FEES_UPSERT_FEE_TIERS,
+    _d(103, 244, 82, 31, 44, 245, 119, 119): EventType.PUMP_SWAP_BUY,
+    _d(62, 47, 55, 10, 165, 3, 220, 42): EventType.PUMP_SWAP_SELL,
+    _d(177, 49, 12, 210, 160, 118, 167, 116): EventType.PUMP_SWAP_CREATE_POOL,
+    _d(120, 248, 61, 83, 31, 142, 107, 144): EventType.PUMP_SWAP_LIQUIDITY_ADDED,
+    _d(22, 9, 133, 26, 160, 44, 71, 192): EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
+    _d(248, 198, 158, 145, 225, 117, 135, 200): EventType.RAYDIUM_CLMM_SWAP,
+    _d(133, 29, 89, 223, 69, 238, 176, 10): EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
+    _d(160, 38, 208, 111, 104, 91, 44, 1): EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
+    _d(233, 146, 209, 142, 207, 104, 64, 188): EventType.RAYDIUM_CLMM_CREATE_POOL,
+    _d(164, 152, 207, 99, 187, 104, 171, 119): EventType.RAYDIUM_CLMM_COLLECT_FEE,
+    _d(143, 190, 90, 218, 196, 30, 51, 222): EventType.RAYDIUM_CPMM_SWAP,
+    _d(55, 217, 98, 86, 163, 74, 180, 173): EventType.RAYDIUM_CPMM_SWAP,
+    _d(242, 35, 198, 137, 82, 225, 242, 182): EventType.RAYDIUM_CPMM_DEPOSIT,
+    _d(183, 18, 70, 156, 148, 109, 161, 34): EventType.RAYDIUM_CPMM_WITHDRAW,
+    _d(0, 0, 0, 0, 0, 0, 0, 9): EventType.RAYDIUM_AMM_V4_SWAP,
+    _d(0, 0, 0, 0, 0, 0, 0, 11): EventType.RAYDIUM_AMM_V4_SWAP,
+    _d(0, 0, 0, 0, 0, 0, 0, 3): EventType.RAYDIUM_AMM_V4_DEPOSIT,
+    _d(0, 0, 0, 0, 0, 0, 0, 4): EventType.RAYDIUM_AMM_V4_WITHDRAW,
+    _d(0, 0, 0, 0, 0, 0, 0, 7): EventType.RAYDIUM_AMM_V4_WITHDRAW_PNL,
+    _d(0, 0, 0, 0, 0, 0, 0, 1): EventType.RAYDIUM_AMM_V4_INITIALIZE2,
+    _d(225, 202, 73, 175, 147, 43, 160, 150): EventType.ORCA_WHIRLPOOL_SWAP,
+    _d(30, 7, 144, 181, 102, 254, 155, 161): EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED,
+    _d(166, 1, 36, 71, 112, 202, 181, 171): EventType.ORCA_WHIRLPOOL_LIQUIDITY_DECREASED,
+    _d(100, 118, 173, 87, 12, 198, 254, 229): EventType.ORCA_WHIRLPOOL_POOL_INITIALIZED,
+    _d(81, 108, 227, 190, 205, 208, 10, 196): EventType.METEORA_POOLS_SWAP,
+    _d(31, 94, 125, 90, 227, 52, 61, 186): EventType.METEORA_POOLS_ADD_LIQUIDITY,
+    _d(116, 244, 97, 232, 103, 31, 152, 58): EventType.METEORA_POOLS_REMOVE_LIQUIDITY,
+    _d(121, 127, 38, 136, 92, 55, 14, 247): EventType.METEORA_POOLS_BOOTSTRAP_LIQUIDITY,
+    _d(202, 44, 41, 88, 104, 220, 157, 82): EventType.METEORA_POOLS_POOL_CREATED,
+    _d(245, 26, 198, 164, 88, 18, 75, 9): EventType.METEORA_POOLS_SET_POOL_FEES,
+    DAMM_SWAP: EventType.METEORA_DAMM_V2_SWAP,
+    DAMM_SWAP2: EventType.METEORA_DAMM_V2_SWAP,
+    _d(175, 242, 8, 157, 30, 247, 185, 169): EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
+    _d(87, 46, 88, 98, 175, 96, 34, 91): EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
+    _d(228, 50, 246, 85, 203, 66, 134, 37): EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
+    _d(156, 15, 119, 198, 29, 181, 221, 55): EventType.METEORA_DAMM_V2_CREATE_POSITION,
+    _d(20, 145, 144, 68, 143, 142, 214, 178): EventType.METEORA_DAMM_V2_CLOSE_POSITION,
+    DISC_BONK_TRADE: EventType.BONK_TRADE,
+    DISC_BONK_POOL_CREATE: EventType.BONK_POOL_CREATE,
+    DISC_BONK_MIGRATE_AMM: EventType.BONK_MIGRATE_AMM,
+    DLMM_ADD_LIQ: EventType.METEORA_DLMM_ADD_LIQUIDITY,
+    DLMM_REMOVE_LIQ: EventType.METEORA_DLMM_REMOVE_LIQUIDITY,
+    DLMM_INIT_POOL: EventType.METEORA_DLMM_INITIALIZE_POOL,
+    DLMM_INIT_BIN: EventType.METEORA_DLMM_INITIALIZE_BIN_ARRAY,
+    DLMM_CREATE_POS: EventType.METEORA_DLMM_CREATE_POSITION,
+    DLMM_CLOSE_POS: EventType.METEORA_DLMM_CLOSE_POSITION,
+    DLMM_CLAIM_FEE: EventType.METEORA_DLMM_CLAIM_FEE,
+}
+
+
+def event_type_for_discriminator(disc: int) -> Optional[EventType]:
+    return _LOG_DISCRIMINATOR_EVENT_TYPES.get(disc)
+
+
+def filter_allows_unknown_log_event(event_type_filter: Any) -> bool:
+    include_only = getattr(event_type_filter, "include_only", None)
+    return include_only is None
+
+
+def apply_event_type_filter(ev: Optional[DexEvent], event_type_filter: Any) -> Optional[DexEvent]:
+    if ev is None or not ev.is_valid():
+        return None
+    if event_type_filter is not None and not event_type_filter.should_include(ev.type):
+        return None
+    return ev
+
+
 # --- 主调度（与 Go matcher 分支顺序一致） ---
 
 def dispatch_program_data(
@@ -2040,6 +2488,26 @@ def dispatch_program_data(
         return parse_create_from_data(data, meta)
     if disc == PUMP_MIGRATE:
         return parse_migrate_from_data(data, meta)
+    if disc == PUMP_MIGRATE_BONDING_CURVE_CREATOR:
+        return parse_migrate_bonding_curve_creator_from_data(data, meta)
+    if disc == PUMP_FEES_CREATE_FEE_SHARING_CONFIG:
+        return parse_pump_fees_create_fee_sharing_config_from_data(data, meta)
+    if disc == PUMP_FEES_INITIALIZE_FEE_CONFIG:
+        return parse_pump_fees_initialize_fee_config_from_data(data, meta)
+    if disc == PUMP_FEES_RESET_FEE_SHARING_CONFIG:
+        return parse_pump_fees_reset_fee_sharing_config_from_data(data, meta)
+    if disc == PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY:
+        return parse_pump_fees_revoke_fee_sharing_authority_from_data(data, meta)
+    if disc == PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY:
+        return parse_pump_fees_transfer_fee_sharing_authority_from_data(data, meta)
+    if disc == PUMP_FEES_UPDATE_ADMIN:
+        return parse_pump_fees_update_admin_from_data(data, meta)
+    if disc == PUMP_FEES_UPDATE_FEE_CONFIG:
+        return parse_pump_fees_update_fee_config_from_data(data, meta)
+    if disc == PUMP_FEES_UPDATE_FEE_SHARES:
+        return parse_pump_fees_update_fee_shares_from_data(data, meta)
+    if disc == PUMP_FEES_UPSERT_FEE_TIERS:
+        return parse_pump_fees_upsert_fee_tiers_from_data(data, meta)
     if disc == _d(177, 49, 12, 210, 160, 118, 167, 116):
         return parse_ps_create_pool_from_data(data, meta)
     if disc == _d(120, 248, 61, 83, 31, 142, 107, 144):

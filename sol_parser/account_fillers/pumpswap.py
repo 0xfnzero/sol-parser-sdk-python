@@ -30,14 +30,30 @@ def _fill_trade_common(
         e.pool = get(0)
     if _empty(e.user):
         e.user = get(1)
+    if _empty(e.base_mint):
+        e.base_mint = get(3)
+    if _empty(e.quote_mint):
+        e.quote_mint = get(4)
     if _empty(e.user_base_token_account):
         e.user_base_token_account = get(5)
     if _empty(e.user_quote_token_account):
         e.user_quote_token_account = get(6)
+    if _empty(e.pool_base_token_account):
+        e.pool_base_token_account = get(7)
+    if _empty(e.pool_quote_token_account):
+        e.pool_quote_token_account = get(8)
     if _empty(e.protocol_fee_recipient):
         e.protocol_fee_recipient = get(9)
     if _empty(e.protocol_fee_recipient_token_account):
         e.protocol_fee_recipient_token_account = get(10)
+    if _empty(e.base_token_program):
+        e.base_token_program = get(11)
+    if _empty(e.quote_token_program):
+        e.quote_token_program = get(12)
+    if _empty(e.coin_creator_vault_ata):
+        e.coin_creator_vault_ata = get(17)
+    if _empty(e.coin_creator_vault_authority):
+        e.coin_creator_vault_authority = get(18)
 
 
 def fill_buy_accounts(e: PumpSwapBuyEvent, get: AccountGetter) -> None:

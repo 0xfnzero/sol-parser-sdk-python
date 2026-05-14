@@ -11,6 +11,9 @@ from ..event_types import (
     RaydiumClmmCreatePoolEvent,
     RaydiumClmmDecreaseLiquidityEvent,
     RaydiumClmmIncreaseLiquidityEvent,
+    RaydiumClmmClosePositionEvent,
+    RaydiumClmmOpenPositionEvent,
+    RaydiumClmmOpenPositionWithTokenExtNftEvent,
     RaydiumClmmSwapEvent,
     RaydiumCpmmDepositEvent,
     RaydiumCpmmInitializeEvent,
@@ -48,6 +51,30 @@ def fill_clmm_increase_liquidity_accounts(e: RaydiumClmmIncreaseLiquidityEvent, 
 def fill_clmm_decrease_liquidity_accounts(e: RaydiumClmmDecreaseLiquidityEvent, get: AccountGetter) -> None:
     if _empty(e.user):
         e.user = get(0)
+
+
+def fill_clmm_open_position_accounts(e: RaydiumClmmOpenPositionEvent, get: AccountGetter) -> None:
+    if _empty(e.user):
+        e.user = get(0)
+    if _empty(e.position_nft_mint):
+        e.position_nft_mint = get(2)
+
+
+def fill_clmm_open_position_with_token_ext_nft_accounts(
+    e: RaydiumClmmOpenPositionWithTokenExtNftEvent,
+    get: AccountGetter,
+) -> None:
+    if _empty(e.user):
+        e.user = get(0)
+    if _empty(e.position_nft_mint):
+        e.position_nft_mint = get(2)
+
+
+def fill_clmm_close_position_accounts(e: RaydiumClmmClosePositionEvent, get: AccountGetter) -> None:
+    if _empty(e.user):
+        e.user = get(0)
+    if _empty(e.position_nft_mint):
+        e.position_nft_mint = get(1)
 
 
 def fill_cpmm_swap_accounts(_e: RaydiumCpmmSwapEvent, _get: AccountGetter) -> None:

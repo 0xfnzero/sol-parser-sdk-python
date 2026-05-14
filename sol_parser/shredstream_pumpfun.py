@@ -14,6 +14,9 @@ _DISC_CREATE_V2 = bytes([214, 144, 76, 236, 95, 139, 49, 180])
 _DISC_BUY = bytes([102, 6, 61, 18, 1, 218, 235, 234])
 _DISC_SELL = bytes([51, 230, 133, 164, 1, 127, 131, 173])
 _DISC_BUY_EXACT_SOL_IN = bytes([56, 252, 116, 8, 158, 223, 205, 95])
+_DISC_BUY_V2 = bytes([184, 23, 238, 97, 103, 197, 211, 61])
+_DISC_SELL_V2 = bytes([93, 246, 130, 60, 231, 233, 64, 178])
+_DISC_BUY_EXACT_QUOTE_IN_V2 = bytes([194, 171, 28, 70, 104, 77, 91, 47])
 
 
 def _get_acct(accounts: List[str], ix_accounts: bytes, idx: int) -> str:
@@ -198,6 +201,52 @@ def parse_pumpfun_buy_exact_sol_in(
     )
 
 
+def parse_pumpfun_trade_v2(
+    ix_name: str,
+    data: bytes,
+    accounts: List[str],
+    ix_accounts: bytes,
+    sig: str,
+    slot: int,
+    tx_index: int,
+    recv_us: int,
+    created_mints: Set[str],
+    mayhem_mints: Set[str],
+) -> DexEvent | None:
+    min_accounts = 26 if ix_name == "sell_v2" else 27
+    if len(ix_accounts) < min_accounts or len(data) < 8:
+        return None
+    payload = data[8:]
+    first = struct.unpack_from("<Q", payload, 0)[0] if len(payload) >= 8 else 0
+    second = struct.unpack_from("<Q", payload, 8)[0] if len(payload) >= 16 else 0
+    if ix_name == "buy_exact_quote_in_v2":
+        sol_amount, token_amount = first, second
+    else:
+        token_amount, sol_amount = first, second
+    mint = _get_acct(accounts, ix_accounts, 1)
+    if not mint:
+        return None
+    return DexEvent(
+        type=EventType.PUMP_FUN_TRADE,
+        data=PumpFunTradeEvent(
+            metadata=_meta(sig, slot, tx_index, recv_us),
+            mint=mint,
+            bonding_curve=_get_acct(accounts, ix_accounts, 10),
+            user=_get_acct(accounts, ix_accounts, 13),
+            sol_amount=sol_amount,
+            token_amount=token_amount,
+            fee_recipient=_get_acct(accounts, ix_accounts, 6),
+            is_buy=ix_name != "sell_v2",
+            is_created_buy=mint in created_mints,
+            ix_name=ix_name,
+            mayhem_mode=mint in mayhem_mints,
+            associated_bonding_curve=_get_acct(accounts, ix_accounts, 11),
+            token_program=_token_program_default(_get_acct(accounts, ix_accounts, 3)),
+            creator_vault=_get_acct(accounts, ix_accounts, 16),
+        ),
+    )
+
+
 def parse_pumpfun_shred_ix(
     data: bytes,
     accounts: List[str],
@@ -222,5 +271,26 @@ def parse_pumpfun_shred_ix(
     if disc == _DISC_BUY_EXACT_SOL_IN:
         return parse_pumpfun_buy_exact_sol_in(
             data, accounts, ix_accounts, sig, slot, tx_index, recv_us, created_mints, mayhem_mints
+        )
+    if disc == _DISC_BUY_V2:
+        return parse_pumpfun_trade_v2(
+            "buy_v2", data, accounts, ix_accounts, sig, slot, tx_index, recv_us, created_mints, mayhem_mints
+        )
+    if disc == _DISC_BUY_EXACT_QUOTE_IN_V2:
+        return parse_pumpfun_trade_v2(
+            "buy_exact_quote_in_v2",
+            data,
+            accounts,
+            ix_accounts,
+            sig,
+            slot,
+            tx_index,
+            recv_us,
+            created_mints,
+            mayhem_mints,
+        )
+    if disc == _DISC_SELL_V2:
+        return parse_pumpfun_trade_v2(
+            "sell_v2", data, accounts, ix_accounts, sig, slot, tx_index, recv_us, created_mints, mayhem_mints
         )
     return parse_pumpfun_instruction(data, accounts, sig, slot, tx_index, None, recv_us)

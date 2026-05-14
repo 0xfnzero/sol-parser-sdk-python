@@ -11,7 +11,8 @@ import base58
 from .dex_parsers import DexEvent, dispatch_program_data, parse_trade_from_data
 from .grpc_types import EventTypeFilter, EventType, IncludeOnlyFilter
 from .instructions import parse_instruction_unified
-from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
+from .log_instr_dedup import dedupe_log_instruction_events
+from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
 
 class ParseError(Exception):
@@ -187,7 +188,7 @@ def parse_rpc_transaction(
     block_time_us = tx.block_time * 1_000_000 if tx.block_time else None
     block_tx_index = int(getattr(tx, "transaction_index", 0) or 0)
 
-    events: List[DexEvent] = []
+    instruction_events: List[DexEvent] = []
 
     # 解析外层指令
     for i, ix in enumerate(msg.instructions):
@@ -202,7 +203,7 @@ def parse_rpc_transaction(
             filter,
         )
         if ev:
-            events.append(ev)
+            instruction_events.append(ev)
 
     # 解析内层指令
     for group in meta.inner_instructions:
@@ -218,11 +219,12 @@ def parse_rpc_transaction(
                 filter,
             )
             if ev:
-                events.append(ev)
+                instruction_events.append(ev)
 
     # 解析日志
     is_created_buy = False
     recent_blockhash = msg.recent_blockhash
+    log_events: List[DexEvent] = []
 
     from .parser import parse_log_optimized
 
@@ -241,15 +243,23 @@ def parse_rpc_transaction(
         if ev:
             if ev.type in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
                 is_created_buy = True
-            events.append(ev)
-
-    enrich_create_v2_observed_fee_recipient(events)
+            log_events.append(ev)
 
     tx_pb, meta_pb = rpc_response_to_solana_storage(tx)
     if tx_pb is not None and meta_pb is not None:
         from .grpc_instruction_parser import apply_account_fill_to_events
 
+        apply_account_fill_to_events(instruction_events, tx_pb, meta_pb)
+        apply_account_fill_to_events(log_events, tx_pb, meta_pb)
+
+    events = dedupe_log_instruction_events(log_events, instruction_events)
+    enrich_pumpfun_same_tx_post_merge(events)
+
+    if tx_pb is not None and meta_pb is not None:
+        from .grpc_instruction_parser import apply_account_fill_to_events
+
         apply_account_fill_to_events(events, tx_pb, meta_pb)
+        enrich_pumpfun_same_tx_post_merge(events)
 
     return events, None
 
@@ -643,4 +653,3 @@ def enrich_dex_events_from_rpc_get_transaction_result(
     from .grpc_instruction_parser import apply_account_fill_to_events
 
     apply_account_fill_to_events(events, tx_pb, meta_pb)
-

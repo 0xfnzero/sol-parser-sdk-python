@@ -22,6 +22,18 @@ AccountGetter = Callable[[int], str]
 
 
 def fill_trade_accounts(e: PumpFunTradeEvent, get: AccountGetter) -> None:
+    if e.ix_name in ("buy_v2", "sell_v2", "buy_exact_quote_in_v2"):
+        if _empty(e.user):
+            e.user = get(13)
+        if _empty(e.bonding_curve):
+            e.bonding_curve = get(10)
+        if _empty(e.associated_bonding_curve):
+            e.associated_bonding_curve = get(11)
+        if _empty(e.creator_vault):
+            e.creator_vault = get(16)
+        if _empty(e.token_program):
+            e.token_program = get(3)
+        return
     if _empty(e.user):
         e.user = get(6)
     if _empty(e.bonding_curve):

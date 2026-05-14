@@ -1,6 +1,6 @@
 [project]
 name = "sol-parser-sdk-python"
-version = "0.3.1"
+version = "0.4.4"
 description = "Solana DEX program log parsing (pure Python, API aligned with sol-parser-sdk)"
 requires-python = ">=3.10"
 dependencies = [
@@ -30,3 +30,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sol_parser"]
+
+[tool.pytest.ini_options]
+addopts = "-p no:pytest_anchorpy"

@@ -127,6 +127,12 @@ def fill_accounts_with_owned_keys(
         run(RAYDIUM_CLMM_PROGRAM_ID, lambda g: raydium.fill_clmm_swap_accounts(data, g))
     elif et == EventType.RAYDIUM_CLMM_CREATE_POOL:
         run(RAYDIUM_CLMM_PROGRAM_ID, lambda g: raydium.fill_clmm_create_pool_accounts(data, g))
+    elif et == EventType.RAYDIUM_CLMM_OPEN_POSITION:
+        run(RAYDIUM_CLMM_PROGRAM_ID, lambda g: raydium.fill_clmm_open_position_accounts(data, g))
+    elif et == EventType.RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT:
+        run(RAYDIUM_CLMM_PROGRAM_ID, lambda g: raydium.fill_clmm_open_position_with_token_ext_nft_accounts(data, g))
+    elif et == EventType.RAYDIUM_CLMM_CLOSE_POSITION:
+        run(RAYDIUM_CLMM_PROGRAM_ID, lambda g: raydium.fill_clmm_close_position_accounts(data, g))
     elif et == EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY:
         run(RAYDIUM_CLMM_PROGRAM_ID, lambda g: raydium.fill_clmm_increase_liquidity_accounts(data, g))
     elif et == EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY:

@@ -17,7 +17,7 @@ from .entries_decode import decode_entries_bincode_flat
 from .event_types import DexEvent
 from .grpc_types import EventTypeFilter, IncludeOnlyFilter
 from .instructions import PUMPFUN_PROGRAM_ID, parse_instruction_unified
-from .pumpfun_fee_enrich import enrich_create_v2_observed_fee_recipient
+from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 from .shredstream_pumpfun import detect_pumpfun_create_mints, parse_pumpfun_shred_ix
 from .shredstream_pb2 import SubscribeEntriesRequest
 from .shredstream_pb2_grpc import ShredstreamProxyStub
@@ -130,7 +130,7 @@ def _events_from_versioned_tx_wire(
     for ev in out:
         if hasattr(ev.data, "metadata"):
             ev.data.metadata.grpc_recv_us = recv_us
-    enrich_create_v2_observed_fee_recipient(out)
+    enrich_pumpfun_same_tx_post_merge(out)
     return out
 
 

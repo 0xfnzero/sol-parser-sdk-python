@@ -223,6 +223,118 @@ class PumpFunMigrateEvent(DexEventBase):
     pool: str = ""
 
 
+@dataclass
+class PumpFeesShareholder:
+    address: str = ""
+    share_bps: int = 0
+
+
+@dataclass
+class PumpFeesFees:
+    lp_fee_bps: int = 0
+    protocol_fee_bps: int = 0
+    creator_fee_bps: int = 0
+
+
+@dataclass
+class PumpFeesFeeTier:
+    market_cap_lamports_threshold: int = 0
+    fees: PumpFeesFees = field(default_factory=PumpFeesFees)
+
+
+@dataclass
+class PumpFeesCreateFeeSharingConfigEvent(DexEventBase):
+    timestamp: int = 0
+    mint: str = ""
+    bonding_curve: str = ""
+    pool: str = ""
+    sharing_config: str = ""
+    admin: str = ""
+    initial_shareholders: List[PumpFeesShareholder] = field(default_factory=list)
+    status: str = "Active"
+
+
+@dataclass
+class PumpFeesInitializeFeeConfigEvent(DexEventBase):
+    timestamp: int = 0
+    admin: str = ""
+    fee_config: str = ""
+
+
+@dataclass
+class PumpFeesResetFeeSharingConfigEvent(DexEventBase):
+    timestamp: int = 0
+    mint: str = ""
+    sharing_config: str = ""
+    old_admin: str = ""
+    old_shareholders: List[PumpFeesShareholder] = field(default_factory=list)
+    new_admin: str = ""
+    new_shareholders: List[PumpFeesShareholder] = field(default_factory=list)
+
+
+@dataclass
+class PumpFeesRevokeFeeSharingAuthorityEvent(DexEventBase):
+    timestamp: int = 0
+    mint: str = ""
+    sharing_config: str = ""
+    admin: str = ""
+
+
+@dataclass
+class PumpFeesTransferFeeSharingAuthorityEvent(DexEventBase):
+    timestamp: int = 0
+    mint: str = ""
+    sharing_config: str = ""
+    old_admin: str = ""
+    new_admin: str = ""
+
+
+@dataclass
+class PumpFeesUpdateAdminEvent(DexEventBase):
+    timestamp: int = 0
+    old_admin: str = ""
+    new_admin: str = ""
+
+
+@dataclass
+class PumpFeesUpdateFeeConfigEvent(DexEventBase):
+    timestamp: int = 0
+    admin: str = ""
+    fee_config: str = ""
+    fee_tiers: List[PumpFeesFeeTier] = field(default_factory=list)
+    flat_fees: PumpFeesFees = field(default_factory=PumpFeesFees)
+
+
+@dataclass
+class PumpFeesUpdateFeeSharesEvent(DexEventBase):
+    timestamp: int = 0
+    mint: str = ""
+    sharing_config: str = ""
+    admin: str = ""
+    bonding_curve: str = ""
+    pump_creator_vault: str = ""
+    new_shareholders: List[PumpFeesShareholder] = field(default_factory=list)
+
+
+@dataclass
+class PumpFeesUpsertFeeTiersEvent(DexEventBase):
+    timestamp: int = 0
+    admin: str = ""
+    fee_config: str = ""
+    fee_tiers: List[PumpFeesFeeTier] = field(default_factory=list)
+    offset: int = 0
+
+
+@dataclass
+class PumpFunMigrateBondingCurveCreatorEvent(DexEventBase):
+    timestamp: int = 0
+    mint: str = ""
+    bonding_curve: str = ""
+    sharing_config: str = ""
+    old_creator: str = ""
+    new_creator: str = ""
+
+
 # ============================================================
 # PumpSwap 事件
 # ============================================================
@@ -264,6 +376,14 @@ class PumpSwapBuyEvent(DexEventBase):
     cashback_fee_basis_points: int = 0
     cashback: int = 0
     is_cashback_coin: bool = False
+    base_mint: str = ""
+    quote_mint: str = ""
+    pool_base_token_account: str = ""
+    pool_quote_token_account: str = ""
+    coin_creator_vault_ata: str = ""
+    coin_creator_vault_authority: str = ""
+    base_token_program: str = ""
+    quote_token_program: str = ""
     is_pump_pool: bool = False
 
 
@@ -295,6 +415,14 @@ class PumpSwapSellEvent(DexEventBase):
     coin_creator_fee: int = 0
     cashback_fee_basis_points: int = 0
     cashback: int = 0
+    base_mint: str = ""
+    quote_mint: str = ""
+    pool_base_token_account: str = ""
+    pool_quote_token_account: str = ""
+    coin_creator_vault_ata: str = ""
+    coin_creator_vault_authority: str = ""
+    base_token_program: str = ""
+    quote_token_program: str = ""
     is_pump_pool: bool = False
 
 
@@ -538,6 +666,36 @@ class RaydiumClmmDecreaseLiquidityEvent(DexEventBase):
     liquidity: str = ""
     amount0_min: int = 0
     amount1_min: int = 0
+
+
+@dataclass
+class RaydiumClmmOpenPositionEvent(DexEventBase):
+    """Raydium CLMM 开启仓位事件"""
+    pool: str = ""
+    user: str = ""
+    position_nft_mint: str = ""
+    tick_lower_index: int = 0
+    tick_upper_index: int = 0
+    liquidity: str = ""
+
+
+@dataclass
+class RaydiumClmmOpenPositionWithTokenExtNftEvent(DexEventBase):
+    """Raydium CLMM Token-2022 NFT 开启仓位事件"""
+    pool: str = ""
+    user: str = ""
+    position_nft_mint: str = ""
+    tick_lower_index: int = 0
+    tick_upper_index: int = 0
+    liquidity: str = ""
+
+
+@dataclass
+class RaydiumClmmClosePositionEvent(DexEventBase):
+    """Raydium CLMM 关闭仓位事件"""
+    pool: str = ""
+    user: str = ""
+    position_nft_mint: str = ""
 
 
 @dataclass
@@ -957,6 +1115,16 @@ TypedDexEvent = Union[
     PumpFunCreateEvent,
     PumpFunCreateV2TokenEvent,
     PumpFunMigrateEvent,
+    PumpFeesCreateFeeSharingConfigEvent,
+    PumpFeesInitializeFeeConfigEvent,
+    PumpFeesResetFeeSharingConfigEvent,
+    PumpFeesRevokeFeeSharingAuthorityEvent,
+    PumpFeesTransferFeeSharingAuthorityEvent,
+    PumpFeesUpdateAdminEvent,
+    PumpFeesUpdateFeeConfigEvent,
+    PumpFeesUpdateFeeSharesEvent,
+    PumpFeesUpsertFeeTiersEvent,
+    PumpFunMigrateBondingCurveCreatorEvent,
     PumpSwapBuyEvent,
     PumpSwapSellEvent,
     PumpSwapCreatePoolEvent,
@@ -971,6 +1139,9 @@ TypedDexEvent = Union[
     RaydiumClmmIncreaseLiquidityEvent,
     RaydiumClmmDecreaseLiquidityEvent,
     RaydiumClmmCreatePoolEvent,
+    RaydiumClmmOpenPositionEvent,
+    RaydiumClmmOpenPositionWithTokenExtNftEvent,
+    RaydiumClmmClosePositionEvent,
     RaydiumClmmCollectFeeEvent,
     RaydiumCpmmSwapEvent,
     RaydiumCpmmDepositEvent,
@@ -1394,6 +1565,41 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             fee_rate=_get_int(data, "fee_rate"),
             sqrt_price_x64=_get_str(data, "sqrt_price_x64"),
             open_time=_get_int(data, "open_time"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_OPEN_POSITION:
+        return RaydiumClmmOpenPositionEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            user=_get_str(data, "user"),
+            position_nft_mint=_get_str(data, "position_nft_mint"),
+            tick_lower_index=_get_int(data, "tick_lower_index"),
+            tick_upper_index=_get_int(data, "tick_upper_index"),
+            liquidity=_get_str(data, "liquidity"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT:
+        return RaydiumClmmOpenPositionWithTokenExtNftEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            user=_get_str(data, "user"),
+            position_nft_mint=_get_str(data, "position_nft_mint"),
+            tick_lower_index=_get_int(data, "tick_lower_index"),
+            tick_upper_index=_get_int(data, "tick_upper_index"),
+            liquidity=_get_str(data, "liquidity"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_CLOSE_POSITION:
+        return RaydiumClmmClosePositionEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            user=_get_str(data, "user"),
+            position_nft_mint=_get_str(data, "position_nft_mint"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_COLLECT_FEE:
+        return RaydiumClmmCollectFeeEvent(
+            metadata=meta,
+            pool_state=_get_str(data, "pool_state"),
+            position_nft_mint=_get_str(data, "position_nft_mint"),
+            amount_0=_get_int(data, "amount_0"),
+            amount_1=_get_int(data, "amount_1"),
         )
 
     if event_type == EventType.RAYDIUM_CPMM_SWAP:

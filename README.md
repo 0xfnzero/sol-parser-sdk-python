@@ -56,7 +56,7 @@
 **From PyPI**
 
 ```bash
-pip install sol-parser-sdk-python
+pip install sol-parser-sdk-python==0.4.4
 ```
 
 **From source**

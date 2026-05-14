@@ -10,11 +10,9 @@ import asyncio
 import os
 import sys
 
-import base58
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from sol_parser import format_dex_event_json, now_micros, parse_logs_only
+from sol_parser import format_dex_event_json, now_micros
 from sol_parser.env_config import load_dotenv_silent, parse_grpc_credentials
 from sol_parser.event_types import DexEvent
 from sol_parser.grpc_client import YellowstoneGrpc
@@ -23,7 +21,7 @@ from sol_parser.grpc_types import (
     EventType,
     OrderMode,
     Protocol,
-    SubscribeCallbacks,
+    account_filter_for_protocols,
     event_type_filter_include_only,
     transaction_filter_for_protocols,
 )
@@ -35,7 +33,7 @@ max_latency = 0
 last_count = 0
 
 
-async def stats_reporter():
+async def stats_reporter(queue: asyncio.Queue[DexEvent]):
     global last_count
     while True:
         await asyncio.sleep(10)
@@ -45,7 +43,7 @@ async def stats_reporter():
         total = total_latency
         min_l = min_latency if min_latency < 2**62 else 0
         max_l = max_latency
-        queue_len = 0
+        queue_len = queue.qsize()
         avg = total // count if count else 0
         events_per_sec = (count - last_count) / 10.0
 
@@ -110,6 +108,7 @@ async def main() -> None:
     tx_filter = transaction_filter_for_protocols(protocols)
     tx_filter.vote = False
     tx_filter.failed = False
+    account_filter = account_filter_for_protocols(protocols)
 
     event_filter = event_type_filter_include_only(
         [
@@ -121,29 +120,19 @@ async def main() -> None:
 
     print("🎧 Starting low-latency subscription...\n")
 
-    await client.connect()
-    asyncio.create_task(stats_reporter())
+    queue: asyncio.Queue[DexEvent] = await client.subscribe_dex_events(
+        [tx_filter],
+        [account_filter],
+        event_filter,
+    )
+    asyncio.create_task(stats_reporter(queue))
 
-    def on_update(update):
+    async def consume_events() -> None:
         global event_count, total_latency, min_latency, max_latency
 
-        if update.transaction is None or update.transaction.transaction is None:
-            return
-        tx_info = update.transaction.transaction
-        slot = update.transaction.slot
-        logs = tx_info.log_messages
-        if not logs:
-            return
-
-        sb = bytes(tx_info.signature) if tx_info.signature else b""
-        sig = base58.b58encode(sb).decode("ascii") if len(sb) == 64 else ""
-
-        for ev in parse_logs_only(
-            logs, sig, slot, None, subscribe_tx_info=tx_info
-        ):
+        while True:
+            ev = await queue.get()
             if not isinstance(ev, DexEvent) or ev.data is None:
-                continue
-            if not event_filter.should_include(ev.type):
                 continue
 
             grpc_recv_us_opt = _grpc_recv_us(ev)
@@ -151,34 +140,21 @@ async def main() -> None:
                 continue
 
             queue_recv_us = now_micros()
-            latency_us = queue_recv_us - grpc_recv_us_opt
-            if latency_us < 0:
-                latency_us = 0
+            latency_us = max(0, queue_recv_us - grpc_recv_us_opt)
 
             event_count += 1
             total_latency += latency_us
             min_latency = min(min_latency, latency_us)
             max_latency = max(max_latency, latency_us)
 
-            queue_len = 0
-
             print("\n================================================")
             print(f"gRPC接收时间: {grpc_recv_us_opt} μs")
             print(f"事件接收时间: {queue_recv_us} μs")
             print(f"延迟时间: {latency_us} μs")
-            print(f"队列长度: {queue_len}")
+            print(f"队列长度: {queue.qsize()}")
             print("================================================")
             print(format_dex_event_json(ev))
             print()
-
-    await client.subscribe_transactions(
-        tx_filter,
-        SubscribeCallbacks(
-            on_update=on_update,
-            on_error=lambda e: print(f"Stream error: {e}", file=sys.stderr),
-            on_end=lambda: None,
-        ),
-    )
 
     async def auto_stop():
         await asyncio.sleep(600)
@@ -190,7 +166,7 @@ async def main() -> None:
     print("🛑 Press Ctrl+C to stop...\n")
 
     try:
-        await asyncio.Event().wait()
+        await consume_events()
     finally:
         await client.disconnect()
         print("\n👋 Shutting down gracefully...")

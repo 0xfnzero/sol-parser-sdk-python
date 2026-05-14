@@ -10,18 +10,17 @@ import asyncio
 import os
 import sys
 
-import base58
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from sol_parser import format_dex_event_json, parse_logs_only
+from sol_parser import format_dex_event_json
 from sol_parser.env_config import load_dotenv_silent, parse_grpc_credentials
 from sol_parser.event_types import DexEvent
 from sol_parser.grpc_client import YellowstoneGrpc
 from sol_parser.grpc_types import (
     ClientConfig,
+    OrderMode,
     Protocol,
-    SubscribeCallbacks,
+    account_filter_for_protocols,
     transaction_filter_for_protocols,
 )
 
@@ -64,50 +63,32 @@ async def main() -> None:
 
     cfg = ClientConfig.default()
     cfg.enable_metrics = True
+    cfg.order_mode = OrderMode.UNORDERED
     client = YellowstoneGrpc.new_with_config(endpoint, token or None, cfg)
 
-    await client.connect()
     asyncio.create_task(stats_reporter())
-
-    def on_update(update):
-        if update.transaction is None or update.transaction.transaction is None:
-            return
-        tx_info = update.transaction.transaction
-        slot = update.transaction.slot
-        logs = tx_info.log_messages
-        if not logs:
-            return
-
-        sb = bytes(tx_info.signature) if tx_info.signature else b""
-        sig_b58 = base58.b58encode(sb).decode("ascii") if len(sb) == 64 else ""
-
-        for ev in parse_logs_only(
-            logs, sig_b58, slot, None, subscribe_tx_info=tx_info
-        ):
-            if not isinstance(ev, DexEvent):
-                continue
-            key = str(ev.type.value)
-            stats[key] = stats.get(key, 0) + 1
-            print(format_dex_event_json(ev))
 
     tx_filter = transaction_filter_for_protocols(PROTOCOLS)
     tx_filter.vote = False
     tx_filter.failed = False
+    account_filter = account_filter_for_protocols(PROTOCOLS)
 
-    await client.subscribe_transactions(
-        tx_filter,
-        SubscribeCallbacks(
-            on_update=on_update,
-            on_error=lambda e: print(f"Stream error: {e}", file=sys.stderr),
-            on_end=lambda: print("Stream ended"),
-        ),
+    queue: asyncio.Queue[DexEvent] = await client.subscribe_dex_events(
+        [tx_filter],
+        [account_filter],
     )
 
     print(f"✅ Subscribed")
     print("🛑 Press Ctrl+C to stop...\n")
 
     try:
-        await asyncio.Event().wait()
+        while True:
+            ev = await queue.get()
+            if not isinstance(ev, DexEvent):
+                continue
+            key = str(ev.type.value)
+            stats[key] = stats.get(key, 0) + 1
+            print(format_dex_event_json(ev))
     except KeyboardInterrupt:
         pass
     finally:

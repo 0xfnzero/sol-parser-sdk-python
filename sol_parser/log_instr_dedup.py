@@ -42,9 +42,9 @@ def _fill_bonk_mint_param(log: Any, ix: Any, key: str) -> None:
 
 
 def _ix_lane(ix_name: Any) -> int:
-    if ix_name == "sell":
+    if ix_name in ("sell", "sell_v2"):
         return 1
-    if ix_name == "buy_exact_sol_in":
+    if ix_name in ("buy_exact_sol_in", "buy_exact_quote_in", "buy_exact_quote_in_v2"):
         return 2
     return 0
 
@@ -123,15 +123,49 @@ def _dedupe_key(ev: DexEvent, pumpfun_lane_counts: Dict[PumpfunLaneBase, int]) -
 
 def _merge_pumpfun_trade(log: Any, ix: Any) -> None:
     for attr in (
+        "global_account",
         "bonding_curve",
+        "bonding_curve_v2",
         "associated_bonding_curve",
+        "associated_user",
+        "system_program",
         "token_program",
+        "quote_token_program",
+        "associated_token_program",
         "creator_vault",
         "fee_recipient",
+        "associated_quote_fee_recipient",
+        "buyback_fee_recipient",
+        "associated_quote_buyback_fee_recipient",
+        "associated_quote_bonding_curve",
+        "associated_quote_user",
+        "associated_creator_vault",
+        "sharing_config",
+        "event_authority",
+        "program",
+        "global_volume_accumulator",
+        "user_volume_accumulator",
+        "associated_user_volume_accumulator",
+        "fee_config",
+        "fee_program",
+        "quote_mint",
         "creator",
         "extra_instruction_account",
     ):
         _fill_attr(log, attr, ix)
+    for attr in (
+        "amount",
+        "max_sol_cost",
+        "min_sol_output",
+        "spendable_sol_in",
+        "spendable_quote_in",
+        "min_tokens_out",
+        "quote_amount",
+        "virtual_quote_reserves",
+        "real_quote_reserves",
+    ):
+        if getattr(log, attr, 0) == 0 and getattr(ix, attr, 0) != 0:
+            setattr(log, attr, getattr(ix, attr))
     if getattr(log, "ix_name", "") == "" and getattr(ix, "ix_name", "") != "":
         log.ix_name = ix.ix_name
     log.is_created_buy = bool(getattr(log, "is_created_buy", False)) or bool(
@@ -179,6 +213,9 @@ def _merge_pumpswap_buy_sell(log: Any, ix: Any, include_ix_name: bool) -> None:
         "coin_creator_vault_authority",
         "base_token_program",
         "quote_token_program",
+        "pool_v2",
+        "fee_recipient",
+        "fee_recipient_quote_token_account",
     ):
         _fill_attr(log, attr, ix)
     if include_ix_name and getattr(log, "ix_name", "") == "" and getattr(ix, "ix_name", "") != "":

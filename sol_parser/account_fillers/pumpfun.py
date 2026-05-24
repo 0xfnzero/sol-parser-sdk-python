@@ -22,31 +22,96 @@ AccountGetter = Callable[[int], str]
 
 
 def fill_trade_accounts(e: PumpFunTradeEvent, get: AccountGetter) -> None:
-    if e.ix_name in ("buy_v2", "sell_v2", "buy_exact_quote_in_v2"):
-        if _empty(e.user):
-            e.user = get(13)
-        if _empty(e.bonding_curve):
-            e.bonding_curve = get(10)
-        if _empty(e.associated_bonding_curve):
-            e.associated_bonding_curve = get(11)
-        if _empty(e.creator_vault):
-            e.creator_vault = get(16)
-        if _empty(e.token_program):
-            e.token_program = get(3)
+    def account_at_matches_mint(idx: int) -> bool:
+        return not _empty(e.mint) and get(idx) == e.mint
+
+    def set_attr(name: str, idx: int) -> None:
+        if _empty(getattr(e, name)):
+            setattr(e, name, get(idx))
+
+    is_v2 = e.ix_name in ("buy_v2", "sell_v2", "buy_exact_quote_in_v2") or (
+        e.ix_name == "buy_exact_quote_in" and account_at_matches_mint(1)
+    )
+    if is_v2:
+        set_attr("global_account", 0)
+        set_attr("quote_mint", 2)
+        set_attr("fee_recipient", 6)
+        set_attr("bonding_curve", 10)
+        set_attr("associated_bonding_curve", 11)
+        set_attr("associated_quote_bonding_curve", 12)
+        set_attr("user", 13)
+        set_attr("associated_user", 14)
+        set_attr("associated_quote_user", 15)
+        set_attr("token_program", 3)
+        set_attr("quote_token_program", 4)
+        set_attr("associated_token_program", 5)
+        set_attr("creator_vault", 16)
+        set_attr("associated_quote_fee_recipient", 7)
+        set_attr("buyback_fee_recipient", 8)
+        set_attr("associated_quote_buyback_fee_recipient", 9)
+        set_attr("associated_creator_vault", 17)
+        set_attr("sharing_config", 18)
+        if e.ix_name == "sell_v2":
+            set_attr("user_volume_accumulator", 19)
+            set_attr("associated_user_volume_accumulator", 20)
+            set_attr("fee_config", 21)
+            set_attr("fee_program", 22)
+            set_attr("system_program", 23)
+            set_attr("event_authority", 24)
+            set_attr("program", 25)
+        else:
+            set_attr("global_volume_accumulator", 19)
+            set_attr("user_volume_accumulator", 20)
+            set_attr("associated_user_volume_accumulator", 21)
+            set_attr("fee_config", 22)
+            set_attr("fee_program", 23)
+            set_attr("system_program", 24)
+            set_attr("event_authority", 25)
+            set_attr("program", 26)
         return
-    if _empty(e.user):
-        e.user = get(6)
-    if _empty(e.bonding_curve):
-        e.bonding_curve = get(3)
-    if _empty(e.associated_bonding_curve):
-        e.associated_bonding_curve = get(4)
+    set_attr("global_account", 0)
+    set_attr("fee_recipient", 1)
+    set_attr("bonding_curve", 3)
+    set_attr("associated_bonding_curve", 4)
+    set_attr("associated_user", 5)
+    set_attr("user", 6)
+    set_attr("system_program", 7)
     if _empty(e.creator_vault):
         e.creator_vault = get(9) if e.is_buy else get(8)
     if _empty(e.token_program):
         e.token_program = get(8) if e.is_buy else get(9)
+    set_attr("event_authority", 10)
+    set_attr("program", 11)
+    if e.is_buy:
+        set_attr("global_volume_accumulator", 12)
+        set_attr("user_volume_accumulator", 13)
+        set_attr("fee_config", 14)
+        set_attr("fee_program", 15)
+        set_attr("bonding_curve_v2", 16)
+        set_attr("buyback_fee_recipient", 17)
+        a17 = get(17)
+        if not _empty(a17) and _empty(e.extra_instruction_account):
+            e.extra_instruction_account = a17
+        return
+    set_attr("fee_config", 12)
+    set_attr("fee_program", 13)
     a16 = get(16)
     if not _empty(a16):
-        e.extra_instruction_account = a16
+        set_attr("user_volume_accumulator", 14)
+        set_attr("bonding_curve_v2", 15)
+        set_attr("buyback_fee_recipient", 16)
+        if _empty(e.extra_instruction_account):
+            e.extra_instruction_account = a16
+        return
+    if e.is_cashback_coin:
+        set_attr("user_volume_accumulator", 14)
+        set_attr("bonding_curve_v2", 15)
+        return
+    set_attr("bonding_curve_v2", 14)
+    set_attr("buyback_fee_recipient", 15)
+    a15 = get(15)
+    if not _empty(a15) and _empty(e.extra_instruction_account):
+        e.extra_instruction_account = a15
 
 
 def fill_create_accounts(e: PumpFunCreateEvent, get: AccountGetter) -> None:

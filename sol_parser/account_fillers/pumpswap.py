@@ -58,10 +58,50 @@ def _fill_trade_common(
 
 def fill_buy_accounts(e: PumpSwapBuyEvent, get: AccountGetter) -> None:
     _fill_trade_common(e, get)
+    a26 = get(26)
+    if not _empty(a26):
+        if _empty(e.pool_v2):
+            e.pool_v2 = get(24)
+        if _empty(e.fee_recipient):
+            e.fee_recipient = get(25)
+        if _empty(e.fee_recipient_quote_token_account):
+            e.fee_recipient_quote_token_account = a26
+        return
+    a25 = get(25)
+    if not _empty(a25):
+        if _empty(e.pool_v2):
+            e.pool_v2 = get(23)
+        if _empty(e.fee_recipient):
+            e.fee_recipient = get(24)
+        if _empty(e.fee_recipient_quote_token_account):
+            e.fee_recipient_quote_token_account = a25
+        return
+    if _empty(e.pool_v2):
+        e.pool_v2 = get(23)
 
 
 def fill_sell_accounts(e: PumpSwapSellEvent, get: AccountGetter) -> None:
     _fill_trade_common(e, get)
+    a25 = get(25)
+    if not _empty(a25):
+        if _empty(e.pool_v2):
+            e.pool_v2 = get(23)
+        if _empty(e.fee_recipient):
+            e.fee_recipient = get(24)
+        if _empty(e.fee_recipient_quote_token_account):
+            e.fee_recipient_quote_token_account = a25
+        return
+    a23 = get(23)
+    if not _empty(a23):
+        if _empty(e.pool_v2):
+            e.pool_v2 = get(21)
+        if _empty(e.fee_recipient):
+            e.fee_recipient = get(22)
+        if _empty(e.fee_recipient_quote_token_account):
+            e.fee_recipient_quote_token_account = a23
+        return
+    if _empty(e.pool_v2):
+        e.pool_v2 = get(21)
 
 
 def fill_trade_accounts(_e: Any, _get: AccountGetter) -> None:

@@ -5,6 +5,8 @@ from __future__ import annotations
 import struct
 from typing import Optional, List
 
+import base58
+
 from .grpc_types import EventTypeFilter, EventType, EventMetadata, IncludeOnlyFilter, ExcludeFilter
 from .dex_parsers import Z, read_pump_fees_fee_tiers_vec, read_pump_fees_shareholders_vec
 from .event_types import (
@@ -22,6 +24,8 @@ from .event_types import (
     PumpFunCreateEvent,
     PumpFunCreateV2TokenEvent,
     PumpFunTradeEvent,
+    PumpSwapBuyEvent,
+    PumpSwapSellEvent,
     legacy_dict_to_dex_event,
 )
 
@@ -45,8 +49,9 @@ def _d(*xs: int) -> int:
 
 
 # Discriminator 常量
-_DISC_PUMPSWAP_BUY  = _d(103, 244, 82, 31, 44, 245, 119, 119)
-_DISC_PUMPSWAP_SELL = _d(62, 47, 55, 10, 165, 3, 220, 42)
+_DISC_PUMPSWAP_BUY = _d(102, 6, 61, 18, 1, 218, 235, 234)
+_DISC_PUMPSWAP_SELL = _d(51, 230, 133, 164, 1, 127, 131, 173)
+_DISC_PUMPSWAP_BUY_EXACT_QUOTE_IN = _d(198, 46, 21, 82, 180, 217, 232, 112)
 
 _DISC_DAMM_SWAP    = _d(27, 60, 21, 213, 138, 170, 187, 147)
 _DISC_DAMM_SWAP2   = _d(189, 66, 51, 168, 38, 80, 117, 153)
@@ -86,6 +91,11 @@ _DISC_PFEES_UPDATE_FEE_CONFIG = _d(104, 184, 103, 242, 88, 151, 107, 20)
 _DISC_PFEES_UPDATE_FEE_SHARES = _d(189, 13, 136, 99, 187, 164, 237, 35)
 _DISC_PFEES_UPSERT_FEE_TIERS = _d(227, 23, 150, 12, 77, 86, 94, 4)
 
+_DISC_PUMPFUN_CREATE = _d(24, 30, 200, 40, 5, 28, 7, 119)
+_DISC_PUMPFUN_CREATE_V2 = _d(214, 144, 76, 236, 95, 139, 49, 180)
+_DISC_PUMPFUN_BUY = _d(102, 6, 61, 18, 1, 218, 235, 234)
+_DISC_PUMPFUN_SELL = _d(51, 230, 133, 164, 1, 127, 131, 173)
+_DISC_PUMPFUN_BUY_EXACT_SOL_IN = _d(56, 252, 116, 8, 158, 223, 205, 95)
 _DISC_PUMPFUN_BUY_V2 = _d(184, 23, 238, 97, 103, 197, 211, 61)
 _DISC_PUMPFUN_SELL_V2 = _d(93, 246, 130, 60, 231, 233, 64, 178)
 _DISC_PUMPFUN_BUY_EXACT_QUOTE_IN_V2 = _d(194, 171, 28, 70, 104, 77, 91, 47)
@@ -209,13 +219,12 @@ def parse_pumpfun_instruction(
 ) -> Optional[DexEvent]:
     """解析 PumpFun 指令
     
-    注意：PumpFun 的 Buy/Sell 操作通过统一的 TRADE 日志事件捕获，
-    在 dex_parsers.py 的 parse_trade_from_data 中处理。
-    这里只处理 Create 和 CreateV2 指令。
+    注意：legacy Buy/Sell 仍主要通过统一的 TRADE 日志事件捕获，
+    这里也解析 legacy/v2 trade 外层指令，用于和 Rust instruction parser 保持一致。
     
     Discriminators（8字节小端）：
-    - CREATE: [24, 30, 200, 40, 5, 28, 7, 119] = 8576854823835016728
-    - CREATE_V2: [214, 144, 76, 236, 95, 139, 49, 180] = 12992944682502211062
+    - CREATE: [24, 30, 200, 40, 5, 28, 7, 119]
+    - CREATE_V2: [214, 144, 76, 236, 95, 139, 49, 180]
     """
     if len(data) < 8:
         return None
@@ -224,12 +233,21 @@ def parse_pumpfun_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     # PumpFun Create: [24, 30, 200, 40, 5, 28, 7, 119]
-    if discriminator == 8576854823835016728:
+    if discriminator == _DISC_PUMPFUN_CREATE:
         return _parse_pumpfun_create(data, accounts, meta)
 
     # PumpFun CreateV2: [214, 144, 76, 236, 95, 139, 49, 180]
-    if discriminator == 12992944682502211062:
+    if discriminator == _DISC_PUMPFUN_CREATE_V2:
         return _parse_pumpfun_create_v2(data, accounts, meta)
+
+    if discriminator == _DISC_PUMPFUN_BUY:
+        return _parse_pumpfun_legacy_buy("buy", data[8:], accounts, meta)
+
+    if discriminator == _DISC_PUMPFUN_BUY_EXACT_SOL_IN:
+        return _parse_pumpfun_legacy_buy("buy_exact_sol_in", data[8:], accounts, meta)
+
+    if discriminator == _DISC_PUMPFUN_SELL:
+        return _parse_pumpfun_legacy_sell(data[8:], accounts, meta)
 
     if discriminator == _DISC_PUMPFUN_BUY_V2:
         return _parse_pumpfun_trade_v2("buy_v2", data[8:], accounts, meta)
@@ -249,6 +267,107 @@ def _u64_payload(data: bytes, offset: int) -> int:
     return 0
 
 
+def _parse_pumpfun_legacy_buy(
+    ix_name: str,
+    payload: bytes,
+    accounts: List[str],
+    meta: EventMetadata,
+) -> Optional[DexEvent]:
+    if len(accounts) < 16:
+        return None
+    first = _u64_payload(payload, 0)
+    second = _u64_payload(payload, 8)
+    exact_sol_in = ix_name == "buy_exact_sol_in"
+    buyback_fee_recipient = _get_account_safe(accounts, 17)
+
+    return DexEvent(
+        type=EventType.PUMP_FUN_BUY_EXACT_SOL_IN if exact_sol_in else EventType.PUMP_FUN_BUY,
+        data=PumpFunTradeEvent(
+            metadata=meta,
+            mint=_get_account_safe(accounts, 2),
+            global_account=_get_account_safe(accounts, 0),
+            fee_recipient=_get_account_safe(accounts, 1),
+            bonding_curve=_get_account_safe(accounts, 3),
+            bonding_curve_v2=_get_account_safe(accounts, 16),
+            associated_bonding_curve=_get_account_safe(accounts, 4),
+            associated_user=_get_account_safe(accounts, 5),
+            user=_get_account_safe(accounts, 6),
+            system_program=_get_account_safe(accounts, 7),
+            token_program=_get_account_safe(accounts, 8),
+            creator_vault=_get_account_safe(accounts, 9),
+            event_authority=_get_account_safe(accounts, 10),
+            program=_get_account_safe(accounts, 11),
+            global_volume_accumulator=_get_account_safe(accounts, 12),
+            user_volume_accumulator=_get_account_safe(accounts, 13),
+            fee_config=_get_account_safe(accounts, 14),
+            fee_program=_get_account_safe(accounts, 15),
+            buyback_fee_recipient=buyback_fee_recipient,
+            is_buy=True,
+            sol_amount=first if exact_sol_in else second,
+            token_amount=second if exact_sol_in else first,
+            amount=second if exact_sol_in else first,
+            max_sol_cost=first if exact_sol_in else second,
+            spendable_sol_in=first if exact_sol_in else 0,
+            min_tokens_out=second if exact_sol_in else 0,
+            track_volume=(payload[16] != 0) if len(payload) > 16 else False,
+            ix_name=ix_name,
+            extra_instruction_account=buyback_fee_recipient if buyback_fee_recipient != Z else "",
+        ),
+    )
+
+
+def _parse_pumpfun_legacy_sell(
+    payload: bytes,
+    accounts: List[str],
+    meta: EventMetadata,
+) -> Optional[DexEvent]:
+    if len(accounts) < 14:
+        return None
+    amount = _u64_payload(payload, 0)
+    min_sol_output = _u64_payload(payload, 8)
+    legacy_user_volume_accumulator = Z
+    legacy_bonding_curve_v2 = _get_account_safe(accounts, 14)
+    legacy_buyback_fee_recipient = Z
+    if len(accounts) >= 17:
+        legacy_user_volume_accumulator = _get_account_safe(accounts, 14)
+        legacy_bonding_curve_v2 = _get_account_safe(accounts, 15)
+        legacy_buyback_fee_recipient = _get_account_safe(accounts, 16)
+    elif len(accounts) >= 16:
+        legacy_bonding_curve_v2 = _get_account_safe(accounts, 14)
+        legacy_buyback_fee_recipient = _get_account_safe(accounts, 15)
+
+    return DexEvent(
+        type=EventType.PUMP_FUN_SELL,
+        data=PumpFunTradeEvent(
+            metadata=meta,
+            mint=_get_account_safe(accounts, 2),
+            is_buy=False,
+            global_account=_get_account_safe(accounts, 0),
+            fee_recipient=_get_account_safe(accounts, 1),
+            bonding_curve=_get_account_safe(accounts, 3),
+            bonding_curve_v2=legacy_bonding_curve_v2,
+            associated_bonding_curve=_get_account_safe(accounts, 4),
+            associated_user=_get_account_safe(accounts, 5),
+            user=_get_account_safe(accounts, 6),
+            system_program=_get_account_safe(accounts, 7),
+            creator_vault=_get_account_safe(accounts, 8),
+            token_program=_get_account_safe(accounts, 9),
+            event_authority=_get_account_safe(accounts, 10),
+            program=_get_account_safe(accounts, 11),
+            user_volume_accumulator=legacy_user_volume_accumulator,
+            fee_config=_get_account_safe(accounts, 12),
+            fee_program=_get_account_safe(accounts, 13),
+            buyback_fee_recipient=legacy_buyback_fee_recipient,
+            sol_amount=min_sol_output,
+            token_amount=amount,
+            amount=amount,
+            min_sol_output=min_sol_output,
+            ix_name="sell",
+            extra_instruction_account=legacy_buyback_fee_recipient if legacy_buyback_fee_recipient != Z else "",
+        ),
+    )
+
+
 def _parse_pumpfun_trade_v2(
     ix_name: str,
     payload: bytes,
@@ -265,22 +384,55 @@ def _parse_pumpfun_trade_v2(
     else:
         token_amount, sol_amount = first, second
 
+    if ix_name == "buy_v2":
+        event_type = EventType.PUMP_FUN_BUY
+    elif ix_name == "sell_v2":
+        event_type = EventType.PUMP_FUN_SELL
+    else:
+        event_type = EventType.PUMP_FUN_BUY_EXACT_SOL_IN
+
     return DexEvent(
-        type=EventType.PUMP_FUN_TRADE,
+        type=event_type,
         data=PumpFunTradeEvent(
             metadata=meta,
             mint=_get_account_safe(accounts, 1),
+            quote_mint=_get_account_safe(accounts, 2),
+            global_account=_get_account_safe(accounts, 0),
             bonding_curve=_get_account_safe(accounts, 10),
             user=_get_account_safe(accounts, 13),
             sol_amount=sol_amount,
             token_amount=token_amount,
+            amount=second if ix_name == "buy_exact_quote_in_v2" else first,
+            max_sol_cost=0 if ix_name == "buy_exact_quote_in_v2" else (0 if ix_name == "sell_v2" else second),
+            min_sol_output=second if ix_name == "sell_v2" else 0,
+            spendable_quote_in=first if ix_name == "buy_exact_quote_in_v2" else 0,
+            min_tokens_out=second if ix_name == "buy_exact_quote_in_v2" else 0,
+            quote_amount=first if ix_name == "buy_exact_quote_in_v2" else 0,
             fee_recipient=_get_account_safe(accounts, 6),
             is_buy=ix_name != "sell_v2",
             is_created_buy=False,
             ix_name=ix_name,
             associated_bonding_curve=_get_account_safe(accounts, 11),
+            associated_user=_get_account_safe(accounts, 14),
+            system_program=_get_account_safe(accounts, 23 if ix_name == "sell_v2" else 24),
             token_program=_get_account_safe(accounts, 3),
+            quote_token_program=_get_account_safe(accounts, 4),
+            associated_token_program=_get_account_safe(accounts, 5),
             creator_vault=_get_account_safe(accounts, 16),
+            associated_quote_fee_recipient=_get_account_safe(accounts, 7),
+            buyback_fee_recipient=_get_account_safe(accounts, 8),
+            associated_quote_buyback_fee_recipient=_get_account_safe(accounts, 9),
+            associated_quote_bonding_curve=_get_account_safe(accounts, 12),
+            associated_quote_user=_get_account_safe(accounts, 15),
+            associated_creator_vault=_get_account_safe(accounts, 17),
+            sharing_config=_get_account_safe(accounts, 18),
+            event_authority=_get_account_safe(accounts, 24 if ix_name == "sell_v2" else 25),
+            program=_get_account_safe(accounts, 25 if ix_name == "sell_v2" else 26),
+            global_volume_accumulator="" if ix_name == "sell_v2" else _get_account_safe(accounts, 19),
+            user_volume_accumulator=_get_account_safe(accounts, 19 if ix_name == "sell_v2" else 20),
+            associated_user_volume_accumulator=_get_account_safe(accounts, 20 if ix_name == "sell_v2" else 21),
+            fee_config=_get_account_safe(accounts, 21 if ix_name == "sell_v2" else 22),
+            fee_program=_get_account_safe(accounts, 22 if ix_name == "sell_v2" else 23),
         ),
     )
 
@@ -308,7 +460,6 @@ def _parse_pumpfun_create(data: bytes, accounts: List[str], meta: EventMetadata)
 
     creator = Z
     if offset + 32 <= len(data):
-        import base58
         creator = base58.b58encode(data[offset:offset + 32]).decode('ascii')
 
     return DexEvent(
@@ -361,10 +512,13 @@ def _parse_pumpfun_create_v2(data: bytes, accounts: List[str], meta: EventMetada
     except Exception:
         return None
 
-    creator = Z
-    if offset + 32 <= len(data):
-        import base58
-        creator = base58.b58encode(data[offset:offset + 32]).decode('ascii')
+    if offset + 33 > len(data):
+        return None
+    creator = base58.b58encode(data[offset:offset + 32]).decode('ascii')
+    offset += 32
+    is_mayhem_mode = data[offset] == 1
+    offset += 1
+    is_cashback_enabled = data[offset] == 1 if offset < len(data) else False
 
     return DexEvent(
         type=EventType.PUMP_FUN_CREATE_V2,
@@ -395,8 +549,8 @@ def _parse_pumpfun_create_v2(data: bytes, accounts: List[str], meta: EventMetada
             virtual_sol_reserves=0,
             real_token_reserves=0,
             token_total_supply=0,
-            is_mayhem_mode=False,
-            is_cashback_enabled=False,
+            is_mayhem_mode=is_mayhem_mode,
+            is_cashback_enabled=is_cashback_enabled,
             observed_fee_recipient="",
         ),
     )
@@ -417,11 +571,91 @@ def parse_pumpswap_instruction(
 
     discriminator = struct.unpack_from("<Q", data, 0)[0]
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
+    payload = data[8:]
 
-    if discriminator == _DISC_PUMPSWAP_BUY:
-        return legacy_dict_to_dex_event({"PumpSwapBuy": {"metadata": meta}})
+    def read_args() -> tuple[int, int]:
+        if len(payload) < 16:
+            return 0, 0
+        return struct.unpack_from("<QQ", payload, 0)
+
+    def fill_buy_tail(ev: PumpSwapBuyEvent) -> None:
+        if len(accounts) >= 27:
+            ev.pool_v2 = _get_account_safe(accounts, 24)
+            ev.fee_recipient = _get_account_safe(accounts, 25)
+            ev.fee_recipient_quote_token_account = _get_account_safe(accounts, 26)
+        elif len(accounts) >= 26:
+            ev.pool_v2 = _get_account_safe(accounts, 23)
+            ev.fee_recipient = _get_account_safe(accounts, 24)
+            ev.fee_recipient_quote_token_account = _get_account_safe(accounts, 25)
+        elif len(accounts) >= 24:
+            ev.pool_v2 = _get_account_safe(accounts, 23)
+
+    def fill_sell_tail(ev: PumpSwapSellEvent) -> None:
+        if len(accounts) >= 26:
+            ev.pool_v2 = _get_account_safe(accounts, 23)
+            ev.fee_recipient = _get_account_safe(accounts, 24)
+            ev.fee_recipient_quote_token_account = _get_account_safe(accounts, 25)
+        elif len(accounts) >= 24:
+            ev.pool_v2 = _get_account_safe(accounts, 21)
+            ev.fee_recipient = _get_account_safe(accounts, 22)
+            ev.fee_recipient_quote_token_account = _get_account_safe(accounts, 23)
+        elif len(accounts) >= 22:
+            ev.pool_v2 = _get_account_safe(accounts, 21)
+
+    if discriminator in (_DISC_PUMPSWAP_BUY, _DISC_PUMPSWAP_BUY_EXACT_QUOTE_IN):
+        if len(accounts) < 13:
+            return None
+        first, second = read_args()
+        if discriminator == _DISC_PUMPSWAP_BUY_EXACT_QUOTE_IN:
+            base_amount_out, max_quote_amount_in = second, first
+        else:
+            base_amount_out, max_quote_amount_in = first, second
+        ev = PumpSwapBuyEvent(
+            metadata=meta,
+            base_amount_out=base_amount_out,
+            max_quote_amount_in=max_quote_amount_in,
+            pool=_get_account_safe(accounts, 0),
+            user=_get_account_safe(accounts, 1),
+            base_mint=_get_account_safe(accounts, 3),
+            quote_mint=_get_account_safe(accounts, 4),
+            user_base_token_account=_get_account_safe(accounts, 5),
+            user_quote_token_account=_get_account_safe(accounts, 6),
+            pool_base_token_account=_get_account_safe(accounts, 7),
+            pool_quote_token_account=_get_account_safe(accounts, 8),
+            protocol_fee_recipient=_get_account_safe(accounts, 9),
+            protocol_fee_recipient_token_account=_get_account_safe(accounts, 10),
+            coin_creator_vault_ata=_get_account_safe(accounts, 17) if len(accounts) >= 19 else Z,
+            coin_creator_vault_authority=_get_account_safe(accounts, 18) if len(accounts) >= 19 else Z,
+            base_token_program=_get_account_safe(accounts, 11),
+            quote_token_program=_get_account_safe(accounts, 12),
+        )
+        fill_buy_tail(ev)
+        return DexEvent(type=EventType.PUMP_SWAP_BUY, data=ev)
     if discriminator == _DISC_PUMPSWAP_SELL:
-        return legacy_dict_to_dex_event({"PumpSwapSell": {"metadata": meta}})
+        if len(accounts) < 13:
+            return None
+        base_amount_in, min_quote_amount_out = read_args()
+        ev = PumpSwapSellEvent(
+            metadata=meta,
+            base_amount_in=base_amount_in,
+            min_quote_amount_out=min_quote_amount_out,
+            pool=_get_account_safe(accounts, 0),
+            user=_get_account_safe(accounts, 1),
+            base_mint=_get_account_safe(accounts, 3),
+            quote_mint=_get_account_safe(accounts, 4),
+            user_base_token_account=_get_account_safe(accounts, 5),
+            user_quote_token_account=_get_account_safe(accounts, 6),
+            pool_base_token_account=_get_account_safe(accounts, 7),
+            pool_quote_token_account=_get_account_safe(accounts, 8),
+            protocol_fee_recipient=_get_account_safe(accounts, 9),
+            protocol_fee_recipient_token_account=_get_account_safe(accounts, 10),
+            coin_creator_vault_ata=_get_account_safe(accounts, 17) if len(accounts) >= 19 else Z,
+            coin_creator_vault_authority=_get_account_safe(accounts, 18) if len(accounts) >= 19 else Z,
+            base_token_program=_get_account_safe(accounts, 11),
+            quote_token_program=_get_account_safe(accounts, 12),
+        )
+        fill_sell_tail(ev)
+        return DexEvent(type=EventType.PUMP_SWAP_SELL, data=ev)
 
     return None
 
@@ -932,6 +1166,11 @@ def _filter_includes_pumpfun(filter: Optional[EventTypeFilter]) -> bool:
         EventType.PUMP_FEES_UPSERT_FEE_TIERS,
         EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
         EventType.ACCOUNT_PUMP_FUN_GLOBAL,
+        EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
+        EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR,
+        EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
     ]
     return _filter_includes_any(filter, pumpfun_types)
 

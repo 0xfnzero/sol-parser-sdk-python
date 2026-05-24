@@ -16,9 +16,15 @@ from . import utils as acc_utils
 
 # 程序 ID（与 Rust ``accounts/program_ids`` / ``instr/program_ids`` 一致）
 PUMPFUN_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+PUMP_FEES_PROGRAM_ID = "pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ"
 PUMPSWAP_PROGRAM_ID = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
 
 _DISC_PUMPFUN_GLOBAL = bytes([167, 232, 232, 177, 200, 108, 114, 127])
+_DISC_PUMPFUN_BONDING_CURVE = bytes([23, 183, 248, 55, 96, 216, 172, 96])
+_DISC_PUMPFUN_FEE_CONFIG = bytes([143, 52, 146, 187, 219, 123, 76, 155])
+_DISC_PUMPFUN_GLOBAL_VOLUME_ACCUMULATOR = bytes([202, 42, 246, 43, 142, 190, 30, 255])
+_DISC_PUMPFUN_SHARING_CONFIG = bytes([216, 74, 9, 0, 56, 140, 93, 75])
+_DISC_PUMPFUN_USER_VOLUME_ACCUMULATOR = bytes([86, 255, 112, 14, 102, 53, 154, 250])
 _DISC_GLOBAL_CONFIG = bytes([149, 8, 156, 202, 160, 252, 176, 217])
 _DISC_POOL = bytes([241, 154, 109, 4, 17, 177, 109, 188])
 _DISC_NONCE = bytes([1, 0, 0, 0, 1, 0, 0, 0])
@@ -26,9 +32,14 @@ _DISC_NONCE = bytes([1, 0, 0, 0, 1, 0, 0, 0])
 MINT_SIZE = 82
 TOKEN_ACCOUNT_SIZE = 165
 NONCE_ACCOUNT_SIZE = 80
-PUMPFUN_GLOBAL_BODY = 1021
+PUMPFUN_GLOBAL_BODY = 1037
+PUMPFUN_BONDING_CURVE_BODY = 107
+PUMPFUN_GLOBAL_VOLUME_ACCUMULATOR_BODY = 536
+PUMPFUN_USER_VOLUME_ACCUMULATOR_BODY = 98
 GLOBAL_CONFIG_BODY = 634
 POOL_BODY = 244
+MAX_PUMPFUN_FEE_TIERS = 64
+MAX_PUMPFUN_SHAREHOLDERS = 64
 
 SUPPLY_OFFSET = 36
 DECIMALS_OFFSET = 44
@@ -75,6 +86,71 @@ def read_u16_fast(data: bytes, offset: int) -> int:
     return struct.unpack_from("<H", data, offset)[0]
 
 
+def read_i64_fast(data: bytes, offset: int) -> int:
+    return struct.unpack_from("<q", data, offset)[0]
+
+
+def read_u32_fast(data: bytes, offset: int) -> int:
+    return struct.unpack_from("<I", data, offset)[0]
+
+
+def read_u128_fast(data: bytes, offset: int) -> int:
+    return int.from_bytes(data[offset : offset + 16], "little")
+
+
+def _read_pumpfun_fees(data: bytes, offset: int) -> Optional[tuple[dict, int]]:
+    if offset + 24 > len(data):
+        return None
+    return (
+        {
+            "lp_fee_bps": read_u64_fast(data, offset),
+            "protocol_fee_bps": read_u64_fast(data, offset + 8),
+            "creator_fee_bps": read_u64_fast(data, offset + 16),
+        },
+        offset + 24,
+    )
+
+
+def _read_pumpfun_fee_tiers(data: bytes, offset: int) -> Optional[tuple[list[dict], int]]:
+    if offset + 4 > len(data):
+        return None
+    length = read_u32_fast(data, offset)
+    if length > MAX_PUMPFUN_FEE_TIERS:
+        return None
+    offset += 4
+    if offset + length * 40 > len(data):
+        return None
+    out = []
+    for _ in range(length):
+        threshold = read_u128_fast(data, offset)
+        offset += 16
+        fees_result = _read_pumpfun_fees(data, offset)
+        if fees_result is None:
+            return None
+        fees, offset = fees_result
+        out.append({"market_cap_lamports_threshold": threshold, "fees": fees})
+    return out, offset
+
+
+def _read_pumpfun_shareholders(data: bytes, offset: int) -> Optional[tuple[list[dict], int]]:
+    if offset + 4 > len(data):
+        return None
+    length = read_u32_fast(data, offset)
+    if length > MAX_PUMPFUN_SHAREHOLDERS:
+        return None
+    offset += 4
+    if offset + length * 34 > len(data):
+        return None
+    out = []
+    for _ in range(length):
+        address = read_pubkey_fast(data, offset)
+        offset += 32
+        share_bps = read_u16_fast(data, offset)
+        offset += 2
+        out.append({"address": address, "share_bps": share_bps})
+    return out, offset
+
+
 def parse_account_unified(
     account: AccountData,
     metadata: EventMetadata,
@@ -93,6 +169,11 @@ def parse_account_unified(
                 EventType.TOKEN_INFO,
                 EventType.NONCE_ACCOUNT,
                 EventType.ACCOUNT_PUMP_FUN_GLOBAL,
+                EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
+                EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
+                EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG,
+                EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR,
+                EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
                 EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
                 EventType.ACCOUNT_PUMP_SWAP_POOL,
             }
@@ -107,8 +188,20 @@ def parse_account_unified(
             if ev is not None:
                 return ev
 
-    if account.owner == PUMPFUN_PROGRAM_ID and event_type_filter is not None:
-        if event_type_filter.should_include(EventType.ACCOUNT_PUMP_FUN_GLOBAL):
+    if account.owner in (PUMPFUN_PROGRAM_ID, PUMP_FEES_PROGRAM_ID) and event_type_filter is not None:
+        if event_type_filter.should_include(
+            EventType.ACCOUNT_PUMP_FUN_GLOBAL
+        ) or event_type_filter.should_include(
+            EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE
+        ) or event_type_filter.should_include(
+            EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG
+        ) or event_type_filter.should_include(
+            EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG
+        ) or event_type_filter.should_include(
+            EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR
+        ) or event_type_filter.should_include(
+            EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR
+        ):
             ev = _parse_pumpfun_account(account, metadata)
             if ev is not None:
                 return ev
@@ -134,6 +227,16 @@ def _parse_pumpswap_account(account: AccountData, metadata: EventMetadata) -> Op
 
 
 def _parse_pumpfun_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    if acc_utils.has_discriminator(account.data, _DISC_PUMPFUN_FEE_CONFIG):
+        return parse_pumpfun_fee_config(account, metadata)
+    if acc_utils.has_discriminator(account.data, _DISC_PUMPFUN_SHARING_CONFIG):
+        return parse_pumpfun_sharing_config(account, metadata)
+    if acc_utils.has_discriminator(account.data, _DISC_PUMPFUN_GLOBAL_VOLUME_ACCUMULATOR):
+        return parse_pumpfun_global_volume_accumulator(account, metadata)
+    if acc_utils.has_discriminator(account.data, _DISC_PUMPFUN_USER_VOLUME_ACCUMULATOR):
+        return parse_pumpfun_user_volume_accumulator(account, metadata)
+    if acc_utils.has_discriminator(account.data, _DISC_PUMPFUN_BONDING_CURVE):
+        return parse_pumpfun_bonding_curve(account, metadata)
     if acc_utils.has_discriminator(account.data, _DISC_PUMPFUN_GLOBAL):
         return parse_pumpfun_global(account, metadata)
     return None
@@ -219,7 +322,7 @@ def _parse_pumpfun_global_fast(account: AccountData, metadata: EventMetadata) ->
     creator_fee_basis_points = read_u64_fast(data, o)
     o += 8
     fee_recipients = []
-    for _ in range(8):
+    for _ in range(7):
         fee_recipients.append(read_pubkey_fast(data, o))
         o += 32
     set_creator_authority = read_pubkey_fast(data, o)
@@ -238,6 +341,18 @@ def _parse_pumpfun_global_fast(account: AccountData, metadata: EventMetadata) ->
     for _ in range(7):
         reserved_fee_recipients.append(read_pubkey_fast(data, o))
         o += 32
+    is_cashback_enabled = data[o] != 0
+    o += 1
+    buyback_fee_recipients = []
+    for _ in range(8):
+        buyback_fee_recipients.append(read_pubkey_fast(data, o))
+        o += 32
+    buyback_basis_points = read_u64_fast(data, o)
+    o += 8
+    initial_virtual_quote_reserves = read_u64_fast(data, o)
+    o += 8
+    whitelisted_quote_mints = [read_pubkey_fast(data, o)]
+    o += 32
     return _account_event(
         EventType.ACCOUNT_PUMP_FUN_GLOBAL,
         {
@@ -264,6 +379,221 @@ def _parse_pumpfun_global_fast(account: AccountData, metadata: EventMetadata) ->
                 "reserved_fee_recipient": reserved_fee_recipient,
                 "mayhem_mode_enabled": mayhem_mode_enabled,
                 "reserved_fee_recipients": reserved_fee_recipients,
+                "is_cashback_enabled": is_cashback_enabled,
+                "buyback_fee_recipients": buyback_fee_recipients,
+                "buyback_basis_points": buyback_basis_points,
+                "initial_virtual_quote_reserves": initial_virtual_quote_reserves,
+                "whitelisted_quote_mints": whitelisted_quote_mints,
+            },
+        },
+    )
+
+
+def _parse_pumpfun_bonding_curve_fast(
+    account: AccountData, metadata: EventMetadata
+) -> Optional[DexEvent]:
+    data = account.data[8:]
+    o = 0
+    virtual_token_reserves = read_u64_fast(data, o)
+    o += 8
+    virtual_quote_reserves = read_u64_fast(data, o)
+    o += 8
+    real_token_reserves = read_u64_fast(data, o)
+    o += 8
+    real_quote_reserves = read_u64_fast(data, o)
+    o += 8
+    token_total_supply = read_u64_fast(data, o)
+    o += 8
+    complete = data[o] != 0
+    o += 1
+    creator = read_pubkey_fast(data, o)
+    o += 32
+    is_mayhem_mode = data[o] != 0
+    o += 1
+    is_cashback_coin = data[o] != 0
+    o += 1
+    quote_mint = read_pubkey_fast(data, o)
+    return _account_event(
+        EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
+        {
+            "metadata": metadata,
+            "pubkey": account.pubkey,
+            "bonding_curve": {
+                "virtual_token_reserves": virtual_token_reserves,
+                "virtual_quote_reserves": virtual_quote_reserves,
+                "real_token_reserves": real_token_reserves,
+                "real_quote_reserves": real_quote_reserves,
+                "token_total_supply": token_total_supply,
+                "complete": complete,
+                "creator": creator,
+                "is_mayhem_mode": is_mayhem_mode,
+                "is_cashback_coin": is_cashback_coin,
+                "quote_mint": quote_mint,
+            },
+        },
+    )
+
+
+def _parse_pumpfun_fee_config_fast(
+    account: AccountData, metadata: EventMetadata
+) -> Optional[DexEvent]:
+    data = account.data[8:]
+    o = 0
+    bump = data[o]
+    o += 1
+    admin = read_pubkey_fast(data, o)
+    o += 32
+    flat_fees_result = _read_pumpfun_fees(data, o)
+    if flat_fees_result is None:
+        return None
+    flat_fees, o = flat_fees_result
+    fee_tiers_result = _read_pumpfun_fee_tiers(data, o)
+    if fee_tiers_result is None:
+        return None
+    fee_tiers, o = fee_tiers_result
+    stable_fee_tiers_result = _read_pumpfun_fee_tiers(data, o)
+    if stable_fee_tiers_result is None:
+        return None
+    stable_fee_tiers, _ = stable_fee_tiers_result
+    return _account_event(
+        EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
+        {
+            "metadata": metadata,
+            "pubkey": account.pubkey,
+            "fee_config": {
+                "bump": bump,
+                "admin": admin,
+                "flat_fees": flat_fees,
+                "fee_tiers": fee_tiers,
+                "stable_fee_tiers": stable_fee_tiers,
+            },
+        },
+    )
+
+
+def _parse_pumpfun_sharing_config_fast(
+    account: AccountData, metadata: EventMetadata
+) -> Optional[DexEvent]:
+    data = account.data[8:]
+    o = 0
+    bump = data[o]
+    o += 1
+    version = data[o]
+    o += 1
+    status_raw = data[o]
+    if status_raw > 1:
+        return None
+    status = "Paused" if status_raw == 0 else "Active"
+    o += 1
+    mint = read_pubkey_fast(data, o)
+    o += 32
+    admin = read_pubkey_fast(data, o)
+    o += 32
+    admin_revoked = data[o] != 0
+    o += 1
+    shareholders_result = _read_pumpfun_shareholders(data, o)
+    if shareholders_result is None:
+        return None
+    shareholders, _ = shareholders_result
+    return _account_event(
+        EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG,
+        {
+            "metadata": metadata,
+            "pubkey": account.pubkey,
+            "sharing_config": {
+                "bump": bump,
+                "version": version,
+                "status": status,
+                "mint": mint,
+                "admin": admin,
+                "admin_revoked": admin_revoked,
+                "shareholders": shareholders,
+            },
+        },
+    )
+
+
+def _parse_pumpfun_global_volume_accumulator_fast(
+    account: AccountData, metadata: EventMetadata
+) -> Optional[DexEvent]:
+    data = account.data[8:]
+    o = 0
+    start_time = read_i64_fast(data, o)
+    o += 8
+    end_time = read_i64_fast(data, o)
+    o += 8
+    seconds_in_a_day = read_i64_fast(data, o)
+    o += 8
+    mint = read_pubkey_fast(data, o)
+    o += 32
+    total_token_supply = []
+    for _ in range(30):
+        total_token_supply.append(read_u64_fast(data, o))
+        o += 8
+    sol_volumes = []
+    for _ in range(30):
+        sol_volumes.append(read_u64_fast(data, o))
+        o += 8
+    return _account_event(
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR,
+        {
+            "metadata": metadata,
+            "pubkey": account.pubkey,
+            "global_volume_accumulator": {
+                "start_time": start_time,
+                "end_time": end_time,
+                "seconds_in_a_day": seconds_in_a_day,
+                "mint": mint,
+                "total_token_supply": total_token_supply,
+                "sol_volumes": sol_volumes,
+            },
+        },
+    )
+
+
+def _parse_pumpfun_user_volume_accumulator_fast(
+    account: AccountData, metadata: EventMetadata
+) -> Optional[DexEvent]:
+    data = account.data[8:]
+    o = 0
+    user = read_pubkey_fast(data, o)
+    o += 32
+    needs_claim = data[o] != 0
+    o += 1
+    total_unclaimed_tokens = read_u64_fast(data, o)
+    o += 8
+    total_claimed_tokens = read_u64_fast(data, o)
+    o += 8
+    current_sol_volume = read_u64_fast(data, o)
+    o += 8
+    last_update_timestamp = read_i64_fast(data, o)
+    o += 8
+    has_total_claimed_tokens = data[o] != 0
+    o += 1
+    cashback_earned = read_u64_fast(data, o)
+    o += 8
+    total_cashback_claimed = read_u64_fast(data, o)
+    o += 8
+    stable_cashback_earned = read_u64_fast(data, o)
+    o += 8
+    total_stable_cashback_claimed = read_u64_fast(data, o)
+    return _account_event(
+        EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
+        {
+            "metadata": metadata,
+            "pubkey": account.pubkey,
+            "user_volume_accumulator": {
+                "user": user,
+                "needs_claim": needs_claim,
+                "total_unclaimed_tokens": total_unclaimed_tokens,
+                "total_claimed_tokens": total_claimed_tokens,
+                "current_sol_volume": current_sol_volume,
+                "last_update_timestamp": last_update_timestamp,
+                "has_total_claimed_tokens": has_total_claimed_tokens,
+                "cashback_earned": cashback_earned,
+                "total_cashback_claimed": total_cashback_claimed,
+                "stable_cashback_earned": stable_cashback_earned,
+                "total_stable_cashback_claimed": total_stable_cashback_claimed,
             },
         },
     )
@@ -399,6 +729,52 @@ def parse_pumpfun_global(account: AccountData, metadata: EventMetadata) -> Optio
     return _parse_pumpfun_global_fast(account, metadata)
 
 
+def parse_pumpfun_bonding_curve(
+    account: AccountData, metadata: EventMetadata
+) -> Optional[DexEvent]:
+    if len(account.data) < 8 + PUMPFUN_BONDING_CURVE_BODY:
+        return None
+    if not has_discriminator(account.data, _DISC_PUMPFUN_BONDING_CURVE):
+        return None
+    return _parse_pumpfun_bonding_curve_fast(account, metadata)
+
+
+def parse_pumpfun_fee_config(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    if len(account.data) < 8 + 1 + 32 + 24 + 4 + 4:
+        return None
+    if not has_discriminator(account.data, _DISC_PUMPFUN_FEE_CONFIG):
+        return None
+    return _parse_pumpfun_fee_config_fast(account, metadata)
+
+
+def parse_pumpfun_sharing_config(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    if len(account.data) < 8 + 1 + 1 + 1 + 32 + 32 + 1 + 4:
+        return None
+    if not has_discriminator(account.data, _DISC_PUMPFUN_SHARING_CONFIG):
+        return None
+    return _parse_pumpfun_sharing_config_fast(account, metadata)
+
+
+def parse_pumpfun_global_volume_accumulator(
+    account: AccountData, metadata: EventMetadata
+) -> Optional[DexEvent]:
+    if len(account.data) < 8 + PUMPFUN_GLOBAL_VOLUME_ACCUMULATOR_BODY:
+        return None
+    if not has_discriminator(account.data, _DISC_PUMPFUN_GLOBAL_VOLUME_ACCUMULATOR):
+        return None
+    return _parse_pumpfun_global_volume_accumulator_fast(account, metadata)
+
+
+def parse_pumpfun_user_volume_accumulator(
+    account: AccountData, metadata: EventMetadata
+) -> Optional[DexEvent]:
+    if len(account.data) < 8 + PUMPFUN_USER_VOLUME_ACCUMULATOR_BODY:
+        return None
+    if not has_discriminator(account.data, _DISC_PUMPFUN_USER_VOLUME_ACCUMULATOR):
+        return None
+    return _parse_pumpfun_user_volume_accumulator_fast(account, metadata)
+
+
 def is_nonce_account(data: bytes) -> bool:
     return acc_utils.is_nonce_account(data)
 
@@ -445,6 +821,11 @@ __all__ = [
     "parse_token_account",
     "parse_nonce_account",
     "parse_pumpfun_global",
+    "parse_pumpfun_bonding_curve",
+    "parse_pumpfun_fee_config",
+    "parse_pumpfun_sharing_config",
+    "parse_pumpfun_global_volume_accumulator",
+    "parse_pumpfun_user_volume_accumulator",
     "is_nonce_account",
     "is_pumpfun_global_account",
     "parse_pumpswap_global_config",
@@ -453,6 +834,7 @@ __all__ = [
     "is_pool_account",
     "has_discriminator",
     "PUMPFUN_PROGRAM_ID",
+    "PUMP_FEES_PROGRAM_ID",
     "PUMPSWAP_PROGRAM_ID",
     "rpc_resolve_user_wallet_pubkey",
     "user_wallet_pubkey_for_onchain_account",

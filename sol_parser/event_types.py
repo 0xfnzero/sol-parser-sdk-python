@@ -144,12 +144,45 @@ class PumpFunTradeEvent(DexEventBase):
     mayhem_mode: bool = False
     cashback_fee_basis_points: int = 0
     cashback: int = 0
+    buyback_fee_basis_points: int = 0
+    buyback_fee: int = 0
+    shareholders: List[PumpFeesShareholder] = field(default_factory=list)
+    quote_mint: str = ""
+    quote_amount: int = 0
+    virtual_quote_reserves: int = 0
+    real_quote_reserves: int = 0
     is_cashback_coin: bool = False
+    amount: int = 0
+    max_sol_cost: int = 0
+    min_sol_output: int = 0
+    spendable_sol_in: int = 0
+    spendable_quote_in: int = 0
+    min_tokens_out: int = 0
+    global_account: str = ""
     bonding_curve: str = ""
+    bonding_curve_v2: str = ""
     associated_bonding_curve: str = ""
+    associated_user: str = ""
+    system_program: str = ""
     token_program: str = ""
+    quote_token_program: str = ""
+    associated_token_program: str = ""
     creator_vault: str = ""
-    #: 第 17 个账户（索引 16），部分交易存在（Creator Rewards / fee 等）；由 ``fill_trade_accounts`` 从指令账户填充。
+    associated_quote_fee_recipient: str = ""
+    buyback_fee_recipient: str = ""
+    associated_quote_buyback_fee_recipient: str = ""
+    associated_quote_bonding_curve: str = ""
+    associated_quote_user: str = ""
+    associated_creator_vault: str = ""
+    sharing_config: str = ""
+    event_authority: str = ""
+    program: str = ""
+    global_volume_accumulator: str = ""
+    user_volume_accumulator: str = ""
+    associated_user_volume_accumulator: str = ""
+    fee_config: str = ""
+    fee_program: str = ""
+    #: Legacy fallback alias for the last post-upgrade extra account. Prefer structured fields above.
     extra_instruction_account: str = ""
 
 
@@ -384,6 +417,9 @@ class PumpSwapBuyEvent(DexEventBase):
     coin_creator_vault_authority: str = ""
     base_token_program: str = ""
     quote_token_program: str = ""
+    pool_v2: str = ""
+    fee_recipient: str = ""
+    fee_recipient_quote_token_account: str = ""
     is_pump_pool: bool = False
 
 
@@ -423,6 +459,9 @@ class PumpSwapSellEvent(DexEventBase):
     coin_creator_vault_authority: str = ""
     base_token_program: str = ""
     quote_token_program: str = ""
+    pool_v2: str = ""
+    fee_recipient: str = ""
+    fee_recipient_quote_token_account: str = ""
     is_pump_pool: bool = False
 
 
@@ -1229,6 +1268,24 @@ def _get_dict_any(m: dict, key: str) -> Optional[Dict[str, Any]]:
     return v if isinstance(v, dict) else None
 
 
+def _get_pump_shareholders(m: dict, key: str) -> List[PumpFeesShareholder]:
+    v = m.get(key, [])
+    if not isinstance(v, (list, tuple)):
+        return []
+    out: List[PumpFeesShareholder] = []
+    for item in v:
+        if isinstance(item, PumpFeesShareholder):
+            out.append(item)
+        elif isinstance(item, dict):
+            out.append(
+                PumpFeesShareholder(
+                    address=_get_str(item, "address"),
+                    share_bps=_get_int(item, "share_bps"),
+                )
+            )
+    return out
+
+
 def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
     """将旧版 DexEvent dict 转换为强类型事件
     
@@ -1290,11 +1347,45 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             mayhem_mode=_get_bool(data, "mayhem_mode"),
             cashback_fee_basis_points=_get_int(data, "cashback_fee_basis_points"),
             cashback=_get_int(data, "cashback"),
+            buyback_fee_basis_points=_get_int(data, "buyback_fee_basis_points"),
+            buyback_fee=_get_int(data, "buyback_fee"),
+            shareholders=_get_pump_shareholders(data, "shareholders"),
+            quote_mint=_get_str(data, "quote_mint"),
+            quote_amount=_get_int(data, "quote_amount"),
+            virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
+            real_quote_reserves=_get_int(data, "real_quote_reserves"),
             is_cashback_coin=_get_bool(data, "is_cashback_coin"),
+            amount=_get_int(data, "amount"),
+            max_sol_cost=_get_int(data, "max_sol_cost"),
+            min_sol_output=_get_int(data, "min_sol_output"),
+            spendable_sol_in=_get_int(data, "spendable_sol_in"),
+            spendable_quote_in=_get_int(data, "spendable_quote_in"),
+            min_tokens_out=_get_int(data, "min_tokens_out"),
+            global_account=_get_str(data, "global") or _get_str(data, "global_account"),
             bonding_curve=_get_str(data, "bonding_curve"),
+            bonding_curve_v2=_get_str(data, "bonding_curve_v2"),
             associated_bonding_curve=_get_str(data, "associated_bonding_curve"),
+            associated_user=_get_str(data, "associated_user"),
+            system_program=_get_str(data, "system_program"),
             token_program=_get_str(data, "token_program"),
+            quote_token_program=_get_str(data, "quote_token_program"),
+            associated_token_program=_get_str(data, "associated_token_program"),
             creator_vault=_get_str(data, "creator_vault"),
+            associated_quote_fee_recipient=_get_str(data, "associated_quote_fee_recipient"),
+            buyback_fee_recipient=_get_str(data, "buyback_fee_recipient"),
+            associated_quote_buyback_fee_recipient=_get_str(data, "associated_quote_buyback_fee_recipient"),
+            associated_quote_bonding_curve=_get_str(data, "associated_quote_bonding_curve"),
+            associated_quote_user=_get_str(data, "associated_quote_user"),
+            associated_creator_vault=_get_str(data, "associated_creator_vault"),
+            sharing_config=_get_str(data, "sharing_config"),
+            event_authority=_get_str(data, "event_authority"),
+            program=_get_str(data, "program"),
+            global_volume_accumulator=_get_str(data, "global_volume_accumulator"),
+            user_volume_accumulator=_get_str(data, "user_volume_accumulator"),
+            associated_user_volume_accumulator=_get_str(data, "associated_user_volume_accumulator"),
+            fee_config=_get_str(data, "fee_config"),
+            fee_program=_get_str(data, "fee_program"),
+            extra_instruction_account=_get_str(data, "account") or _get_str(data, "extra_instruction_account"),
         )
     
     if event_type == EventType.PUMP_FUN_CREATE:
@@ -1403,6 +1494,17 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             cashback=_get_int(data, "cashback"),
             is_cashback_coin=_get_bool(data, "is_cashback_coin"),
             is_pump_pool=_get_bool(data, "is_pump_pool"),
+            base_mint=_get_str(data, "base_mint"),
+            quote_mint=_get_str(data, "quote_mint"),
+            pool_base_token_account=_get_str(data, "pool_base_token_account"),
+            pool_quote_token_account=_get_str(data, "pool_quote_token_account"),
+            coin_creator_vault_ata=_get_str(data, "coin_creator_vault_ata"),
+            coin_creator_vault_authority=_get_str(data, "coin_creator_vault_authority"),
+            base_token_program=_get_str(data, "base_token_program"),
+            quote_token_program=_get_str(data, "quote_token_program"),
+            pool_v2=_get_str(data, "pool_v2"),
+            fee_recipient=_get_str(data, "fee_recipient"),
+            fee_recipient_quote_token_account=_get_str(data, "fee_recipient_quote_token_account"),
         )
     
     if event_type == EventType.PUMP_SWAP_SELL:
@@ -1434,6 +1536,17 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             cashback_fee_basis_points=_get_int(data, "cashback_fee_basis_points"),
             cashback=_get_int(data, "cashback"),
             is_pump_pool=_get_bool(data, "is_pump_pool"),
+            base_mint=_get_str(data, "base_mint"),
+            quote_mint=_get_str(data, "quote_mint"),
+            pool_base_token_account=_get_str(data, "pool_base_token_account"),
+            pool_quote_token_account=_get_str(data, "pool_quote_token_account"),
+            coin_creator_vault_ata=_get_str(data, "coin_creator_vault_ata"),
+            coin_creator_vault_authority=_get_str(data, "coin_creator_vault_authority"),
+            base_token_program=_get_str(data, "base_token_program"),
+            quote_token_program=_get_str(data, "quote_token_program"),
+            pool_v2=_get_str(data, "pool_v2"),
+            fee_recipient=_get_str(data, "fee_recipient"),
+            fee_recipient_quote_token_account=_get_str(data, "fee_recipient_quote_token_account"),
         )
     
     if event_type == EventType.PUMP_SWAP_CREATE_POOL:

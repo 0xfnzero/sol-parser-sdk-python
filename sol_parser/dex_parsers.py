@@ -73,6 +73,41 @@ def _pub(b: bytes, o: int) -> str:
     return base58.b58encode(b[o : o + 32]).decode()
 
 
+def _optional_u64(b: bytes, o: List[int]) -> int:
+    if o[0] + 8 > len(b):
+        return 0
+    v = _u64le(b, o[0])
+    o[0] += 8
+    return v
+
+
+def _optional_pub(b: bytes, o: List[int]) -> str:
+    if o[0] + 32 > len(b):
+        return Z
+    v = _pub(b, o[0])
+    o[0] += 32
+    return v
+
+
+def _trade_shareholders(b: bytes, o: List[int]) -> Optional[List[PumpFeesShareholder]]:
+    if o[0] + 4 > len(b):
+        return []
+    n = _u32le(b, o[0])
+    if n > 64:
+        return None
+    o[0] += 4
+    if o[0] + n * 34 > len(b):
+        return None
+    out: List[PumpFeesShareholder] = []
+    for _ in range(n):
+        address = _pub(b, o[0])
+        o[0] += 32
+        share_bps = _u16le(b, o[0])
+        o[0] += 2
+        out.append(PumpFeesShareholder(address=address, share_bps=share_bps))
+    return out
+
+
 def _bool(b: bytes, o: int) -> bool:
     return b[o] == 1
 
@@ -188,6 +223,17 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexE
     cb_bps = _u64le(data, o) if o + 8 <= len(data) else 0
     o += 8
     cb = _u64le(data, o) if o + 8 <= len(data) else 0
+    o += 8
+    tail = [o]
+    buyback_fee_basis_points = _optional_u64(data, tail)
+    buyback_fee = _optional_u64(data, tail)
+    shareholders = _trade_shareholders(data, tail)
+    if shareholders is None:
+        return DexEvent()
+    quote_mint = _optional_pub(data, tail)
+    quote_amount = _optional_u64(data, tail)
+    virtual_quote_reserves = _optional_u64(data, tail)
+    real_quote_reserves = _optional_u64(data, tail)
     
     event_data = PumpFunTradeEvent(
         metadata=_make_meta(meta),
@@ -217,6 +263,13 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexE
         mayhem_mode=mm,
         cashback_fee_basis_points=cb_bps,
         cashback=cb,
+        buyback_fee_basis_points=buyback_fee_basis_points,
+        buyback_fee=buyback_fee,
+        shareholders=shareholders,
+        quote_mint=quote_mint,
+        quote_amount=quote_amount,
+        virtual_quote_reserves=virtual_quote_reserves,
+        real_quote_reserves=real_quote_reserves,
         is_cashback_coin=cb_bps > 0,
         bonding_curve=Z,
         associated_bonding_curve=Z,
@@ -228,7 +281,7 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexE
         return DexEvent(type=EventType.PUMP_FUN_BUY, data=event_data)
     if ix_name in ("sell", "sell_v2"):
         return DexEvent(type=EventType.PUMP_FUN_SELL, data=event_data)
-    if ix_name in ("buy_exact_sol_in", "buy_exact_quote_in_v2"):
+    if ix_name in ("buy_exact_sol_in", "buy_exact_quote_in", "buy_exact_quote_in_v2"):
         return DexEvent(type=EventType.PUMP_FUN_BUY_EXACT_SOL_IN, data=event_data)
     return DexEvent(type=EventType.PUMP_FUN_TRADE, data=event_data)
 

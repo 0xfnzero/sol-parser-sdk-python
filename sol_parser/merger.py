@@ -42,10 +42,22 @@ from .event_types import (
 )
 from .grpc_types import EventType
 
+ZERO = "11111111111111111111111111111111"
+
 
 def _merge_generic(base: Any, inner: Any) -> None:
     for f in dataclasses.fields(type(base)):
         setattr(base, f.name, getattr(inner, f.name))
+
+
+def _empty(value: Any) -> bool:
+    return value is None or value == "" or value == ZERO
+
+
+def _fill_attr_if_empty(base: Any, attr: str, source: Any) -> None:
+    value = getattr(source, attr, None)
+    if _empty(getattr(base, attr, None)) and not _empty(value):
+        setattr(base, attr, value)
 
 
 def merge_pumpfun_trade(base: PumpFunTradeEvent, inner: PumpFunTradeEvent) -> None:
@@ -75,7 +87,67 @@ def merge_pumpfun_trade(base: PumpFunTradeEvent, inner: PumpFunTradeEvent) -> No
     base.mayhem_mode = inner.mayhem_mode
     base.cashback_fee_basis_points = inner.cashback_fee_basis_points
     base.cashback = inner.cashback
+    if inner.buyback_fee_basis_points != 0:
+        base.buyback_fee_basis_points = inner.buyback_fee_basis_points
+    if inner.buyback_fee != 0:
+        base.buyback_fee = inner.buyback_fee
+    if inner.shareholders:
+        base.shareholders = inner.shareholders
+    if not _empty(inner.quote_mint):
+        base.quote_mint = inner.quote_mint
+    if inner.quote_amount != 0:
+        base.quote_amount = inner.quote_amount
+    if inner.virtual_quote_reserves != 0:
+        base.virtual_quote_reserves = inner.virtual_quote_reserves
+    if inner.real_quote_reserves != 0:
+        base.real_quote_reserves = inner.real_quote_reserves
     base.is_cashback_coin = inner.is_cashback_coin
+
+
+def merge_pumpswap_buy(base: PumpSwapBuyEvent, inner: PumpSwapBuyEvent) -> None:
+    instruction = dataclasses.replace(base)
+    _merge_generic(base, inner)
+    for attr in (
+        "base_mint",
+        "quote_mint",
+        "user_base_token_account",
+        "user_quote_token_account",
+        "pool_base_token_account",
+        "pool_quote_token_account",
+        "protocol_fee_recipient",
+        "protocol_fee_recipient_token_account",
+        "coin_creator_vault_ata",
+        "coin_creator_vault_authority",
+        "base_token_program",
+        "quote_token_program",
+        "pool_v2",
+        "fee_recipient",
+        "fee_recipient_quote_token_account",
+    ):
+        _fill_attr_if_empty(base, attr, instruction)
+
+
+def merge_pumpswap_sell(base: PumpSwapSellEvent, inner: PumpSwapSellEvent) -> None:
+    instruction = dataclasses.replace(base)
+    _merge_generic(base, inner)
+    for attr in (
+        "base_mint",
+        "quote_mint",
+        "user_base_token_account",
+        "user_quote_token_account",
+        "pool_base_token_account",
+        "pool_quote_token_account",
+        "protocol_fee_recipient",
+        "protocol_fee_recipient_token_account",
+        "coin_creator_vault_ata",
+        "coin_creator_vault_authority",
+        "base_token_program",
+        "quote_token_program",
+        "pool_v2",
+        "fee_recipient",
+        "fee_recipient_quote_token_account",
+    ):
+        _fill_attr_if_empty(base, attr, instruction)
 
 
 def merge_pumpfun_create(base: PumpFunCreateEvent, inner: PumpFunCreateEvent) -> None:
@@ -141,10 +213,10 @@ def merge_dex_events(base: DexEvent, inner: DexEvent) -> None:
         return
 
     if isinstance(bd, PumpSwapBuyEvent) and isinstance(ind, PumpSwapBuyEvent):
-        _merge_generic(bd, ind)
+        merge_pumpswap_buy(bd, ind)
         return
     if isinstance(bd, PumpSwapSellEvent) and isinstance(ind, PumpSwapSellEvent):
-        _merge_generic(bd, ind)
+        merge_pumpswap_sell(bd, ind)
         return
     if isinstance(bd, PumpSwapCreatePoolEvent) and isinstance(ind, PumpSwapCreatePoolEvent):
         _merge_generic(bd, ind)

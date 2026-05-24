@@ -119,6 +119,11 @@ class EventType(str, Enum):
     TOKEN_INFO = "TokenInfo"
     NONCE_ACCOUNT = "NonceAccount"
     ACCOUNT_PUMP_FUN_GLOBAL = "AccountPumpFunGlobal"
+    ACCOUNT_PUMP_FUN_BONDING_CURVE = "AccountPumpFunBondingCurve"
+    ACCOUNT_PUMP_FUN_FEE_CONFIG = "AccountPumpFunFeeConfig"
+    ACCOUNT_PUMP_FUN_SHARING_CONFIG = "AccountPumpFunSharingConfig"
+    ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR = "AccountPumpFunGlobalVolumeAccumulator"
+    ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR = "AccountPumpFunUserVolumeAccumulator"
     ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG = "AccountPumpSwapGlobalConfig"
     ACCOUNT_PUMP_SWAP_POOL = "AccountPumpSwapPool"
 
@@ -211,6 +216,11 @@ def all_event_types() -> List[EventType]:
         EventType.TOKEN_INFO,
         EventType.NONCE_ACCOUNT,
         EventType.ACCOUNT_PUMP_FUN_GLOBAL,
+        EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
+        EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR,
+        EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
         EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
         EventType.ACCOUNT_PUMP_SWAP_POOL,
     ]
@@ -415,6 +425,11 @@ def event_type_filter_includes_pumpfun(filter: EventTypeFilter) -> bool:
         EventType.PUMP_FEES_UPSERT_FEE_TIERS,
         EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
         EventType.ACCOUNT_PUMP_FUN_GLOBAL,
+        EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
+        EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR,
+        EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
     ]
     return _event_type_filter_includes_any(filter, pumpfun_types)
 
@@ -461,6 +476,11 @@ def event_type_filter_allows_instruction_parsing(include_only: List[EventType]) 
         EventType.PUMP_FUN_MIGRATE,
         EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
         EventType.ACCOUNT_PUMP_FUN_GLOBAL,
+        EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
+        EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR,
+        EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
         *PUMP_FEES_EVENT_TYPES,
         EventType.PUMP_SWAP_BUY,
         EventType.PUMP_SWAP_SELL,

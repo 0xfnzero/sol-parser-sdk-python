@@ -1,7 +1,8 @@
 [project]
 name = "sol-parser-sdk-python"
-version = "0.4.5"
+version = "0.5.5"
 description = "Solana DEX program log parsing (pure Python, API aligned with sol-parser-sdk)"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "base58>=2.0",

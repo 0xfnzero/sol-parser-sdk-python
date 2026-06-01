@@ -2,7 +2,9 @@
 
 from ..instructions import (
     parse_instruction_unified,
+    parse_meteora_dlmm_instruction,
     parse_meteora_damm_instruction,
+    parse_meteora_pools_instruction,
     parse_pumpfun_instruction,
     parse_pumpswap_instruction,
 )
@@ -12,4 +14,6 @@ __all__ = [
     "parse_pumpfun_instruction",
     "parse_pumpswap_instruction",
     "parse_meteora_damm_instruction",
+    "parse_meteora_pools_instruction",
+    "parse_meteora_dlmm_instruction",
 ]

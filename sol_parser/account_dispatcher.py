@@ -6,12 +6,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import base58
 
-from .account_fillers import bonk, meteora, orca, pumpfun, pumpswap, raydium
+from .account_fillers import raydium_launchlab, meteora, orca, pumpfun, pumpswap, raydium
 from .event_types import DexEvent
 from .grpc_types import EventType
 from .instr_account_utils import get_instruction_account_getter
 from .instructions import (
-    BONK_LAUNCHPAD_PROGRAM_ID,
+    RAYDIUM_LAUNCHLAB_PROGRAM_ID,
     METEORA_DAMM_V2_PROGRAM_ID,
     METEORA_DLMM_PROGRAM_ID,
     METEORA_POOLS_PROGRAM_ID,
@@ -179,10 +179,10 @@ def fill_accounts_with_owned_keys(
         run(METEORA_DLMM_PROGRAM_ID, lambda g: meteora.fill_dlmm_add_liquidity_accounts(data, g))
     elif et == EventType.METEORA_DLMM_REMOVE_LIQUIDITY:
         run(METEORA_DLMM_PROGRAM_ID, lambda g: meteora.fill_dlmm_remove_liquidity_accounts(data, g))
-    elif et == EventType.BONK_TRADE:
-        run(BONK_LAUNCHPAD_PROGRAM_ID, lambda g: bonk.fill_trade_accounts(data, g))
-    elif et == EventType.BONK_POOL_CREATE:
-        run(BONK_LAUNCHPAD_PROGRAM_ID, lambda g: bonk.fill_pool_create_accounts(data, g))
+    elif et == EventType.RAYDIUM_LAUNCHLAB_TRADE:
+        run(RAYDIUM_LAUNCHLAB_PROGRAM_ID, lambda g: raydium_launchlab.fill_trade_accounts(data, g))
+    elif et == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
+        run(RAYDIUM_LAUNCHLAB_PROGRAM_ID, lambda g: raydium_launchlab.fill_pool_create_accounts(data, g))
 
 
 def fill_data(

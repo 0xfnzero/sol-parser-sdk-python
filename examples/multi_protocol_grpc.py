@@ -28,7 +28,7 @@ from sol_parser.grpc_types import (
 PROTOCOLS = [
     Protocol.PUMP_FUN,
     Protocol.PUMP_SWAP,
-    Protocol.BONK,
+    Protocol.RAYDIUM_LAUNCHLAB,
     Protocol.RAYDIUM_CPMM,
     Protocol.RAYDIUM_CLMM,
     Protocol.RAYDIUM_AMM_V4,

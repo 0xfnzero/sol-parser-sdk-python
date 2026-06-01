@@ -49,6 +49,18 @@
 
 ---
 
+## Release notes
+
+### v0.5.5
+
+- Aligns ShredStream parsing with Rust/Node.js/Go for low-latency static-account paths.
+- Uses default pubkey placeholders for V0 ALT-loaded instruction accounts instead of dropping the instruction.
+- Adds discriminator fallback when the ShredStream outer program id is ALT-loaded.
+- Fixes Pump.fun ShredStream create/create_v2 fallback to use instruction-order accounts.
+- Improves Pump.fun v2 short-account parsing, event-type filtering, and multi-protocol routing parity.
+
+---
+
 ## How to use
 
 ### 1. Install
@@ -56,7 +68,7 @@
 **From PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.4.5
+pip install sol-parser-sdk-python==0.5.5
 ```
 
 **From source**
@@ -159,7 +171,9 @@ asyncio.run(main())
 
 ### 5. ShredStream (HTTP — not Yellowstone gRPC)
 
-The Node.js SDK includes a ShredStream HTTP client. **Python** provides the same env/CLI helpers as Node (`parse_shredstream_url`: `SHREDSTREAM_URL` / `SHRED_URL`, `--url` / `-u` / `--endpoint=`) for configuration parity; a native ShredStream client may be added later. **Not** `GRPC_URL`.
+Python includes a native ShredStream client (`ShredStreamClient`, `ShredStreamConfig`) plus the same env/CLI helpers as Node (`parse_shredstream_url`: `SHREDSTREAM_URL` / `SHRED_URL`, `--url` / `-u` / `--endpoint=`). Install the optional extra with `pip install 'sol-parser-sdk-python[shredstream]'`. ShredStream uses its own endpoint, **not** `GRPC_URL`.
+
+The Python ShredStream hot path uses static account keys only. V0 ALT-loaded instruction accounts are represented with default pubkey placeholders, and ALT-loaded outer program ids are parsed best-effort by discriminator. Inner CPI/log-only events still require the Yellowstone/RPC paths.
 
 ---
 
@@ -189,7 +203,7 @@ From the **package root** after `pip install -e .`. Run with `python examples/<f
 
 ## Protocols
 
-PumpFun, PumpSwap, Raydium AMM V4 / CLMM / CPMM, Orca Whirlpool, Meteora DAMM V2 / DLMM, Bonk Launchpad (see `sol_parser/`).
+PumpFun, PumpSwap, Raydium AMM V4 / CLMM / CPMM, Orca Whirlpool, Meteora DAMM V2 / DLMM, Raydium LaunchLab (see `sol_parser/`).
 
 ---
 

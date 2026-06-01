@@ -48,11 +48,12 @@ class DexEvent:
         """判断是否为交易事件"""
         return self.type in (
             EventType.PUMP_FUN_TRADE, EventType.PUMP_FUN_BUY, EventType.PUMP_FUN_SELL,
-            EventType.PUMP_FUN_BUY_EXACT_SOL_IN, EventType.PUMP_SWAP_BUY, EventType.PUMP_SWAP_SELL,
+            EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
+            EventType.PUMP_SWAP_BUY, EventType.PUMP_SWAP_SELL,
             EventType.RAYDIUM_AMM_V4_SWAP, EventType.RAYDIUM_CLMM_SWAP, EventType.RAYDIUM_CPMM_SWAP,
             EventType.ORCA_WHIRLPOOL_SWAP, EventType.METEORA_DLMM_SWAP,
             EventType.METEORA_POOLS_SWAP, EventType.METEORA_DAMM_V2_SWAP,
-            EventType.BONK_TRADE,
+            EventType.RAYDIUM_LAUNCHLAB_TRADE,
         )
     
     def as_pumpfun_trade(self) -> Optional['PumpFunTradeEvent']:
@@ -204,6 +205,8 @@ class PumpFunCreateEvent(DexEventBase):
     token_program: str = ""
     is_mayhem_mode: bool = False
     is_cashback_enabled: bool = False
+    quote_mint: str = ""
+    virtual_quote_reserves: int = 0
 
 
 @dataclass
@@ -228,6 +231,8 @@ class PumpFunCreateV2TokenEvent(DexEventBase):
     token_program: str = ""
     is_mayhem_mode: bool = False
     is_cashback_enabled: bool = False
+    quote_mint: str = ""
+    virtual_quote_reserves: int = 0
     mint_authority: str = ""
     associated_bonding_curve: str = ""
     global_account: str = ""  # Rust `global` PumpFun global config
@@ -1113,12 +1118,12 @@ class MeteoraDammV2InitializePoolEvent(DexEventBase):
 
 
 # ============================================================
-# Bonk 事件
+# RaydiumLaunchlab 事件
 # ============================================================
 
 @dataclass
-class BonkTradeEvent(DexEventBase):
-    """Bonk 交易事件"""
+class RaydiumLaunchlabTradeEvent(DexEventBase):
+    """RaydiumLaunchlab 交易事件"""
     pool_state: str = ""
     user: str = ""
     amount_in: int = 0
@@ -1129,16 +1134,16 @@ class BonkTradeEvent(DexEventBase):
 
 
 @dataclass
-class BonkPoolCreateEvent(DexEventBase):
-    """Bonk 创建池子事件"""
+class RaydiumLaunchlabPoolCreateEvent(DexEventBase):
+    """RaydiumLaunchlab 创建池子事件"""
     pool_state: str = ""
     creator: str = ""
     base_mint_param: Optional[Dict[str, Any]] = None
 
 
 @dataclass
-class BonkMigrateAmmEvent(DexEventBase):
-    """Bonk 迁移 AMM 事件"""
+class RaydiumLaunchlabMigrateAmmEvent(DexEventBase):
+    """RaydiumLaunchlab 迁移 AMM 事件"""
     old_pool: str = ""
     new_pool: str = ""
     user: str = ""
@@ -1210,9 +1215,9 @@ TypedDexEvent = Union[
     MeteoraDammV2AddLiquidityEvent,
     MeteoraDammV2RemoveLiquidityEvent,
     MeteoraDammV2InitializePoolEvent,
-    BonkTradeEvent,
-    BonkPoolCreateEvent,
-    BonkMigrateAmmEvent,
+    RaydiumLaunchlabTradeEvent,
+    RaydiumLaunchlabPoolCreateEvent,
+    RaydiumLaunchlabMigrateAmmEvent,
 ]
 
 
@@ -1317,7 +1322,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
     meta = _get_metadata(data)
     
     # PumpFun events
-    if event_type in (EventType.PUMP_FUN_TRADE, EventType.PUMP_FUN_BUY, 
+    if event_type in (EventType.PUMP_FUN_TRADE, EventType.PUMP_FUN_BUY,
                       EventType.PUMP_FUN_SELL, EventType.PUMP_FUN_BUY_EXACT_SOL_IN):
         return PumpFunTradeEvent(
             metadata=meta,
@@ -1406,6 +1411,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             token_program=_get_str(data, "token_program"),
             is_mayhem_mode=_get_bool(data, "is_mayhem_mode"),
             is_cashback_enabled=_get_bool(data, "is_cashback_enabled"),
+            quote_mint=_get_str(data, "quote_mint"),
+            virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
         )
 
     if event_type == EventType.PUMP_FUN_CREATE_V2:
@@ -1427,6 +1434,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             token_program=_get_str(data, "token_program"),
             is_mayhem_mode=_get_bool(data, "is_mayhem_mode"),
             is_cashback_enabled=_get_bool(data, "is_cashback_enabled"),
+            quote_mint=_get_str(data, "quote_mint"),
+            virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
             mint_authority=_get_str(data, "mint_authority"),
             associated_bonding_curve=_get_str(data, "associated_bonding_curve"),
             global_account=g,
@@ -1813,9 +1822,9 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             token_b_transfer_fee=_get_int(data, "token_b_transfer_fee"),
         )
 
-    # Bonk events
-    if event_type == EventType.BONK_TRADE:
-        return BonkTradeEvent(
+    # RaydiumLaunchlab events
+    if event_type == EventType.RAYDIUM_LAUNCHLAB_TRADE:
+        return RaydiumLaunchlabTradeEvent(
             metadata=meta,
             pool_state=_get_str(data, "pool_state"),
             user=_get_str(data, "user"),
@@ -1826,16 +1835,16 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             exact_in=_get_bool(data, "exact_in"),
         )
     
-    if event_type == EventType.BONK_POOL_CREATE:
-        return BonkPoolCreateEvent(
+    if event_type == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
+        return RaydiumLaunchlabPoolCreateEvent(
             metadata=meta,
             pool_state=_get_str(data, "pool_state"),
             creator=_get_str(data, "creator"),
             base_mint_param=_get_dict_any(data, "base_mint_param"),
         )
     
-    if event_type == EventType.BONK_MIGRATE_AMM:
-        return BonkMigrateAmmEvent(
+    if event_type == EventType.RAYDIUM_LAUNCHLAB_MIGRATE_AMM:
+        return RaydiumLaunchlabMigrateAmmEvent(
             metadata=meta,
             old_pool=_get_str(data, "old_pool"),
             new_pool=_get_str(data, "new_pool"),

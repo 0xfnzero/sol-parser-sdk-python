@@ -151,6 +151,32 @@ def _read_pumpfun_shareholders(data: bytes, offset: int) -> Optional[tuple[list[
     return out, offset
 
 
+def _filter_account_event(
+    ev: Optional[DexEvent],
+    event_type_filter: Optional[EventTypeFilter],
+) -> Optional[DexEvent]:
+    if ev is None or event_type_filter is None:
+        return ev
+    return ev if event_type_filter.should_include(ev.type) else None
+
+
+ACCOUNT_EVENT_TYPES = frozenset(
+    (
+        EventType.TOKEN_ACCOUNT,
+        EventType.TOKEN_INFO,
+        EventType.NONCE_ACCOUNT,
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL,
+        EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
+        EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG,
+        EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR,
+        EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
+        EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
+        EventType.ACCOUNT_PUMP_SWAP_POOL,
+    )
+)
+
+
 def parse_account_unified(
     account: AccountData,
     metadata: EventMetadata,
@@ -164,47 +190,34 @@ def parse_account_unified(
     if event_type_filter is not None:
         inc = getattr(event_type_filter, "include_only", None)
         if inc is not None and len(inc) > 0:
-            need = {
-                EventType.TOKEN_ACCOUNT,
-                EventType.TOKEN_INFO,
-                EventType.NONCE_ACCOUNT,
-                EventType.ACCOUNT_PUMP_FUN_GLOBAL,
-                EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
-                EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
-                EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG,
-                EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR,
-                EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
-                EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
-                EventType.ACCOUNT_PUMP_SWAP_POOL,
-            }
-            if not any(t in need for t in inc):
+            if not any(t in ACCOUNT_EVENT_TYPES for t in inc):
                 return None
 
-    if account.owner == PUMPSWAP_PROGRAM_ID and event_type_filter is not None:
-        if event_type_filter.should_include(
-            EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG
-        ) or event_type_filter.should_include(EventType.ACCOUNT_PUMP_SWAP_POOL):
+    if account.owner == PUMPSWAP_PROGRAM_ID:
+        should_parse_pumpswap = event_type_filter is None or (
+            event_type_filter.should_include(EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG)
+            or event_type_filter.should_include(EventType.ACCOUNT_PUMP_SWAP_POOL)
+        )
+        if should_parse_pumpswap:
             ev = _parse_pumpswap_account(account, metadata)
             if ev is not None:
-                return ev
+                return _filter_account_event(ev, event_type_filter)
+        return None
 
-    if account.owner in (PUMPFUN_PROGRAM_ID, PUMP_FEES_PROGRAM_ID) and event_type_filter is not None:
-        if event_type_filter.should_include(
-            EventType.ACCOUNT_PUMP_FUN_GLOBAL
-        ) or event_type_filter.should_include(
-            EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE
-        ) or event_type_filter.should_include(
-            EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG
-        ) or event_type_filter.should_include(
-            EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG
-        ) or event_type_filter.should_include(
-            EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR
-        ) or event_type_filter.should_include(
-            EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR
-        ):
+    if account.owner in (PUMPFUN_PROGRAM_ID, PUMP_FEES_PROGRAM_ID):
+        should_parse_pumpfun = event_type_filter is None or (
+            event_type_filter.should_include(EventType.ACCOUNT_PUMP_FUN_GLOBAL)
+            or event_type_filter.should_include(EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE)
+            or event_type_filter.should_include(EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG)
+            or event_type_filter.should_include(EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG)
+            or event_type_filter.should_include(EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR)
+            or event_type_filter.should_include(EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR)
+        )
+        if should_parse_pumpfun:
             ev = _parse_pumpfun_account(account, metadata)
             if ev is not None:
-                return ev
+                return _filter_account_event(ev, event_type_filter)
+        return None
 
     if acc_utils.is_nonce_account(data):
         if event_type_filter is not None:
@@ -213,9 +226,11 @@ def parse_account_unified(
         return _parse_nonce_fast(account, metadata)
 
     if event_type_filter is not None:
-        if not event_type_filter.should_include(EventType.TOKEN_ACCOUNT):
+        if not event_type_filter.should_include(
+            EventType.TOKEN_ACCOUNT
+        ) and not event_type_filter.should_include(EventType.TOKEN_INFO):
             return None
-    return parse_token_account(account, metadata)
+    return _filter_account_event(parse_token_account(account, metadata), event_type_filter)
 
 
 def _parse_pumpswap_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
@@ -706,6 +721,9 @@ def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> 
 
 
 def parse_token_account(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
+    if not acc_utils.is_token_program_account(account.owner):
+        return None
+
     if len(account.data) <= 100:
         event = _parse_mint_fast(account, metadata)
         if event:

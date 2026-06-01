@@ -28,7 +28,7 @@ def _fill_attr(log: Any, attr: str, ix: Any, ix_attr: Optional[str] = None) -> N
         setattr(log, attr, value)
 
 
-def _fill_bonk_mint_param(log: Any, ix: Any, key: str) -> None:
+def _fill_raydium_launchlab_mint_param(log: Any, ix: Any, key: str) -> None:
     src = getattr(ix, "base_mint_param", None)
     if not isinstance(src, dict):
         return
@@ -84,16 +84,16 @@ def _dedupe_key(ev: DexEvent, pumpfun_lane_counts: Dict[PumpfunLaneBase, int]) -
             f"PumpFunMigrate|{getattr(data, 'mint', '')}|"
             f"{getattr(data, 'pool', '')}|{getattr(data, 'user', '')}"
         )
-    if t == EventType.BONK_TRADE:
+    if t == EventType.RAYDIUM_LAUNCHLAB_TRADE:
         return (
-            f"BonkTrade|{getattr(data, 'pool_state', '')}|"
+            f"RaydiumLaunchlabTrade|{getattr(data, 'pool_state', '')}|"
             f"{getattr(data, 'user', '')}|{bool(getattr(data, 'is_buy', False))}"
         )
-    if t == EventType.BONK_POOL_CREATE:
-        return f"BonkPoolCreate|{getattr(data, 'pool_state', '')}"
-    if t == EventType.BONK_MIGRATE_AMM:
+    if t == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
+        return f"RaydiumLaunchlabPoolCreate|{getattr(data, 'pool_state', '')}"
+    if t == EventType.RAYDIUM_LAUNCHLAB_MIGRATE_AMM:
         return (
-            f"BonkMigrateAmm|{getattr(data, 'old_pool', '')}|"
+            f"RaydiumLaunchlabMigrateAmm|{getattr(data, 'old_pool', '')}|"
             f"{getattr(data, 'new_pool', '')}|{getattr(data, 'user', '')}"
         )
     if t == EventType.PUMP_SWAP_BUY:
@@ -174,8 +174,10 @@ def _merge_pumpfun_trade(log: Any, ix: Any) -> None:
 
 
 def _merge_pumpfun_create(log: Any, ix: Any) -> None:
-    for attr in ("name", "symbol", "uri", "bonding_curve", "user", "creator", "token_program"):
+    for attr in ("name", "symbol", "uri", "bonding_curve", "user", "creator", "token_program", "quote_mint"):
         _fill_attr(log, attr, ix)
+    if getattr(log, "virtual_quote_reserves", 0) == 0 and getattr(ix, "virtual_quote_reserves", 0) != 0:
+        log.virtual_quote_reserves = ix.virtual_quote_reserves
 
 
 def _merge_pumpfun_create_v2(log: Any, ix: Any) -> None:
@@ -282,11 +284,11 @@ def _merge_grpc_instruction_into_log(log_ev: DexEvent, ix_ev: DexEvent) -> None:
             "user_destination_token_account",
         ):
             _fill_attr(log, attr, ix)
-    elif log_ev.type == EventType.BONK_POOL_CREATE and ix_ev.type == EventType.BONK_POOL_CREATE:
+    elif log_ev.type == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE and ix_ev.type == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
         _fill_attr(log, "creator", ix)
         for key in ("name", "symbol", "uri"):
-            _fill_bonk_mint_param(log, ix, key)
-    elif log_ev.type == EventType.BONK_MIGRATE_AMM and ix_ev.type == EventType.BONK_MIGRATE_AMM:
+            _fill_raydium_launchlab_mint_param(log, ix, key)
+    elif log_ev.type == EventType.RAYDIUM_LAUNCHLAB_MIGRATE_AMM and ix_ev.type == EventType.RAYDIUM_LAUNCHLAB_MIGRATE_AMM:
         for attr in ("old_pool", "new_pool", "user"):
             _fill_attr(log, attr, ix)
 

@@ -29,9 +29,7 @@ def fill_trade_accounts(e: PumpFunTradeEvent, get: AccountGetter) -> None:
         if _empty(getattr(e, name)):
             setattr(e, name, get(idx))
 
-    is_v2 = e.ix_name in ("buy_v2", "sell_v2", "buy_exact_quote_in_v2") or (
-        e.ix_name == "buy_exact_quote_in" and account_at_matches_mint(1)
-    )
+    is_v2 = e.ix_name in ("buy_v2", "sell_v2", "buy_exact_quote_in_v2") or account_at_matches_mint(1)
     if is_v2:
         set_attr("global_account", 0)
         set_attr("quote_mint", 2)
@@ -51,7 +49,7 @@ def fill_trade_accounts(e: PumpFunTradeEvent, get: AccountGetter) -> None:
         set_attr("associated_quote_buyback_fee_recipient", 9)
         set_attr("associated_creator_vault", 17)
         set_attr("sharing_config", 18)
-        if e.ix_name == "sell_v2":
+        if e.ix_name == "sell_v2" or (e.ix_name == "sell" and not e.is_buy):
             set_attr("user_volume_accumulator", 19)
             set_attr("associated_user_volume_accumulator", 20)
             set_attr("fee_config", 21)

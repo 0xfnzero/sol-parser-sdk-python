@@ -153,7 +153,7 @@ def test_parse_pumpfun_buy_v2_uses_rust_account_indexes() -> None:
     assert ev.type == EventType.PUMP_FUN_BUY
     assert isinstance(ev.data, PumpFunTradeEvent)
     t = ev.data
-    assert t.ix_name == "buy_v2"
+    assert t.ix_name == "buy"
     assert t.mint == "account_1"
     assert t.fee_recipient == "account_6"
     assert t.bonding_curve == "account_10"
@@ -176,10 +176,10 @@ def test_parse_pumpfun_buy_exact_quote_in_v2_uses_quote_amount_fields() -> None:
         10,
     )
     assert ev is not None
-    assert ev.type == EventType.PUMP_FUN_BUY_EXACT_SOL_IN
+    assert ev.type == EventType.PUMP_FUN_BUY
     assert isinstance(ev.data, PumpFunTradeEvent)
     t = ev.data
-    assert t.ix_name == "buy_exact_quote_in_v2"
+    assert t.ix_name == "buy_exact_quote_in"
     assert t.amount == 888
     assert t.max_sol_cost == 0
     assert t.quote_amount == 777
@@ -202,7 +202,7 @@ def test_parse_pumpfun_sell_v2_returns_sell_event_type() -> None:
     assert ev.type == EventType.PUMP_FUN_SELL
     assert isinstance(ev.data, PumpFunTradeEvent)
     t = ev.data
-    assert t.ix_name == "sell_v2"
+    assert t.ix_name == "sell"
     assert t.amount == 333
     assert t.min_sol_output == 444
     assert t.max_sol_cost == 0
@@ -228,7 +228,7 @@ def test_pumpfun_post_merge_enriches_create_v2_and_trade_flags() -> None:
                 mint="mint",
                 fee_recipient="fee",
                 is_buy=True,
-                ix_name="buy_v2",
+                ix_name="buy",
             ),
         ),
     ]

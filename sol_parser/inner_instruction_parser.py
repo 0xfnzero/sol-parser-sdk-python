@@ -6,7 +6,8 @@ import struct
 from typing import Optional
 
 from .dex_parsers import (
-    _parse_bonk_trade,
+    _parse_raydium_launchlab_trade,
+    _parse_raydium_launchlab_pool_create,
     parse_amm_deposit_from_data,
     parse_amm_swap_in_from_data,
     parse_amm_swap_out_from_data,
@@ -41,14 +42,21 @@ from .event_types import (
     MeteoraPoolsRemoveLiquidityEvent,
     MeteoraPoolsSwapEvent,
 )
-from .grpc_types import EventType, EventTypeFilter, IncludeOnlyFilter
+from .grpc_types import EventType, EventTypeFilter
 from .grpc_types import (
     event_type_filter_includes_meteora_damm_v2,
+    event_type_filter_includes_meteora_dlmm,
+    event_type_filter_includes_meteora_pools,
+    event_type_filter_includes_orca_whirlpool,
     event_type_filter_includes_pumpfun,
     event_type_filter_includes_pumpswap,
+    event_type_filter_includes_raydium_amm_v4,
+    event_type_filter_includes_raydium_clmm,
+    event_type_filter_includes_raydium_cpmm,
+    event_type_filter_includes_raydium_launchlab,
 )
 from .instructions import (
-    BONK_LAUNCHPAD_PROGRAM_ID,
+    RAYDIUM_LAUNCHLAB_PROGRAM_ID,
     METEORA_DAMM_V2_PROGRAM_ID,
     METEORA_DLMM_PROGRAM_ID,
     METEORA_POOLS_PROGRAM_ID,
@@ -104,8 +112,9 @@ _MP_REM = bytes([116, 244, 97, 232, 103, 31, 152, 58, 155, 167, 108, 32, 122, 76
 def _damm_buf_from_inner(disc16: bytes, inner: bytes) -> bytes:
     return disc16[8:16] + inner
 
-# Bonk inner
-_BONK_TRADE = bytes([80, 120, 100, 200, 150, 75, 60, 40, 155, 167, 108, 32, 122, 76, 173, 64])
+# Raydium LaunchLab inner（event discriminator + Anchor CPI marker）
+_RAYDIUM_LAUNCHLAB_TRADE = bytes([189, 219, 127, 211, 78, 230, 97, 238, 155, 167, 108, 32, 122, 76, 173, 64])
+_RAYDIUM_LAUNCHLAB_POOL_CREATE = bytes([151, 215, 226, 9, 118, 161, 115, 174, 155, 167, 108, 32, 122, 76, 173, 64])
 
 # DLMM（8 字节 event disc + payload）
 def _dlmm_buf_from_inner(disc16: bytes, inner: bytes) -> bytes:
@@ -164,10 +173,21 @@ def _meteora_pools_rem_inner(data: bytes, meta_d: dict) -> Optional[DexEvent]:
     )
 
 
-def _bonk_trade_inner(data: bytes, meta_d: dict) -> Optional[DexEvent]:
-    if len(data) < 81:
-        return None
-    return _parse_bonk_trade(data, meta_d)
+def _raydium_launchlab_trade_inner(data: bytes, meta_d: dict) -> Optional[DexEvent]:
+    return _parse_raydium_launchlab_trade(data, meta_d)
+
+
+def _raydium_launchlab_pool_create_inner(data: bytes, meta_d: dict) -> Optional[DexEvent]:
+    return _parse_raydium_launchlab_pool_create(data, meta_d)
+
+
+def _filter_inner_event(
+    ev: Optional[DexEvent],
+    event_type_filter: Optional[EventTypeFilter],
+) -> Optional[DexEvent]:
+    if ev is None or event_type_filter is None:
+        return ev
+    return ev if event_type_filter.should_include(ev.type) else None
 
 
 def parse_inner_instruction(
@@ -181,101 +201,119 @@ def parse_inner_instruction(
         return None
     disc16 = bytes(data[:16])
     inner = data[16:]
-    f: EventTypeFilter = filter if filter is not None else IncludeOnlyFilter([])
+
+    def emit(ev: Optional[DexEvent]) -> Optional[DexEvent]:
+        return _filter_inner_event(ev, filter)
 
     if program_id_b58 == PUMPFUN_PROGRAM_ID:
-        if not event_type_filter_includes_pumpfun(f):
+        if filter is not None and not event_type_filter_includes_pumpfun(filter):
             return None
         if disc16 == _PUMPFUN_INNER_TRADE:
             ev = parse_trade_from_data(inner, meta_d, is_created_buy)
-            return ev if ev.is_valid() else None
+            return emit(ev if ev.is_valid() else None)
         if disc16 == _PUMPFUN_INNER_CREATE:
             ev = parse_create_from_data(inner, meta_d)
-            return ev if ev.is_valid() else None
+            return emit(ev if ev.is_valid() else None)
         if disc16 == _PUMPFUN_INNER_MIGRATE:
             ev = parse_migrate_from_data(inner, meta_d)
-            return ev if ev.is_valid() else None
+            return emit(ev if ev.is_valid() else None)
         return None
 
     if program_id_b58 == PUMPSWAP_PROGRAM_ID:
-        if not event_type_filter_includes_pumpswap(f):
+        if filter is not None and not event_type_filter_includes_pumpswap(filter):
             return None
         if disc16 == _PS_BUY:
-            return parse_ps_buy_from_data(inner, meta_d)
+            return emit(parse_ps_buy_from_data(inner, meta_d))
         if disc16 == _PS_SELL:
-            return parse_ps_sell_from_data(inner, meta_d)
+            return emit(parse_ps_sell_from_data(inner, meta_d))
         if disc16 == _PS_CREATE_POOL:
-            return parse_ps_create_pool_from_data(inner, meta_d)
+            return emit(parse_ps_create_pool_from_data(inner, meta_d))
         if disc16 == _PS_ADD_LIQ:
-            return parse_ps_add_liq_from_data(inner, meta_d)
+            return emit(parse_ps_add_liq_from_data(inner, meta_d))
         if disc16 == _PS_REMOVE_LIQ:
-            return parse_ps_remove_liq_from_data(inner, meta_d)
+            return emit(parse_ps_remove_liq_from_data(inner, meta_d))
         return None
 
     if program_id_b58 == RAYDIUM_CLMM_PROGRAM_ID:
+        if filter is not None and not event_type_filter_includes_raydium_clmm(filter):
+            return None
         if disc16 == _CLMM_SWAP:
-            return parse_clmm_swap_from_data(inner, meta_d)
+            return emit(parse_clmm_swap_from_data(inner, meta_d))
         if disc16 == _CLMM_INC:
-            return parse_clmm_inc_from_data(inner, meta_d)
+            return emit(parse_clmm_inc_from_data(inner, meta_d))
         if disc16 == _CLMM_DEC:
-            return parse_clmm_dec_from_data(inner, meta_d)
+            return emit(parse_clmm_dec_from_data(inner, meta_d))
         if disc16 == _CLMM_CREATE_POOL:
-            return parse_clmm_create_from_data(inner, meta_d)
+            return emit(parse_clmm_create_from_data(inner, meta_d))
         if disc16 == _CLMM_COLLECT_FEE:
-            return parse_clmm_collect_from_data(inner, meta_d)
+            return emit(parse_clmm_collect_from_data(inner, meta_d))
         return None
 
     if program_id_b58 == RAYDIUM_CPMM_PROGRAM_ID:
+        if filter is not None and not event_type_filter_includes_raydium_cpmm(filter):
+            return None
         if disc16 == _CPMM_SWAP_IN:
-            return parse_cpmm_swap_in_from_data(inner, meta_d)
+            return emit(parse_cpmm_swap_in_from_data(inner, meta_d))
         if disc16 == _CPMM_SWAP_OUT:
-            return parse_cpmm_swap_out_from_data(inner, meta_d)
+            return emit(parse_cpmm_swap_out_from_data(inner, meta_d))
         if disc16 == _CPMM_DEP:
-            return parse_cpmm_deposit_from_data(inner, meta_d)
+            return emit(parse_cpmm_deposit_from_data(inner, meta_d))
         if disc16 == _CPMM_WIT:
-            return parse_cpmm_withdraw_from_data(inner, meta_d)
+            return emit(parse_cpmm_withdraw_from_data(inner, meta_d))
         return None
 
     if program_id_b58 == RAYDIUM_AMM_V4_PROGRAM_ID:
+        if filter is not None and not event_type_filter_includes_raydium_amm_v4(filter):
+            return None
         if disc16 == _AMM_SWAP_IN:
-            return parse_amm_swap_in_from_data(inner, meta_d)
+            return emit(parse_amm_swap_in_from_data(inner, meta_d))
         if disc16 == _AMM_SWAP_OUT:
-            return parse_amm_swap_out_from_data(inner, meta_d)
+            return emit(parse_amm_swap_out_from_data(inner, meta_d))
         if disc16 == _AMM_DEP:
-            return parse_amm_deposit_from_data(inner, meta_d)
+            return emit(parse_amm_deposit_from_data(inner, meta_d))
         if disc16 == _AMM_WIT:
-            return parse_amm_withdraw_from_data(inner, meta_d)
+            return emit(parse_amm_withdraw_from_data(inner, meta_d))
         return None
 
     if program_id_b58 == ORCA_WHIRLPOOL_PROGRAM_ID:
+        if filter is not None and not event_type_filter_includes_orca_whirlpool(filter):
+            return None
         if disc16 == _ORCA_TRADED:
-            return parse_orca_traded_from_data(inner, meta_d)
+            return emit(parse_orca_traded_from_data(inner, meta_d))
         if disc16 == _ORCA_LIQ_INC:
-            return parse_orca_liq_inc_from_data(inner, meta_d)
+            return emit(parse_orca_liq_inc_from_data(inner, meta_d))
         if disc16 == _ORCA_LIQ_DEC:
-            return parse_orca_liq_dec_from_data(inner, meta_d)
+            return emit(parse_orca_liq_dec_from_data(inner, meta_d))
         return None
 
     if program_id_b58 == METEORA_POOLS_PROGRAM_ID:
+        if filter is not None and not event_type_filter_includes_meteora_pools(filter):
+            return None
         if disc16 == _MP_SWAP:
-            return _meteora_pools_swap_inner(inner, meta_d)
+            return emit(_meteora_pools_swap_inner(inner, meta_d))
         if disc16 == _MP_ADD:
-            return _meteora_pools_add_inner(inner, meta_d)
+            return emit(_meteora_pools_add_inner(inner, meta_d))
         if disc16 == _MP_REM:
-            return _meteora_pools_rem_inner(inner, meta_d)
+            return emit(_meteora_pools_rem_inner(inner, meta_d))
         return None
 
     if program_id_b58 == METEORA_DAMM_V2_PROGRAM_ID:
-        if not event_type_filter_includes_meteora_damm_v2(f):
+        if filter is not None and not event_type_filter_includes_meteora_damm_v2(filter):
             return None
-        return parse_meteora_damm_from_buf(_damm_buf_from_inner(disc16, inner), meta_d)
+        return emit(parse_meteora_damm_from_buf(_damm_buf_from_inner(disc16, inner), meta_d))
 
-    if program_id_b58 == BONK_LAUNCHPAD_PROGRAM_ID:
-        if disc16 == _BONK_TRADE:
-            return _bonk_trade_inner(inner, meta_d)
+    if program_id_b58 == RAYDIUM_LAUNCHLAB_PROGRAM_ID:
+        if filter is not None and not event_type_filter_includes_raydium_launchlab(filter):
+            return None
+        if disc16 == _RAYDIUM_LAUNCHLAB_TRADE:
+            return emit(_raydium_launchlab_trade_inner(inner, meta_d))
+        if disc16 == _RAYDIUM_LAUNCHLAB_POOL_CREATE:
+            return emit(_raydium_launchlab_pool_create_inner(inner, meta_d))
         return None
 
     if program_id_b58 == METEORA_DLMM_PROGRAM_ID:
-        return parse_dlmm_from_program_data(_dlmm_buf_from_inner(disc16, inner), meta_d)
+        if filter is not None and not event_type_filter_includes_meteora_dlmm(filter):
+            return None
+        return emit(parse_dlmm_from_program_data(_dlmm_buf_from_inner(disc16, inner), meta_d))
 
     return None

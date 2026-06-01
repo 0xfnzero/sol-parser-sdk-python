@@ -39,10 +39,20 @@ from .event_types import (
     MeteoraDammV2CreatePositionEvent, MeteoraDammV2ClosePositionEvent,
     MeteoraDammV2AddLiquidityEvent, MeteoraDammV2RemoveLiquidityEvent,
     MeteoraDammV2InitializePoolEvent,
-    BonkTradeEvent, BonkPoolCreateEvent, BonkMigrateAmmEvent,
+    RaydiumLaunchlabTradeEvent, RaydiumLaunchlabPoolCreateEvent,
 )
 
 Z = "11111111111111111111111111111111"
+
+
+def normalize_pumpfun_ix_name(ix_name: str) -> str:
+    if ix_name == "buy_v2":
+        return "buy"
+    if ix_name == "sell_v2":
+        return "sell"
+    if ix_name == "buy_exact_quote_in_v2":
+        return "buy_exact_quote_in"
+    return ix_name
 
 
 def _u64le(b: bytes, o: int) -> int:
@@ -218,6 +228,7 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexE
     ix_name = ""
     if o + 4 <= len(data):
         ix_name, o = _borsh_str(data, o)
+    ix_name = normalize_pumpfun_ix_name(ix_name)
     mm = _bool(data, o) if o < len(data) else False
     o += 1
     cb_bps = _u64le(data, o) if o + 8 <= len(data) else 0
@@ -277,12 +288,14 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexE
         creator_vault=Z,
     )
     
-    if ix_name in ("buy", "buy_v2"):
+    if ix_name == "buy":
         return DexEvent(type=EventType.PUMP_FUN_BUY, data=event_data)
-    if ix_name in ("sell", "sell_v2"):
+    if ix_name == "sell":
         return DexEvent(type=EventType.PUMP_FUN_SELL, data=event_data)
-    if ix_name in ("buy_exact_sol_in", "buy_exact_quote_in", "buy_exact_quote_in_v2"):
+    if ix_name == "buy_exact_sol_in":
         return DexEvent(type=EventType.PUMP_FUN_BUY_EXACT_SOL_IN, data=event_data)
+    if ix_name == "buy_exact_quote_in":
+        return DexEvent(type=EventType.PUMP_FUN_BUY, data=event_data)
     return DexEvent(type=EventType.PUMP_FUN_TRADE, data=event_data)
 
 
@@ -319,6 +332,10 @@ def parse_create_from_data(data: bytes, meta: dict) -> DexEvent:
     mm = _bool(data, o) if o < len(data) else False
     o += 1
     ice = _bool(data, o) if o < len(data) else False
+    o += 1
+    quote_mint = _pub(data, o) if o + 32 <= len(data) else Z
+    o += 32
+    virtual_quote_reserves = _u64le(data, o) if o + 8 <= len(data) else 0
     
     return DexEvent(
         type=EventType.PUMP_FUN_CREATE,
@@ -339,6 +356,8 @@ def parse_create_from_data(data: bytes, meta: dict) -> DexEvent:
             token_program=tp,
             is_mayhem_mode=mm,
             is_cashback_enabled=ice,
+            quote_mint=quote_mint,
+            virtual_quote_reserves=virtual_quote_reserves,
         ),
     )
 
@@ -1811,45 +1830,35 @@ def _parse_damm_remove_liquidity(data: bytes, meta: dict) -> Optional[DexEvent]:
     )
 
 
-# --- Bonk ---
+# --- RaydiumLaunchlab ---
 
-DISC_BONK_TRADE = _d(2, 3, 4, 5, 6, 7, 8, 9)
-DISC_BONK_POOL_CREATE = _d(1, 2, 3, 4, 5, 6, 7, 8)
-DISC_BONK_MIGRATE_AMM = _d(3, 4, 5, 6, 7, 8, 9, 10)
+DISC_RAYDIUM_LAUNCHLAB_TRADE = _d(189, 219, 127, 211, 78, 230, 97, 238)
+DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE = _d(151, 215, 226, 9, 118, 161, 115, 174)
 
 
-def parse_bonk_from_discriminator(disc: int, data: bytes, meta: dict) -> Optional[DexEvent]:
-    if disc == DISC_BONK_TRADE:
-        return _parse_bonk_trade(data, meta)
-    if disc == DISC_BONK_POOL_CREATE:
-        return _parse_bonk_pool_create(data, meta)
-    if disc == DISC_BONK_MIGRATE_AMM:
-        return _parse_bonk_migrate_amm(data, meta)
+def parse_raydium_launchlab_from_discriminator(disc: int, data: bytes, meta: dict) -> Optional[DexEvent]:
+    if disc == DISC_RAYDIUM_LAUNCHLAB_TRADE:
+        return _parse_raydium_launchlab_trade(data, meta)
+    if disc == DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE:
+        return _parse_raydium_launchlab_pool_create(data, meta)
     return None
 
 
-def _parse_bonk_trade(data: bytes, meta: dict) -> Optional[DexEvent]:
-    if len(data) < 32 + 32 + 8 + 8 + 1 + 1:
+def _parse_raydium_launchlab_trade(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 139:
         return None
-    o = 0
-    pool = _pub(data, o)
-    o += 32
-    user = _pub(data, o)
-    o += 32
-    ai = _u64le(data, o)
-    o += 8
-    ao = _u64le(data, o)
-    o += 8
-    is_buy = _bool(data, o)
-    o += 1
-    ex_in = _bool(data, o)
+    pool = _pub(data, 0)
+    ai = _u64le(data, 88)
+    ao = _u64le(data, 96)
+    is_buy = _u8(data, 136) == 0
+    ex_in = _bool(data, 138)
     d = "Buy" if is_buy else "Sell"
     return DexEvent(
-        type=EventType.BONK_TRADE,
-        data=BonkTradeEvent(
+        type=EventType.RAYDIUM_LAUNCHLAB_TRADE,
+        data=RaydiumLaunchlabTradeEvent(
             metadata=_make_meta(meta),
             pool_state=pool,
-            user=user,
+            user=Z,
             amount_in=ai,
             amount_out=ao,
             is_buy=is_buy,
@@ -1859,43 +1868,27 @@ def _parse_bonk_trade(data: bytes, meta: dict) -> Optional[DexEvent]:
     )
 
 
-def _parse_bonk_pool_create(data: bytes, meta: dict) -> Optional[DexEvent]:
-    if len(data) < 32 + 32 + 32 + 32 + 8 + 8:
+def _parse_raydium_launchlab_pool_create(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 97:
         return None
-    o = 0
-    pool = _pub(data, o)
-    o += 32 + 32 + 32
-    creator = _pub(data, o)
+    pool = _pub(data, 0)
+    creator = _pub(data, 32)
+    o = 96
+    decimals = _u8(data, o)
+    o += 1
+    try:
+        name, o = _borsh_str(data, o)
+        symbol, o = _borsh_str(data, o)
+        uri, o = _borsh_str(data, o)
+    except (struct.error, UnicodeDecodeError):
+        return None
     return DexEvent(
-        type=EventType.BONK_POOL_CREATE,
-        data=BonkPoolCreateEvent(
+        type=EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE,
+        data=RaydiumLaunchlabPoolCreateEvent(
             metadata=_make_meta(meta),
-            base_mint_param={"symbol": "BONK", "name": "Bonk Pool", "uri": "https://bonk.com", "decimals": 5},
+            base_mint_param={"symbol": symbol, "name": name, "uri": uri, "decimals": decimals},
             pool_state=pool,
             creator=creator,
-        ),
-    )
-
-
-def _parse_bonk_migrate_amm(data: bytes, meta: dict) -> Optional[DexEvent]:
-    if len(data) < 32 + 32 + 32 + 8:
-        return None
-    o = 0
-    old_p = _pub(data, o)
-    o += 32
-    new_p = _pub(data, o)
-    o += 32
-    user = _pub(data, o)
-    o += 32
-    liq = _u64le(data, o)
-    return DexEvent(
-        type=EventType.BONK_MIGRATE_AMM,
-        data=BonkMigrateAmmEvent(
-            metadata=_make_meta(meta),
-            old_pool=old_p,
-            new_pool=new_p,
-            user=user,
-            liquidity_amount=liq,
         ),
     )
 
@@ -1904,7 +1897,7 @@ def _parse_bonk_migrate_amm(data: bytes, meta: dict) -> Optional[DexEvent]:
 
 
 def parse_ps_buy_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
-    min_len = 14 * 8 + 7 * 32 + 1 + 5 * 8 + 4
+    min_len = 16 * 8 + 7 * 32 + 1 + 5 * 8 + 4
     if len(data) < min_len:
         return None
     o = 0
@@ -2488,9 +2481,7 @@ _LOG_DISCRIMINATOR_EVENT_TYPES = {
     _d(228, 50, 246, 85, 203, 66, 134, 37): EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
     _d(156, 15, 119, 198, 29, 181, 221, 55): EventType.METEORA_DAMM_V2_CREATE_POSITION,
     _d(20, 145, 144, 68, 143, 142, 214, 178): EventType.METEORA_DAMM_V2_CLOSE_POSITION,
-    DISC_BONK_TRADE: EventType.BONK_TRADE,
-    DISC_BONK_POOL_CREATE: EventType.BONK_POOL_CREATE,
-    DISC_BONK_MIGRATE_AMM: EventType.BONK_MIGRATE_AMM,
+    DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE: EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE,
     DLMM_ADD_LIQ: EventType.METEORA_DLMM_ADD_LIQUIDITY,
     DLMM_REMOVE_LIQ: EventType.METEORA_DLMM_REMOVE_LIQUIDITY,
     DLMM_INIT_POOL: EventType.METEORA_DLMM_INITIALIZE_POOL,
@@ -2623,7 +2614,7 @@ def dispatch_program_data(
         _d(20, 145, 144, 68, 143, 142, 214, 178),
     ):
         return parse_meteora_damm_from_buf(buf, meta)
-    bonk = parse_bonk_from_discriminator(disc, data, meta)
-    if bonk:
-        return bonk
+    raydium_launchlab = parse_raydium_launchlab_from_discriminator(disc, data, meta)
+    if raydium_launchlab:
+        return raydium_launchlab
     return parse_dlmm_from_program_data(buf, meta)

@@ -3,12 +3,29 @@
 from __future__ import annotations
 
 import struct
-from typing import Optional, List
+from typing import List, Optional, Sequence
 
 import base58
 
-from .grpc_types import EventTypeFilter, EventType, EventMetadata, IncludeOnlyFilter, ExcludeFilter
-from .dex_parsers import Z, read_pump_fees_fee_tiers_vec, read_pump_fees_shareholders_vec
+from .grpc_types import (
+    EventMetadata,
+    EventType,
+    EventTypeFilter,
+    ExcludeFilter,
+    IncludeOnlyFilter,
+    METEORA_DAMM_V2_FILTER_TYPES,
+    METEORA_DLMM_FILTER_TYPES,
+    METEORA_POOLS_FILTER_TYPES,
+    ORCA_WHIRLPOOL_FILTER_TYPES,
+    PUMP_FEES_EVENT_TYPES,
+    PUMPFUN_FILTER_TYPES,
+    PUMPSWAP_FILTER_TYPES,
+    RAYDIUM_AMM_V4_FILTER_TYPES,
+    RAYDIUM_CLMM_FILTER_TYPES,
+    RAYDIUM_CPMM_FILTER_TYPES,
+    RAYDIUM_LAUNCHLAB_FILTER_TYPES,
+)
+from .dex_parsers import Z, normalize_pumpfun_ix_name, read_pump_fees_fee_tiers_vec, read_pump_fees_shareholders_vec
 from .event_types import (
     DexEvent,
     PumpFeesCreateFeeSharingConfigEvent,
@@ -26,6 +43,18 @@ from .event_types import (
     PumpFunTradeEvent,
     PumpSwapBuyEvent,
     PumpSwapSellEvent,
+    MeteoraDlmmAddLiquidityEvent,
+    MeteoraDlmmClaimFeeEvent,
+    MeteoraDlmmClosePositionEvent,
+    MeteoraDlmmCreatePositionEvent,
+    MeteoraDlmmInitializeBinArrayEvent,
+    MeteoraDlmmInitializePoolEvent,
+    MeteoraDlmmRemoveLiquidityEvent,
+    MeteoraDlmmSwapEvent,
+    MeteoraPoolsAddLiquidityEvent,
+    MeteoraPoolsPoolCreatedEvent,
+    MeteoraPoolsRemoveLiquidityEvent,
+    MeteoraPoolsSwapEvent,
     legacy_dict_to_dex_event,
 )
 
@@ -33,13 +62,14 @@ from .event_types import (
 PUMPFUN_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
 PUMPSWAP_PROGRAM_ID = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
 METEORA_DAMM_V2_PROGRAM_ID = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG"
-RAYDIUM_CLMM_PROGRAM_ID = "CAMMCzo5YL8w4VFF8KVHrK22GGUQtcaMpgYqJPXBDvfE"
+RAYDIUM_CLMM_PROGRAM_ID = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
 RAYDIUM_CPMM_PROGRAM_ID = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
 RAYDIUM_AMM_V4_PROGRAM_ID = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
 ORCA_WHIRLPOOL_PROGRAM_ID = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
 METEORA_POOLS_PROGRAM_ID = "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB"
 METEORA_DLMM_PROGRAM_ID = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
-BONK_LAUNCHPAD_PROGRAM_ID = "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1"
+METEORA_DBC_PROGRAM_ID = "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN"
+RAYDIUM_LAUNCHLAB_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj"
 PUMPSWAP_FEES_PROGRAM_ID = "pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ"
 PUMP_FEES_PROGRAM_ID = PUMPSWAP_FEES_PROGRAM_ID
 
@@ -61,6 +91,11 @@ _DISC_DAMM_CREATE  = _d(156, 15, 119, 198, 29, 181, 221, 55)
 _DISC_DAMM_CLOSE   = _d(20, 145, 144, 68, 143, 142, 214, 178)
 _DISC_DAMM_INIT    = _d(228, 50, 246, 85, 203, 66, 134, 37)
 
+_DISC_METEORA_POOLS_SWAP = _d(248, 198, 158, 145, 225, 117, 135, 200)
+_DISC_METEORA_POOLS_ADD_LIQUIDITY = _d(181, 157, 89, 67, 143, 182, 52, 72)
+_DISC_METEORA_POOLS_REMOVE_LIQUIDITY = _d(80, 85, 209, 72, 24, 206, 177, 108)
+_DISC_METEORA_POOLS_CREATE_POOL = _d(95, 180, 10, 172, 84, 174, 232, 40)
+
 _DISC_CLMM_SWAP    = _d(248, 198, 158, 145, 225, 117, 135, 200)
 _DISC_CLMM_SWAP_V2 = _d(43, 4, 237, 11, 26, 201, 30, 98)
 _DISC_CLMM_INC_LIQ = _d(133, 29, 89, 223, 69, 238, 176, 10)
@@ -78,8 +113,17 @@ _DISC_ORCA_SWAP    = _d(225, 202, 73, 175, 147, 43, 160, 150)
 _DISC_ORCA_INC_LIQ = _d(30, 7, 144, 181, 102, 254, 155, 161)
 _DISC_ORCA_DEC_LIQ = _d(166, 1, 36, 71, 112, 202, 181, 171)
 
-_DISC_BONK_TRADE       = _d(2, 3, 4, 5, 6, 7, 8, 9)
-_DISC_BONK_POOL_CREATE = _d(1, 2, 3, 4, 5, 6, 7, 8)
+_DISC_RAYDIUM_LAUNCHLAB_TRADE       = _d(189, 219, 127, 211, 78, 230, 97, 238)
+_DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE = _d(151, 215, 226, 9, 118, 161, 115, 174)
+_IX_RAYDIUM_LAUNCHLAB_BUY_EXACT_IN = _d(250, 234, 13, 123, 213, 156, 19, 236)
+_IX_RAYDIUM_LAUNCHLAB_BUY_EXACT_OUT = _d(24, 211, 116, 40, 105, 3, 153, 56)
+_IX_RAYDIUM_LAUNCHLAB_INITIALIZE = _d(175, 175, 109, 31, 13, 152, 155, 237)
+_IX_RAYDIUM_LAUNCHLAB_INITIALIZE_V2 = _d(67, 153, 175, 39, 218, 16, 38, 32)
+_IX_RAYDIUM_LAUNCHLAB_INITIALIZE_WITH_TOKEN_2022 = _d(37, 190, 126, 222, 44, 154, 171, 17)
+_IX_RAYDIUM_LAUNCHLAB_MIGRATE_TO_AMM = _d(207, 82, 192, 145, 254, 207, 145, 223)
+_IX_RAYDIUM_LAUNCHLAB_MIGRATE_TO_CPSWAP = _d(136, 92, 200, 103, 28, 218, 144, 140)
+_IX_RAYDIUM_LAUNCHLAB_SELL_EXACT_IN = _d(149, 39, 222, 155, 211, 124, 152, 26)
+_IX_RAYDIUM_LAUNCHLAB_SELL_EXACT_OUT = _d(95, 200, 71, 34, 8, 9, 11, 166)
 
 _DISC_PFEES_CREATE_FEE_SHARING = _d(195, 78, 86, 76, 111, 52, 251, 213)
 _DISC_PFEES_INITIALIZE_FEE_CONFIG = _d(62, 162, 20, 133, 121, 65, 145, 27)
@@ -145,64 +189,111 @@ def parse_instruction_unified(
     if program_id == PUMPFUN_PROGRAM_ID:
         if not _filter_includes_pumpfun(filter):
             return None
-        return parse_pumpfun_instruction(
-            instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+        return _filter_parsed_event(
+            parse_pumpfun_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
         )
 
     elif program_id == PUMPSWAP_PROGRAM_ID:
         if not _filter_includes_pumpswap(filter):
             return None
-        return parse_pumpswap_instruction(
-            instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+        return _filter_parsed_event(
+            parse_pumpswap_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
         )
 
     elif program_id == METEORA_DAMM_V2_PROGRAM_ID:
         if not _filter_includes_meteora_damm_v2(filter):
             return None
-        return parse_meteora_damm_instruction(
-            instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+        return _filter_parsed_event(
+            parse_meteora_damm_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
+        )
+
+    elif program_id == METEORA_POOLS_PROGRAM_ID:
+        if not _filter_includes_meteora_pools(filter):
+            return None
+        return _filter_parsed_event(
+            parse_meteora_pools_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
+        )
+
+    elif program_id == METEORA_DLMM_PROGRAM_ID:
+        if not _filter_includes_meteora_dlmm(filter):
+            return None
+        return _filter_parsed_event(
+            parse_meteora_dlmm_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
         )
 
     elif program_id == PUMP_FEES_PROGRAM_ID:
         if not _filter_includes_pump_fees(filter):
             return None
-        return parse_pump_fees_instruction(
-            instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+        return _filter_parsed_event(
+            parse_pump_fees_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
         )
 
     elif program_id == RAYDIUM_CLMM_PROGRAM_ID:
         if not _filter_includes_raydium_clmm(filter):
             return None
-        return parse_raydium_clmm_instruction(
-            instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+        return _filter_parsed_event(
+            parse_raydium_clmm_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
         )
 
     elif program_id == RAYDIUM_CPMM_PROGRAM_ID:
         if not _filter_includes_raydium_cpmm(filter):
             return None
-        return parse_raydium_cpmm_instruction(
-            instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+        return _filter_parsed_event(
+            parse_raydium_cpmm_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
         )
 
     elif program_id == RAYDIUM_AMM_V4_PROGRAM_ID:
         if not _filter_includes_raydium_amm_v4(filter):
             return None
-        return parse_raydium_amm_v4_instruction(
-            instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+        return _filter_parsed_event(
+            parse_raydium_amm_v4_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
         )
 
     elif program_id == ORCA_WHIRLPOOL_PROGRAM_ID:
         if not _filter_includes_orca_whirlpool(filter):
             return None
-        return parse_orca_whirlpool_instruction(
-            instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+        return _filter_parsed_event(
+            parse_orca_whirlpool_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
         )
 
-    elif program_id == BONK_LAUNCHPAD_PROGRAM_ID:
-        if not _filter_includes_bonk(filter):
+    elif program_id == RAYDIUM_LAUNCHLAB_PROGRAM_ID:
+        if not _filter_includes_raydium_launchlab(filter):
             return None
-        return parse_bonk_instruction(
-            instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+        return _filter_parsed_event(
+            parse_raydium_launchlab_instruction(
+                instruction_data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us
+            ),
+            filter,
         )
 
     return None
@@ -265,6 +356,17 @@ def _u64_payload(data: bytes, offset: int) -> int:
     if offset + 8 <= len(data):
         return struct.unpack_from("<Q", data, offset)[0]
     return 0
+
+
+def _read_borsh_string(data: bytes, offset: int) -> tuple[str, int]:
+    if offset + 4 > len(data):
+        raise ValueError("short borsh string length")
+    size = struct.unpack_from("<I", data, offset)[0]
+    offset += 4
+    end = offset + size
+    if end > len(data):
+        raise ValueError("short borsh string data")
+    return data[offset:end].decode("utf-8", errors="replace"), end
 
 
 def _parse_pumpfun_legacy_buy(
@@ -389,7 +491,8 @@ def _parse_pumpfun_trade_v2(
     elif ix_name == "sell_v2":
         event_type = EventType.PUMP_FUN_SELL
     else:
-        event_type = EventType.PUMP_FUN_BUY_EXACT_SOL_IN
+        event_type = EventType.PUMP_FUN_BUY
+    normalized_ix_name = normalize_pumpfun_ix_name(ix_name)
 
     return DexEvent(
         type=event_type,
@@ -411,7 +514,7 @@ def _parse_pumpfun_trade_v2(
             fee_recipient=_get_account_safe(accounts, 6),
             is_buy=ix_name != "sell_v2",
             is_created_buy=False,
-            ix_name=ix_name,
+            ix_name=normalized_ix_name,
             associated_bonding_curve=_get_account_safe(accounts, 11),
             associated_user=_get_account_safe(accounts, 14),
             system_program=_get_account_safe(accounts, 23 if ix_name == "sell_v2" else 24),
@@ -481,6 +584,8 @@ def _parse_pumpfun_create(data: bytes, accounts: List[str], meta: EventMetadata)
             token_total_supply=0,
             is_mayhem_mode=False,
             is_cashback_enabled=False,
+            quote_mint=Z,
+            virtual_quote_reserves=0,
         ),
     )
 
@@ -551,6 +656,8 @@ def _parse_pumpfun_create_v2(data: bytes, accounts: List[str], meta: EventMetada
             token_total_supply=0,
             is_mayhem_mode=is_mayhem_mode,
             is_cashback_enabled=is_cashback_enabled,
+            quote_mint=Z,
+            virtual_quote_reserves=0,
             observed_fee_recipient="",
         ),
     )
@@ -688,6 +795,216 @@ def parse_meteora_damm_instruction(
         return legacy_dict_to_dex_event({"MeteoraDammV2ClosePosition": {"metadata": meta}})
     if discriminator == _DISC_DAMM_INIT:
         return legacy_dict_to_dex_event({"MeteoraDammV2InitializePool": {"metadata": meta}})
+
+    return None
+
+
+def parse_meteora_pools_instruction(
+    data: bytes,
+    accounts: List[str],
+    signature: str,
+    slot: int,
+    tx_index: int,
+    block_time_us: Optional[int],
+    grpc_recv_us: int,
+) -> Optional[DexEvent]:
+    if len(data) < 8:
+        return None
+    discriminator = struct.unpack_from("<Q", data, 0)[0]
+    payload = data[8:]
+    meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
+
+    if discriminator == _DISC_METEORA_POOLS_SWAP:
+        if len(payload) < 16 or not accounts:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_POOLS_SWAP,
+            data=MeteoraPoolsSwapEvent(
+                metadata=meta,
+                in_amount=struct.unpack_from("<Q", payload, 0)[0],
+                out_amount=struct.unpack_from("<Q", payload, 8)[0],
+                trade_fee=0,
+                admin_fee=0,
+                host_fee=0,
+            ),
+        )
+
+    if discriminator == _DISC_METEORA_POOLS_ADD_LIQUIDITY:
+        if len(payload) < 24 or not accounts:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_POOLS_ADD_LIQUIDITY,
+            data=MeteoraPoolsAddLiquidityEvent(
+                metadata=meta,
+                lp_mint_amount=struct.unpack_from("<Q", payload, 0)[0],
+                token_a_amount=struct.unpack_from("<Q", payload, 8)[0],
+                token_b_amount=struct.unpack_from("<Q", payload, 16)[0],
+            ),
+        )
+
+    if discriminator == _DISC_METEORA_POOLS_REMOVE_LIQUIDITY:
+        if len(payload) < 24 or not accounts:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_POOLS_REMOVE_LIQUIDITY,
+            data=MeteoraPoolsRemoveLiquidityEvent(
+                metadata=meta,
+                lp_unmint_amount=struct.unpack_from("<Q", payload, 0)[0],
+                token_a_out_amount=struct.unpack_from("<Q", payload, 8)[0],
+                token_b_out_amount=struct.unpack_from("<Q", payload, 16)[0],
+            ),
+        )
+
+    if discriminator == _DISC_METEORA_POOLS_CREATE_POOL:
+        if len(payload) < 1 + 6 * 8 or len(accounts) <= 9:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_POOLS_POOL_CREATED,
+            data=MeteoraPoolsPoolCreatedEvent(
+                metadata=meta,
+                lp_mint=accounts[4],
+                token_a_mint=accounts[8],
+                token_b_mint=accounts[9],
+                pool_type=payload[0],
+                pool=accounts[0],
+            ),
+        )
+
+    return None
+
+
+def parse_meteora_dlmm_instruction(
+    data: bytes,
+    accounts: List[str],
+    signature: str,
+    slot: int,
+    tx_index: int,
+    block_time_us: Optional[int],
+    grpc_recv_us: int,
+) -> Optional[DexEvent]:
+    if not data or not accounts:
+        return None
+    instruction_type = data[0]
+    payload = data[1:]
+    meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
+    pool = accounts[0]
+
+    if instruction_type == 0:
+        if len(payload) < 6:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_DLMM_INITIALIZE_POOL,
+            data=MeteoraDlmmInitializePoolEvent(
+                metadata=meta,
+                pool=pool,
+                creator=_get_account_safe(accounts, 1),
+                active_bin_id=struct.unpack_from("<i", payload, 0)[0],
+                bin_step=struct.unpack_from("<H", payload, 4)[0],
+            ),
+        )
+
+    if instruction_type == 1:
+        if len(payload) < 8:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_DLMM_INITIALIZE_BIN_ARRAY,
+            data=MeteoraDlmmInitializeBinArrayEvent(
+                metadata=meta,
+                pool=pool,
+                bin_array=_get_account_safe(accounts, 1),
+                index=struct.unpack_from("<Q", payload, 0)[0],
+            ),
+        )
+
+    if instruction_type == 2:
+        if len(payload) < 32:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_DLMM_ADD_LIQUIDITY,
+            data=MeteoraDlmmAddLiquidityEvent(
+                metadata=meta,
+                pool=pool,
+                from_addr=_get_account_safe(accounts, 1),
+                position=_get_account_safe(accounts, 2),
+                amounts=[0, 0],
+                active_bin_id=0,
+            ),
+        )
+
+    if instruction_type == 7:
+        if len(payload) < 32:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_DLMM_REMOVE_LIQUIDITY,
+            data=MeteoraDlmmRemoveLiquidityEvent(
+                metadata=meta,
+                pool=pool,
+                from_addr=_get_account_safe(accounts, 1),
+                position=_get_account_safe(accounts, 2),
+                amounts=[0, 0],
+                active_bin_id=0,
+            ),
+        )
+
+    if instruction_type == 8:
+        if len(payload) < 8:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_DLMM_CREATE_POSITION,
+            data=MeteoraDlmmCreatePositionEvent(
+                metadata=meta,
+                pool=pool,
+                position=_get_account_safe(accounts, 1),
+                owner=_get_account_safe(accounts, 2),
+                lower_bin_id=struct.unpack_from("<i", payload, 0)[0],
+                width=struct.unpack_from("<I", payload, 4)[0],
+            ),
+        )
+
+    if instruction_type == 11:
+        if len(payload) < 16:
+            return None
+        return DexEvent(
+            type=EventType.METEORA_DLMM_SWAP,
+            data=MeteoraDlmmSwapEvent(
+                metadata=meta,
+                pool=pool,
+                from_addr=_get_account_safe(accounts, 1),
+                start_bin_id=0,
+                end_bin_id=0,
+                amount_in=struct.unpack_from("<Q", payload, 0)[0],
+                amount_out=0,
+                swap_for_y=False,
+                fee=0,
+                protocol_fee=0,
+                fee_bps="0",
+                host_fee=0,
+            ),
+        )
+
+    if instruction_type == 13:
+        return DexEvent(
+            type=EventType.METEORA_DLMM_CLAIM_FEE,
+            data=MeteoraDlmmClaimFeeEvent(
+                metadata=meta,
+                pool=pool,
+                position=_get_account_safe(accounts, 1),
+                owner=_get_account_safe(accounts, 2),
+                fee_x=0,
+                fee_y=0,
+            ),
+        )
+
+    if instruction_type == 14:
+        return DexEvent(
+            type=EventType.METEORA_DLMM_CLOSE_POSITION,
+            data=MeteoraDlmmClosePositionEvent(
+                metadata=meta,
+                pool=pool,
+                position=_get_account_safe(accounts, 1),
+                owner=_get_account_safe(accounts, 2),
+            ),
+        )
 
     return None
 
@@ -1103,7 +1420,7 @@ def parse_orca_whirlpool_instruction(
     return None
 
 
-def parse_bonk_instruction(
+def parse_raydium_launchlab_instruction(
     data: bytes,
     accounts: List[str],
     signature: str,
@@ -1112,143 +1429,169 @@ def parse_bonk_instruction(
     block_time_us: Optional[int],
     grpc_recv_us: int,
 ) -> Optional[DexEvent]:
-    """解析 Bonk (Raydium Launchpad) 指令"""
+    """解析 Raydium LaunchLab 指令"""
     if len(data) < 8:
         return None
 
     discriminator = struct.unpack_from("<Q", data, 0)[0]
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
+    payload = data[8:]
 
-    if discriminator == _DISC_BONK_TRADE:
-        return legacy_dict_to_dex_event({"BonkTrade": {
+    if discriminator == _DISC_RAYDIUM_LAUNCHLAB_TRADE:
+        if len(payload) < 139:
+            return None
+        return legacy_dict_to_dex_event({"RaydiumLaunchlabTrade": {
             "metadata": meta,
-            "pool_state": _get_account_safe(accounts, 1),
+            "pool_state": base58.b58encode(payload[0:32]).decode("ascii"),
+            "user": Z,
+            "amount_in": _u64_payload(payload, 88),
+            "amount_out": _u64_payload(payload, 96),
+            "is_buy": payload[136] == 0,
+            "trade_direction": "Buy" if payload[136] == 0 else "Sell",
+            "exact_in": payload[138] == 1,
+        }})
+    if discriminator == _DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE:
+        if len(payload) < 97:
+            return None
+        try:
+            offset = 97
+            name, offset = _read_borsh_string(payload, offset)
+            symbol, offset = _read_borsh_string(payload, offset)
+            uri, _ = _read_borsh_string(payload, offset)
+        except ValueError:
+            return None
+        return legacy_dict_to_dex_event({"RaydiumLaunchlabPoolCreate": {
+            "metadata": meta,
+            "base_mint_param": {"symbol": symbol, "name": name, "uri": uri, "decimals": payload[96]},
+            "pool_state": base58.b58encode(payload[0:32]).decode("ascii"),
+            "creator": base58.b58encode(payload[32:64]).decode("ascii"),
+        }})
+    if discriminator in (
+        _IX_RAYDIUM_LAUNCHLAB_BUY_EXACT_IN,
+        _IX_RAYDIUM_LAUNCHLAB_BUY_EXACT_OUT,
+        _IX_RAYDIUM_LAUNCHLAB_SELL_EXACT_IN,
+        _IX_RAYDIUM_LAUNCHLAB_SELL_EXACT_OUT,
+    ):
+        first = _u64_payload(payload, 0)
+        second = _u64_payload(payload, 8)
+        exact_in = discriminator in (
+            _IX_RAYDIUM_LAUNCHLAB_BUY_EXACT_IN,
+            _IX_RAYDIUM_LAUNCHLAB_SELL_EXACT_IN,
+        )
+        is_buy = discriminator in (
+            _IX_RAYDIUM_LAUNCHLAB_BUY_EXACT_IN,
+            _IX_RAYDIUM_LAUNCHLAB_BUY_EXACT_OUT,
+        )
+        amount_in, amount_out = (first, second) if exact_in else (second, first)
+        return legacy_dict_to_dex_event({"RaydiumLaunchlabTrade": {
+            "metadata": meta,
+            "pool_state": _get_account_safe(accounts, 4),
             "user": _get_account_safe(accounts, 0),
-            "amount_in": 0, "amount_out": 0,
-            "is_buy": True, "trade_direction": "Buy", "exact_in": True,
+            "amount_in": amount_in,
+            "amount_out": amount_out,
+            "is_buy": is_buy,
+            "trade_direction": "Buy" if is_buy else "Sell",
+            "exact_in": exact_in,
         }})
-    if discriminator == _DISC_BONK_POOL_CREATE:
-        return legacy_dict_to_dex_event({"BonkPoolCreate": {
+    if discriminator in (
+        _IX_RAYDIUM_LAUNCHLAB_INITIALIZE,
+        _IX_RAYDIUM_LAUNCHLAB_INITIALIZE_V2,
+        _IX_RAYDIUM_LAUNCHLAB_INITIALIZE_WITH_TOKEN_2022,
+    ):
+        if not payload:
+            return None
+        try:
+            offset = 1
+            name, offset = _read_borsh_string(payload, offset)
+            symbol, offset = _read_borsh_string(payload, offset)
+            uri, _ = _read_borsh_string(payload, offset)
+        except ValueError:
+            return None
+        return legacy_dict_to_dex_event({"RaydiumLaunchlabPoolCreate": {
             "metadata": meta,
-            "base_mint_param": {"symbol": "BONK", "name": "Bonk Pool", "uri": "https://bonk.com", "decimals": 5},
-            "pool_state": _get_account_safe(accounts, 1),
-            "creator": _get_account_safe(accounts, 8),
+            "base_mint_param": {"symbol": symbol, "name": name, "uri": uri, "decimals": payload[0]},
+            "pool_state": _get_account_safe(accounts, 5),
+            "creator": _get_account_safe(accounts, 1),
         }})
+    if discriminator in (
+        _IX_RAYDIUM_LAUNCHLAB_MIGRATE_TO_AMM,
+        _IX_RAYDIUM_LAUNCHLAB_MIGRATE_TO_CPSWAP,
+    ):
+        return None
 
     return None
 
 
 # --- 过滤器辅助函数 ---
 
-def _filter_includes_any(filter: Optional[EventTypeFilter], types: List[EventType]) -> bool:
+def _types_intersect(left: Sequence[EventType], right: Sequence[EventType]) -> bool:
+    return any(t in right for t in left)
+
+
+def _filter_includes_any(
+    filter: Optional[EventTypeFilter],
+    types: Sequence[EventType],
+) -> bool:
     if filter is None:
         return True
     if isinstance(filter, IncludeOnlyFilter):
-        return any(t in types for t in filter.include_only)
+        return _types_intersect(filter.include_only, types)
     if isinstance(filter, ExcludeFilter):
-        return not any(t in types for t in filter.exclude_types)
+        return any(filter.should_include(t) for t in types)
     return any(filter.should_include(t) for t in types)
 
 
+def _filter_parsed_event(
+    ev: Optional[DexEvent],
+    filter: Optional[EventTypeFilter],
+) -> Optional[DexEvent]:
+    if ev is None or filter is None:
+        return ev
+    return ev if filter.should_include(ev.type) else None
+
+
 def _filter_includes_pumpfun(filter: Optional[EventTypeFilter]) -> bool:
-    pumpfun_types = [
-        EventType.PUMP_FUN_TRADE, EventType.PUMP_FUN_BUY, EventType.PUMP_FUN_SELL,
-        EventType.PUMP_FUN_BUY_EXACT_SOL_IN, EventType.PUMP_FUN_CREATE,
-        EventType.PUMP_FUN_CREATE_V2, EventType.PUMP_FUN_COMPLETE, EventType.PUMP_FUN_MIGRATE,
-        EventType.PUMP_FEES_CREATE_FEE_SHARING_CONFIG,
-        EventType.PUMP_FEES_INITIALIZE_FEE_CONFIG,
-        EventType.PUMP_FEES_RESET_FEE_SHARING_CONFIG,
-        EventType.PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY,
-        EventType.PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY,
-        EventType.PUMP_FEES_UPDATE_ADMIN,
-        EventType.PUMP_FEES_UPDATE_FEE_CONFIG,
-        EventType.PUMP_FEES_UPDATE_FEE_SHARES,
-        EventType.PUMP_FEES_UPSERT_FEE_TIERS,
-        EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
-        EventType.ACCOUNT_PUMP_FUN_GLOBAL,
-        EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
-        EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
-        EventType.ACCOUNT_PUMP_FUN_SHARING_CONFIG,
-        EventType.ACCOUNT_PUMP_FUN_GLOBAL_VOLUME_ACCUMULATOR,
-        EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
-    ]
-    return _filter_includes_any(filter, pumpfun_types)
+    return _filter_includes_any(filter, PUMPFUN_FILTER_TYPES)
 
 
 def _filter_includes_pump_fees(filter: Optional[EventTypeFilter]) -> bool:
-    types = [
-        EventType.PUMP_FEES_CREATE_FEE_SHARING_CONFIG,
-        EventType.PUMP_FEES_INITIALIZE_FEE_CONFIG,
-        EventType.PUMP_FEES_RESET_FEE_SHARING_CONFIG,
-        EventType.PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY,
-        EventType.PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY,
-        EventType.PUMP_FEES_UPDATE_ADMIN,
-        EventType.PUMP_FEES_UPDATE_FEE_CONFIG,
-        EventType.PUMP_FEES_UPDATE_FEE_SHARES,
-        EventType.PUMP_FEES_UPSERT_FEE_TIERS,
-    ]
-    return _filter_includes_any(filter, types)
+    return _filter_includes_any(filter, PUMP_FEES_EVENT_TYPES)
 
 
 def _filter_includes_pumpswap(filter: Optional[EventTypeFilter]) -> bool:
-    pumpswap_types = [
-        EventType.PUMP_SWAP_BUY, EventType.PUMP_SWAP_SELL,
-        EventType.PUMP_SWAP_CREATE_POOL, EventType.PUMP_SWAP_LIQUIDITY_ADDED,
-        EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
-    ]
-    return _filter_includes_any(filter, pumpswap_types)
+    return _filter_includes_any(filter, PUMPSWAP_FILTER_TYPES)
 
 
 def _filter_includes_meteora_damm_v2(filter: Optional[EventTypeFilter]) -> bool:
-    meteora_types = [
-        EventType.METEORA_DAMM_V2_SWAP, EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
-        EventType.METEORA_DAMM_V2_CREATE_POSITION, EventType.METEORA_DAMM_V2_CLOSE_POSITION,
-        EventType.METEORA_DAMM_V2_INITIALIZE_POOL, EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
-    ]
-    return _filter_includes_any(filter, meteora_types)
+    return _filter_includes_any(filter, METEORA_DAMM_V2_FILTER_TYPES)
+
+
+def _filter_includes_meteora_pools(filter: Optional[EventTypeFilter]) -> bool:
+    return _filter_includes_any(filter, METEORA_POOLS_FILTER_TYPES)
+
+
+def _filter_includes_meteora_dlmm(filter: Optional[EventTypeFilter]) -> bool:
+    return _filter_includes_any(filter, METEORA_DLMM_FILTER_TYPES)
 
 
 def _filter_includes_raydium_clmm(filter: Optional[EventTypeFilter]) -> bool:
-    types = [
-        EventType.RAYDIUM_CLMM_SWAP, EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
-        EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY, EventType.RAYDIUM_CLMM_CREATE_POOL,
-        EventType.RAYDIUM_CLMM_OPEN_POSITION, EventType.RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT,
-        EventType.RAYDIUM_CLMM_CLOSE_POSITION,
-        EventType.RAYDIUM_CLMM_COLLECT_FEE,
-    ]
-    return _filter_includes_any(filter, types)
+    return _filter_includes_any(filter, RAYDIUM_CLMM_FILTER_TYPES)
 
 
 def _filter_includes_raydium_cpmm(filter: Optional[EventTypeFilter]) -> bool:
-    types = [
-        EventType.RAYDIUM_CPMM_SWAP, EventType.RAYDIUM_CPMM_DEPOSIT,
-        EventType.RAYDIUM_CPMM_WITHDRAW, EventType.RAYDIUM_CPMM_INITIALIZE,
-    ]
-    return _filter_includes_any(filter, types)
+    return _filter_includes_any(filter, RAYDIUM_CPMM_FILTER_TYPES)
 
 
 def _filter_includes_raydium_amm_v4(filter: Optional[EventTypeFilter]) -> bool:
-    types = [
-        EventType.RAYDIUM_AMM_V4_SWAP, EventType.RAYDIUM_AMM_V4_DEPOSIT,
-        EventType.RAYDIUM_AMM_V4_WITHDRAW, EventType.RAYDIUM_AMM_V4_WITHDRAW_PNL,
-        EventType.RAYDIUM_AMM_V4_INITIALIZE2,
-    ]
-    return _filter_includes_any(filter, types)
+    return _filter_includes_any(filter, RAYDIUM_AMM_V4_FILTER_TYPES)
 
 
 def _filter_includes_orca_whirlpool(filter: Optional[EventTypeFilter]) -> bool:
-    types = [
-        EventType.ORCA_WHIRLPOOL_SWAP, EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED,
-        EventType.ORCA_WHIRLPOOL_LIQUIDITY_DECREASED, EventType.ORCA_WHIRLPOOL_POOL_INITIALIZED,
-    ]
-    return _filter_includes_any(filter, types)
+    return _filter_includes_any(filter, ORCA_WHIRLPOOL_FILTER_TYPES)
 
 
-def _filter_includes_bonk(filter: Optional[EventTypeFilter]) -> bool:
-    types = [
-        EventType.BONK_TRADE, EventType.BONK_POOL_CREATE, EventType.BONK_MIGRATE_AMM,
-    ]
-    return _filter_includes_any(filter, types)
+def _filter_includes_raydium_launchlab(filter: Optional[EventTypeFilter]) -> bool:
+    return _filter_includes_any(filter, RAYDIUM_LAUNCHLAB_FILTER_TYPES)
 
 
 __all__ = [
@@ -1256,10 +1599,12 @@ __all__ = [
     "parse_pumpfun_instruction",
     "parse_pumpswap_instruction",
     "parse_meteora_damm_instruction",
+    "parse_meteora_pools_instruction",
+    "parse_meteora_dlmm_instruction",
     "parse_pump_fees_instruction",
     "parse_raydium_clmm_instruction",
     "parse_raydium_cpmm_instruction",
     "parse_raydium_amm_v4_instruction",
     "parse_orca_whirlpool_instruction",
-    "parse_bonk_instruction",
+    "parse_raydium_launchlab_instruction",
 ]

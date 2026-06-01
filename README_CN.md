@@ -49,6 +49,18 @@
 
 ---
 
+## 发布说明
+
+### v0.5.5
+
+- ShredStream 低延迟静态账户路径与 Rust/Node.js/Go 对齐。
+- V0 ALT-loaded 指令账户不再整条跳过，而是用默认 pubkey 占位继续 best-effort 解析。
+- 当 ShredStream 外层 program id 来自 ALT 时，按 discriminator 做候选 program id fallback。
+- 修复 Pump.fun ShredStream create/create_v2 fallback，确保按 instruction-order 账户解析。
+- 改进 Pump.fun v2 短账户解析、事件类型过滤和多协议路由一致性。
+
+---
+
 ## 怎么用
 
 ### 1. 安装
@@ -56,7 +68,7 @@
 **PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.4.5
+pip install sol-parser-sdk-python==0.5.5
 ```
 
 **源码**
@@ -159,7 +171,9 @@ asyncio.run(main())
 
 ### 5. ShredStream（HTTP，不是 Yellowstone gRPC）
 
-Node 版提供 ShredStream HTTP 客户端。**Python** 侧提供与 Node 相同的配置方式（`parse_shredstream_url`：`SHREDSTREAM_URL` / `SHRED_URL`，`--url` / `-u` / `--endpoint=`）；原生 ShredStream 客户端后续可能补充。**不要**用 `GRPC_URL` 配 ShredStream。
+Python 已提供原生 ShredStream 客户端（`ShredStreamClient`、`ShredStreamConfig`），并保留与 Node 相同的配置方式（`parse_shredstream_url`：`SHREDSTREAM_URL` / `SHRED_URL`，`--url` / `-u` / `--endpoint=`）。安装可选依赖：`pip install 'sol-parser-sdk-python[shredstream]'`。ShredStream 使用独立端点，**不要**用 `GRPC_URL`。
+
+Python ShredStream 热路径只使用静态账户表。V0 ALT-loaded 指令账户会用默认 pubkey 占位，外层 program id 若来自 ALT 会按 discriminator best-effort 解析。Inner CPI / 仅日志事件仍需 Yellowstone/RPC 路径。
 
 ---
 
@@ -189,7 +203,7 @@ Node 版提供 ShredStream HTTP 客户端。**Python** 侧提供与 Node 相同�
 
 ## 协议
 
-PumpFun、PumpSwap、Raydium AMM V4 / CLMM / CPMM、Orca Whirlpool、Meteora DAMM V2 / DLMM、Bonk Launchpad（见 `sol_parser/`）。
+PumpFun、PumpSwap、Raydium AMM V4 / CLMM / CPMM、Orca Whirlpool、Meteora DAMM V2 / DLMM、Raydium LaunchLab（见 `sol_parser/`）。
 
 ---
 

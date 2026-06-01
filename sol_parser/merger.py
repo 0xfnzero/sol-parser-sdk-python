@@ -38,7 +38,7 @@ from .event_types import (
     OrcaWhirlpoolLiquidityDecreasedEvent,
     OrcaWhirlpoolLiquidityIncreasedEvent,
     OrcaWhirlpoolSwapEvent,
-    BonkTradeEvent,
+    RaydiumLaunchlabTradeEvent,
 )
 from .grpc_types import EventType
 
@@ -166,6 +166,8 @@ def merge_pumpfun_create(base: PumpFunCreateEvent, inner: PumpFunCreateEvent) ->
     base.token_program = inner.token_program
     base.is_mayhem_mode = inner.is_mayhem_mode
     base.is_cashback_enabled = inner.is_cashback_enabled
+    base.quote_mint = inner.quote_mint
+    base.virtual_quote_reserves = inner.virtual_quote_reserves
 
 
 def merge_pumpfun_migrate(base: PumpFunMigrateEvent, inner: PumpFunMigrateEvent) -> None:
@@ -300,6 +302,6 @@ def merge_dex_events(base: DexEvent, inner: DexEvent) -> None:
         _merge_generic(bd, ind)
         return
 
-    if isinstance(bd, BonkTradeEvent) and isinstance(ind, BonkTradeEvent):
+    if isinstance(bd, RaydiumLaunchlabTradeEvent) and isinstance(ind, RaydiumLaunchlabTradeEvent):
         _merge_generic(bd, ind)
         return

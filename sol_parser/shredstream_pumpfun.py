@@ -1,10 +1,11 @@
-"""ShredStream 路径下的 PumpFun 外层指令：mint 检测与 Buy/Sell/BuyExactSolIn（对齐 Rust ``shredstream/client``）。"""
+"""ShredStream 路径下的 PumpFun 外层指令：静态账户 best-effort 解析（对齐 Rust ``shredstream``）。"""
 
 from __future__ import annotations
 
 import struct
 from typing import List, Set, Tuple
 
+from .dex_parsers import Z, normalize_pumpfun_ix_name
 from .event_types import DexEvent, PumpFunTradeEvent
 from .grpc_types import EventMetadata, EventType
 from .instructions import PUMPFUN_PROGRAM_ID, parse_pumpfun_instruction
@@ -24,8 +25,12 @@ def _get_acct(accounts: List[str], ix_accounts: bytes, idx: int) -> str:
         return ""
     ai = ix_accounts[idx]
     if ai >= len(accounts):
-        return ""
+        return Z
     return accounts[ai]
+
+
+def _ordered_ix_accounts(accounts: List[str], ix_accounts: bytes) -> List[str]:
+    return [_get_acct(accounts, ix_accounts, i) for i in range(len(ix_accounts))]
 
 
 def _parse_create_v2_mayhem(data_after_disc: bytes) -> bool:
@@ -81,6 +86,19 @@ def _token_program_default(tp: str) -> str:
     return tp
 
 
+def _pumpfun_trade_event_type(ix_name: str) -> EventType:
+    normalized = normalize_pumpfun_ix_name(ix_name)
+    if normalized == "buy":
+        return EventType.PUMP_FUN_BUY
+    if normalized == "sell":
+        return EventType.PUMP_FUN_SELL
+    if normalized == "buy_exact_sol_in":
+        return EventType.PUMP_FUN_BUY_EXACT_SOL_IN
+    if normalized == "buy_exact_quote_in":
+        return EventType.PUMP_FUN_BUY
+    return EventType.PUMP_FUN_TRADE
+
+
 def parse_pumpfun_buy(
     data: bytes,
     accounts: List[str],
@@ -92,7 +110,7 @@ def parse_pumpfun_buy(
     created_mints: Set[str],
     mayhem_mints: Set[str],
 ) -> DexEvent | None:
-    if len(ix_accounts) < 7 or len(data) < 8:
+    if len(ix_accounts) < 16 or len(data) < 8:
         return None
     payload = data[8:]
     ta = struct.unpack_from("<Q", payload, 0)[0] if len(payload) >= 8 else 0
@@ -102,7 +120,7 @@ def parse_pumpfun_buy(
         return None
     m = _meta(sig, slot, tx_index, recv_us)
     return DexEvent(
-        type=EventType.PUMP_FUN_TRADE,
+        type=EventType.PUMP_FUN_BUY,
         data=PumpFunTradeEvent(
             metadata=m,
             mint=mint,
@@ -131,7 +149,7 @@ def parse_pumpfun_sell(
     tx_index: int,
     recv_us: int,
 ) -> DexEvent | None:
-    if len(ix_accounts) < 7 or len(data) < 8:
+    if len(ix_accounts) < 14 or len(data) < 8:
         return None
     payload = data[8:]
     ta = struct.unpack_from("<Q", payload, 0)[0] if len(payload) >= 8 else 0
@@ -141,7 +159,7 @@ def parse_pumpfun_sell(
         return None
     m = _meta(sig, slot, tx_index, recv_us)
     return DexEvent(
-        type=EventType.PUMP_FUN_TRADE,
+        type=EventType.PUMP_FUN_SELL,
         data=PumpFunTradeEvent(
             metadata=m,
             mint=mint,
@@ -171,7 +189,7 @@ def parse_pumpfun_buy_exact_sol_in(
     created_mints: Set[str],
     mayhem_mints: Set[str],
 ) -> DexEvent | None:
-    if len(ix_accounts) < 7 or len(data) < 8:
+    if len(ix_accounts) < 16 or len(data) < 8:
         return None
     payload = data[8:]
     sa = struct.unpack_from("<Q", payload, 0)[0] if len(payload) >= 8 else 0
@@ -181,7 +199,7 @@ def parse_pumpfun_buy_exact_sol_in(
         return None
     m = _meta(sig, slot, tx_index, recv_us)
     return DexEvent(
-        type=EventType.PUMP_FUN_TRADE,
+        type=EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
         data=PumpFunTradeEvent(
             metadata=m,
             mint=mint,
@@ -213,8 +231,7 @@ def parse_pumpfun_trade_v2(
     created_mints: Set[str],
     mayhem_mints: Set[str],
 ) -> DexEvent | None:
-    min_accounts = 26 if ix_name == "sell_v2" else 27
-    if len(ix_accounts) < min_accounts or len(data) < 8:
+    if len(data) < 8:
         return None
     payload = data[8:]
     first = struct.unpack_from("<Q", payload, 0)[0] if len(payload) >= 8 else 0
@@ -223,11 +240,12 @@ def parse_pumpfun_trade_v2(
         sol_amount, token_amount = first, second
     else:
         token_amount, sol_amount = first, second
+    normalized_ix_name = normalize_pumpfun_ix_name(ix_name)
     mint = _get_acct(accounts, ix_accounts, 1)
     if not mint:
         return None
     return DexEvent(
-        type=EventType.PUMP_FUN_TRADE,
+        type=_pumpfun_trade_event_type(ix_name),
         data=PumpFunTradeEvent(
             metadata=_meta(sig, slot, tx_index, recv_us),
             mint=mint,
@@ -244,7 +262,7 @@ def parse_pumpfun_trade_v2(
             fee_recipient=_get_acct(accounts, ix_accounts, 6),
             is_buy=ix_name != "sell_v2",
             is_created_buy=mint in created_mints,
-            ix_name=ix_name,
+            ix_name=normalized_ix_name,
             mayhem_mode=mint in mayhem_mints,
             associated_bonding_curve=_get_acct(accounts, ix_accounts, 11),
             token_program=_token_program_default(_get_acct(accounts, ix_accounts, 3)),
@@ -299,4 +317,12 @@ def parse_pumpfun_shred_ix(
         return parse_pumpfun_trade_v2(
             "sell_v2", data, accounts, ix_accounts, sig, slot, tx_index, recv_us, created_mints, mayhem_mints
         )
-    return parse_pumpfun_instruction(data, accounts, sig, slot, tx_index, None, recv_us)
+    return parse_pumpfun_instruction(
+        data,
+        _ordered_ix_accounts(accounts, ix_accounts),
+        sig,
+        slot,
+        tx_index,
+        None,
+        recv_us,
+    )

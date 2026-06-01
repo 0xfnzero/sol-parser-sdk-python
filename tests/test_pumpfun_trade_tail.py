@@ -1,9 +1,10 @@
 import base58
 
-from sol_parser.dex_parsers import parse_trade_from_data
-from sol_parser.event_types import DexEvent, PumpFunTradeEvent, to_typed_event
+from sol_parser.dex_parsers import parse_create_from_data, parse_trade_from_data
+from sol_parser.event_types import DexEvent, PumpFunCreateEvent, PumpFunCreateV2TokenEvent, PumpFunTradeEvent, to_typed_event
 from sol_parser.grpc_types import EventType
 from sol_parser.merger import merge_dex_events
+from sol_parser.pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
 
 def _pk(seed: int) -> bytes:
@@ -75,7 +76,7 @@ def test_pumpfun_trade_parser_keeps_quote_tail_fields() -> None:
 
     ev = parse_trade_from_data(data, {"signature": "sig", "slot": 1}, False)
 
-    assert ev.type == EventType.PUMP_FUN_BUY_EXACT_SOL_IN
+    assert ev.type == EventType.PUMP_FUN_BUY
     t = ev.data
     assert t.quote_mint == base58.b58encode(quote_mint).decode()
     assert t.quote_amount == 700
@@ -85,6 +86,83 @@ def test_pumpfun_trade_parser_keeps_quote_tail_fields() -> None:
     assert t.buyback_fee == 600
     assert t.shareholders[0].address == base58.b58encode(shareholder).decode()
     assert t.shareholders[0].share_bps == 2500
+
+
+def test_pumpfun_create_parser_keeps_quote_tail_fields() -> None:
+    quote_mint = _pk(90)
+    data = b"".join(
+        [
+            _str("Name"),
+            _str("SYM"),
+            _str("https://example.invalid/meta.json"),
+            _pk(1),
+            _pk(2),
+            _pk(3),
+            _pk(4),
+            _i64(123),
+            _u64(1_073_000_000_000_000),
+            _u64(30_000_000_000),
+            _u64(793_100_000_000_000),
+            _u64(1_000_000_000_000_000),
+            _pk(5),
+            b"\x00",
+            b"\x01",
+            quote_mint,
+            _u64(4_292_000_000),
+        ]
+    )
+
+    ev = parse_create_from_data(data, {"signature": "sig", "slot": 1})
+
+    assert ev.type == EventType.PUMP_FUN_CREATE
+    create = ev.data
+    assert create.quote_mint == base58.b58encode(quote_mint).decode()
+    assert create.virtual_quote_reserves == 4_292_000_000
+    assert create.is_cashback_enabled is True
+
+
+def test_post_merge_enriches_create_v2_from_create_event() -> None:
+    events = [
+        DexEvent(
+            type=EventType.PUMP_FUN_CREATE_V2,
+            data=PumpFunCreateV2TokenEvent(
+                name="ix-name",
+                mint="mint",
+            ),
+        ),
+        DexEvent(
+            type=EventType.PUMP_FUN_CREATE,
+            data=PumpFunCreateEvent(
+                name="event-name",
+                symbol="EVT",
+                uri="uri",
+                mint="mint",
+                bonding_curve="curve",
+                user="user",
+                creator="creator",
+                timestamp=123,
+                virtual_token_reserves=1,
+                virtual_sol_reserves=30_000_000_000,
+                real_token_reserves=2,
+                token_total_supply=3,
+                token_program="token-program",
+                is_mayhem_mode=True,
+                is_cashback_enabled=True,
+                quote_mint="USDC",
+                virtual_quote_reserves=4_292_000_000,
+            ),
+        ),
+    ]
+
+    enrich_pumpfun_same_tx_post_merge(events)
+
+    create_v2 = events[0].data
+    assert create_v2.name == "ix-name"
+    assert create_v2.quote_mint == "USDC"
+    assert create_v2.virtual_quote_reserves == 4_292_000_000
+    assert create_v2.virtual_sol_reserves == 30_000_000_000
+    assert create_v2.is_cashback_enabled is True
+    assert create_v2.is_mayhem_mode is True
 
 
 def test_merge_does_not_clobber_quote_tail_with_defaults() -> None:

@@ -11,7 +11,9 @@ from .dex_parsers import (
     apply_event_type_filter,
     dispatch_program_data,
     event_type_for_discriminator,
+    event_type_for_program_discriminator,
     filter_allows_unknown_log_event,
+    filter_includes_program,
     parse_trade_from_data,
 )
 
@@ -71,6 +73,7 @@ def parse_log_optimized(
     event_type_filter: Any = None,
     is_created_buy: bool = False,
     recent_blockhash: str = "",
+    program_id: Optional[str] = None,
 ) -> Optional[DexEvent]:
     """单次 base64 decode 后按 discriminator 做 early filter，再按实际事件类型二次过滤。"""
     grpc = int(time.time() * 1_000_000) if grpc_recv_us is None else grpc_recv_us
@@ -79,18 +82,83 @@ def parse_log_optimized(
         return None
     disc = _disc8(buf[:8])
     if event_type_filter is not None:
-        event_type = event_type_for_discriminator(disc)
+        event_type = event_type_for_program_discriminator(program_id, disc)
         if event_type is not None:
             if not event_type_filter.should_include(event_type):
+                return None
+        elif program_id:
+            if not filter_includes_program(event_type_filter, program_id):
                 return None
         elif not filter_allows_unknown_log_event(event_type_filter):
             return None
     data = buf[8:]
     meta = _meta(signature, slot, tx_index, block_time_us, grpc, recent_blockhash)
     return apply_event_type_filter(
-        dispatch_program_data(disc, data, buf, meta, is_created_buy),
+        dispatch_program_data(disc, data, buf, meta, is_created_buy, program_id),
         event_type_filter,
     )
+
+
+def parse_log_optimized_with_program_id(
+    log: str,
+    signature: str,
+    slot: int,
+    tx_index: int = 0,
+    block_time_us: Optional[int] = None,
+    grpc_recv_us: Optional[int] = None,
+    event_type_filter: Any = None,
+    is_created_buy: bool = False,
+    recent_blockhash: str = "",
+    program_id: Optional[str] = None,
+) -> Optional[DexEvent]:
+    return parse_log_optimized(
+        log,
+        signature,
+        slot,
+        tx_index,
+        block_time_us,
+        grpc_recv_us,
+        event_type_filter,
+        is_created_buy,
+        recent_blockhash,
+        program_id,
+    )
+
+
+def parse_invoke_info(log: str) -> Optional[tuple[str, int]]:
+    prefix = "Program "
+    start = log.find(prefix)
+    if start < 0:
+        return None
+    marker = " invoke ["
+    mid = log.find(marker, start + len(prefix))
+    if mid < 0:
+        return None
+    end = log.find("]", mid + len(marker))
+    if end < 0:
+        return None
+    program_id = log[start + len(prefix):mid]
+    try:
+        depth = int(log[mid + len(marker):end])
+    except ValueError:
+        return None
+    if not program_id or depth <= 0:
+        return None
+    return program_id, depth
+
+
+def parse_program_complete_info(log: str) -> Optional[str]:
+    prefix = "Program "
+    start = log.find(prefix)
+    if start < 0:
+        return None
+    success = log.find(" success", start + len(prefix))
+    if success >= 0:
+        return log[start + len(prefix):success]
+    failed = log.find(" failed:", start + len(prefix))
+    if failed >= 0:
+        return log[start + len(prefix):failed]
+    return None
 
 
 def parse_log_unified(

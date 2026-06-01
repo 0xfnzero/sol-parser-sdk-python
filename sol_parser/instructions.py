@@ -24,6 +24,7 @@ from .grpc_types import (
     RAYDIUM_CLMM_FILTER_TYPES,
     RAYDIUM_CPMM_FILTER_TYPES,
     RAYDIUM_LAUNCHLAB_FILTER_TYPES,
+    event_type_filter_allows_instruction_parsing,
 )
 from .dex_parsers import Z, normalize_pumpfun_ix_name, read_pump_fees_fee_tiers_vec, read_pump_fees_shareholders_vec
 from .event_types import (
@@ -176,7 +177,7 @@ def parse_instruction_unified(
     tx_index: int,
     block_time_us: Optional[int],
     grpc_recv_us: int,
-    filter: EventTypeFilter,
+    filter: Optional[EventTypeFilter],
     program_id: str,
 ) -> Optional[DexEvent]:
     """统一的指令解析入口
@@ -184,6 +185,10 @@ def parse_instruction_unified(
     对齐 Rust `parse_instruction_unified`
     """
     if not instruction_data:
+        return None
+    if isinstance(filter, IncludeOnlyFilter) and not event_type_filter_allows_instruction_parsing(
+        filter.include_only
+    ):
         return None
 
     if program_id == PUMPFUN_PROGRAM_ID:

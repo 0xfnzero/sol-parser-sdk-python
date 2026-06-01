@@ -18,7 +18,11 @@ import grpc
 from .entries_decode import decode_entries_bincode_flat
 from .event_types import DexEvent
 from .dex_parsers import Z
-from .grpc_types import EventTypeFilter, event_type_filter_includes_pumpfun
+from .grpc_types import (
+    EventTypeFilter,
+    event_type_filter_allows_instruction_parsing,
+    event_type_filter_includes_pumpfun,
+)
 from .instructions import (
     METEORA_DAMM_V2_PROGRAM_ID,
     METEORA_DLMM_PROGRAM_ID,
@@ -118,6 +122,17 @@ def _filter_parsed_event(ev: Optional[DexEvent], filter: Optional[EventTypeFilte
     return ev if filter.should_include(ev.type) else None
 
 
+def _should_parse_shred_instructions(filter: Optional[EventTypeFilter]) -> bool:
+    if filter is None:
+        return True
+    include_only = getattr(filter, "include_only", None)
+    if include_only is None:
+        return True
+    if not include_only:
+        return False
+    return event_type_filter_allows_instruction_parsing(list(include_only))
+
+
 def _events_from_versioned_tx_wire(
     raw: bytes,
     signature: str,
@@ -126,6 +141,9 @@ def _events_from_versioned_tx_wire(
     recv_us: int,
     filter: Optional[EventTypeFilter],
 ) -> List[DexEvent]:
+    if not _should_parse_shred_instructions(filter):
+        return []
+
     try:
         from solders.message import Message as LegacyMessage  # type: ignore
         from solders.message import MessageV0  # type: ignore

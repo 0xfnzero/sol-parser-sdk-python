@@ -53,6 +53,7 @@ class DexEvent:
             EventType.RAYDIUM_AMM_V4_SWAP, EventType.RAYDIUM_CLMM_SWAP, EventType.RAYDIUM_CPMM_SWAP,
             EventType.ORCA_WHIRLPOOL_SWAP, EventType.METEORA_DLMM_SWAP,
             EventType.METEORA_POOLS_SWAP, EventType.METEORA_DAMM_V2_SWAP,
+            EventType.METEORA_DBC_SWAP,
             EventType.RAYDIUM_LAUNCHLAB_TRADE,
         )
     
@@ -1115,6 +1116,44 @@ class MeteoraDammV2InitializePoolEvent(DexEventBase):
     total_amount_a: int = 0
     total_amount_b: int = 0
     pool_type: int = 0
+
+
+@dataclass
+class MeteoraDbcSwapEvent(DexEventBase):
+    """Meteora DBC 交易事件"""
+    pool: str = ""
+    config: str = ""
+    trade_direction: int = 0
+    has_referral: bool = False
+    amount_in: int = 0
+    minimum_amount_out: int = 0
+    actual_input_amount: int = 0
+    output_amount: int = 0
+    next_sqrt_price: int = 0
+    trading_fee: int = 0
+    protocol_fee: int = 0
+    referral_fee: int = 0
+    current_timestamp: int = 0
+
+
+@dataclass
+class MeteoraDbcInitializePoolEvent(DexEventBase):
+    """Meteora DBC 初始化池子事件"""
+    pool: str = ""
+    config: str = ""
+    creator: str = ""
+    base_mint: str = ""
+    pool_type: int = 0
+    activation_point: int = 0
+
+
+@dataclass
+class MeteoraDbcCurveCompleteEvent(DexEventBase):
+    """Meteora DBC 曲线完成事件"""
+    pool: str = ""
+    config: str = ""
+    base_reserve: int = 0
+    quote_reserve: int = 0
 
 
 # ============================================================

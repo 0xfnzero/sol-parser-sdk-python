@@ -13,6 +13,14 @@ from ..dex_parsers import DexEvent
 
 from . import rpc_wallet
 from . import utils as acc_utils
+from .raydium_orca import (
+    ORCA_WHIRLPOOL_PROGRAM_ID,
+    RAYDIUM_CLMM_PROGRAM_ID,
+    RAYDIUM_CPMM_PROGRAM_ID,
+    parse_orca_whirlpool_account,
+    parse_raydium_clmm_account,
+    parse_raydium_cpmm_account,
+)
 
 # 程序 ID（与 Rust ``accounts/program_ids`` / ``instr/program_ids`` 一致）
 PUMPFUN_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
@@ -173,6 +181,16 @@ ACCOUNT_EVENT_TYPES = frozenset(
         EventType.ACCOUNT_PUMP_FUN_USER_VOLUME_ACCUMULATOR,
         EventType.ACCOUNT_PUMP_SWAP_GLOBAL_CONFIG,
         EventType.ACCOUNT_PUMP_SWAP_POOL,
+        EventType.ACCOUNT_RAYDIUM_CLMM_AMM_CONFIG,
+        EventType.ACCOUNT_RAYDIUM_CLMM_POOL_STATE,
+        EventType.ACCOUNT_RAYDIUM_CLMM_TICK_ARRAY_STATE,
+        EventType.ACCOUNT_RAYDIUM_CPMM_AMM_CONFIG,
+        EventType.ACCOUNT_RAYDIUM_CPMM_POOL_STATE,
+        EventType.ACCOUNT_ORCA_WHIRLPOOL,
+        EventType.ACCOUNT_ORCA_POSITION,
+        EventType.ACCOUNT_ORCA_TICK_ARRAY,
+        EventType.ACCOUNT_ORCA_FEE_TIER,
+        EventType.ACCOUNT_ORCA_WHIRLPOOLS_CONFIG,
     )
 )
 
@@ -215,6 +233,43 @@ def parse_account_unified(
         )
         if should_parse_pumpfun:
             ev = _parse_pumpfun_account(account, metadata)
+            if ev is not None:
+                return _filter_account_event(ev, event_type_filter)
+        return None
+
+    if account.owner == RAYDIUM_CLMM_PROGRAM_ID:
+        should_parse_clmm = event_type_filter is None or (
+            event_type_filter.should_include(EventType.ACCOUNT_RAYDIUM_CLMM_AMM_CONFIG)
+            or event_type_filter.should_include(EventType.ACCOUNT_RAYDIUM_CLMM_POOL_STATE)
+            or event_type_filter.should_include(EventType.ACCOUNT_RAYDIUM_CLMM_TICK_ARRAY_STATE)
+        )
+        if should_parse_clmm:
+            ev = parse_raydium_clmm_account(account, metadata)
+            if ev is not None:
+                return _filter_account_event(ev, event_type_filter)
+        return None
+
+    if account.owner == RAYDIUM_CPMM_PROGRAM_ID:
+        should_parse_cpmm = event_type_filter is None or (
+            event_type_filter.should_include(EventType.ACCOUNT_RAYDIUM_CPMM_AMM_CONFIG)
+            or event_type_filter.should_include(EventType.ACCOUNT_RAYDIUM_CPMM_POOL_STATE)
+        )
+        if should_parse_cpmm:
+            ev = parse_raydium_cpmm_account(account, metadata)
+            if ev is not None:
+                return _filter_account_event(ev, event_type_filter)
+        return None
+
+    if account.owner == ORCA_WHIRLPOOL_PROGRAM_ID:
+        should_parse_orca = event_type_filter is None or (
+            event_type_filter.should_include(EventType.ACCOUNT_ORCA_WHIRLPOOL)
+            or event_type_filter.should_include(EventType.ACCOUNT_ORCA_POSITION)
+            or event_type_filter.should_include(EventType.ACCOUNT_ORCA_TICK_ARRAY)
+            or event_type_filter.should_include(EventType.ACCOUNT_ORCA_FEE_TIER)
+            or event_type_filter.should_include(EventType.ACCOUNT_ORCA_WHIRLPOOLS_CONFIG)
+        )
+        if should_parse_orca:
+            ev = parse_orca_whirlpool_account(account, metadata)
             if ev is not None:
                 return _filter_account_event(ev, event_type_filter)
         return None
@@ -848,12 +903,18 @@ __all__ = [
     "is_pumpfun_global_account",
     "parse_pumpswap_global_config",
     "parse_pumpswap_pool",
+    "parse_raydium_clmm_account",
+    "parse_raydium_cpmm_account",
+    "parse_orca_whirlpool_account",
     "is_global_config_account",
     "is_pool_account",
     "has_discriminator",
     "PUMPFUN_PROGRAM_ID",
     "PUMP_FEES_PROGRAM_ID",
     "PUMPSWAP_PROGRAM_ID",
+    "RAYDIUM_CLMM_PROGRAM_ID",
+    "RAYDIUM_CPMM_PROGRAM_ID",
+    "ORCA_WHIRLPOOL_PROGRAM_ID",
     "rpc_resolve_user_wallet_pubkey",
     "user_wallet_pubkey_for_onchain_account",
     "rpc_wallet",

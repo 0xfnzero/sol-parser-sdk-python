@@ -39,6 +39,7 @@ from .event_types import (
     MeteoraDammV2CreatePositionEvent, MeteoraDammV2ClosePositionEvent,
     MeteoraDammV2AddLiquidityEvent, MeteoraDammV2RemoveLiquidityEvent,
     MeteoraDammV2InitializePoolEvent,
+    MeteoraDbcCurveCompleteEvent, MeteoraDbcInitializePoolEvent, MeteoraDbcSwapEvent,
     RaydiumLaunchlabTradeEvent, RaydiumLaunchlabPoolCreateEvent,
 )
 
@@ -1427,6 +1428,9 @@ DAMM_CLOSE_POSITION = _d(20, 145, 144, 68, 143, 142, 214, 178)
 DAMM_ADD_LIQUIDITY = _d(175, 242, 8, 157, 30, 247, 185, 169)
 DAMM_REMOVE_LIQUIDITY = _d(87, 46, 88, 98, 175, 96, 34, 91)
 DAMM_INIT_POOL = _d(228, 50, 246, 85, 203, 66, 134, 37)
+DBC_SWAP = DAMM_SWAP
+DBC_INIT_POOL = DAMM_INIT_POOL
+DBC_CURVE_COMPLETE = _d(229, 231, 86, 84, 156, 134, 75, 24)
 
 
 def parse_meteora_damm_from_buf(buf: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1449,6 +1453,120 @@ def parse_meteora_damm_from_buf(buf: bytes, meta: dict) -> Optional[DexEvent]:
     if d == DAMM_INIT_POOL:
         return _parse_damm_initialize_pool(data, meta)
     return None
+
+
+def parse_meteora_dbc_from_discriminator(disc: int, data: bytes, meta: dict) -> Optional[DexEvent]:
+    if disc == DBC_SWAP:
+        return _parse_dbc_swap(data, meta)
+    if disc == DBC_INIT_POOL:
+        return _parse_dbc_initialize_pool(data, meta)
+    if disc == DBC_CURVE_COMPLETE:
+        return _parse_dbc_curve_complete(data, meta)
+    return None
+
+
+def _parse_dbc_swap(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 32 * 2 + 2 + 8 * 9 + 16:
+        return None
+    o = 0
+    pool = _pub(data, o)
+    o += 32
+    config = _pub(data, o)
+    o += 32
+    td = _u8(data, o)
+    o += 1
+    has_referral = _bool(data, o)
+    o += 1
+    params_amount_in = _u64le(data, o)
+    o += 8
+    minimum_amount_out = _u64le(data, o)
+    o += 8
+    actual_input_amount = _u64le(data, o)
+    o += 8
+    output_amount = _u64le(data, o)
+    o += 8
+    next_sqrt_price = _u128le_int(data, o)
+    o += 16
+    trading_fee = _u64le(data, o)
+    o += 8
+    protocol_fee = _u64le(data, o)
+    o += 8
+    referral_fee = _u64le(data, o)
+    o += 8
+    amount_in = _u64le(data, o) if o + 8 <= len(data) else params_amount_in
+    o += 8
+    current_timestamp = _u64le(data, o)
+    return DexEvent(
+        type=EventType.METEORA_DBC_SWAP,
+        data=MeteoraDbcSwapEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            config=config,
+            trade_direction=td,
+            has_referral=has_referral,
+            amount_in=amount_in,
+            minimum_amount_out=minimum_amount_out,
+            actual_input_amount=actual_input_amount,
+            output_amount=output_amount,
+            next_sqrt_price=next_sqrt_price,
+            trading_fee=trading_fee,
+            protocol_fee=protocol_fee,
+            referral_fee=referral_fee,
+            current_timestamp=current_timestamp,
+        ),
+    )
+
+
+def _parse_dbc_initialize_pool(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 32 * 4 + 1 + 8:
+        return None
+    o = 0
+    pool = _pub(data, o)
+    o += 32
+    config = _pub(data, o)
+    o += 32
+    creator = _pub(data, o)
+    o += 32
+    base_mint = _pub(data, o)
+    o += 32
+    pool_type = _u8(data, o)
+    o += 1
+    activation_point = _u64le(data, o)
+    return DexEvent(
+        type=EventType.METEORA_DBC_INITIALIZE_POOL,
+        data=MeteoraDbcInitializePoolEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            config=config,
+            creator=creator,
+            base_mint=base_mint,
+            pool_type=pool_type,
+            activation_point=activation_point,
+        ),
+    )
+
+
+def _parse_dbc_curve_complete(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 32 * 2 + 8 * 2:
+        return None
+    o = 0
+    pool = _pub(data, o)
+    o += 32
+    config = _pub(data, o)
+    o += 32
+    base_reserve = _u64le(data, o)
+    o += 8
+    quote_reserve = _u64le(data, o)
+    return DexEvent(
+        type=EventType.METEORA_DBC_CURVE_COMPLETE,
+        data=MeteoraDbcCurveCompleteEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            config=config,
+            base_reserve=base_reserve,
+            quote_reserve=quote_reserve,
+        ),
+    )
 
 
 def _parse_damm_swap(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -2496,6 +2614,67 @@ def event_type_for_discriminator(disc: int) -> Optional[EventType]:
     return _LOG_DISCRIMINATOR_EVENT_TYPES.get(disc)
 
 
+RAYDIUM_LAUNCHLAB_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj"
+METEORA_DAMM_V2_PROGRAM_ID = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG"
+METEORA_DBC_PROGRAM_ID = "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN"
+METEORA_DLMM_PROGRAM_ID = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
+
+
+def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -> Optional[EventType]:
+    if program_id == RAYDIUM_LAUNCHLAB_PROGRAM_ID:
+        if disc == DISC_RAYDIUM_LAUNCHLAB_TRADE:
+            return EventType.RAYDIUM_LAUNCHLAB_TRADE
+        if disc == DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE:
+            return EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE
+        return None
+    if program_id == METEORA_DAMM_V2_PROGRAM_ID:
+        if disc in (DAMM_SWAP, DAMM_SWAP2):
+            return EventType.METEORA_DAMM_V2_SWAP
+        if disc == DAMM_ADD_LIQUIDITY:
+            return EventType.METEORA_DAMM_V2_ADD_LIQUIDITY
+        if disc == DAMM_REMOVE_LIQUIDITY:
+            return EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY
+        if disc == DAMM_INIT_POOL:
+            return EventType.METEORA_DAMM_V2_INITIALIZE_POOL
+        if disc == DAMM_CREATE_POSITION:
+            return EventType.METEORA_DAMM_V2_CREATE_POSITION
+        if disc == DAMM_CLOSE_POSITION:
+            return EventType.METEORA_DAMM_V2_CLOSE_POSITION
+        return None
+    if program_id == METEORA_DBC_PROGRAM_ID:
+        if disc == DBC_SWAP:
+            return EventType.METEORA_DBC_SWAP
+        if disc == DBC_INIT_POOL:
+            return EventType.METEORA_DBC_INITIALIZE_POOL
+        if disc == DBC_CURVE_COMPLETE:
+            return EventType.METEORA_DBC_CURVE_COMPLETE
+        return None
+    return event_type_for_discriminator(disc)
+
+
+def filter_includes_program(event_type_filter: Any, program_id: Optional[str]) -> bool:
+    from .grpc_types import (
+        METEORA_DAMM_V2_FILTER_TYPES,
+        METEORA_DBC_FILTER_TYPES,
+        METEORA_DLMM_FILTER_TYPES,
+        RAYDIUM_LAUNCHLAB_FILTER_TYPES,
+    )
+
+    groups = {
+        RAYDIUM_LAUNCHLAB_PROGRAM_ID: RAYDIUM_LAUNCHLAB_FILTER_TYPES,
+        METEORA_DAMM_V2_PROGRAM_ID: METEORA_DAMM_V2_FILTER_TYPES,
+        METEORA_DBC_PROGRAM_ID: METEORA_DBC_FILTER_TYPES,
+        METEORA_DLMM_PROGRAM_ID: METEORA_DLMM_FILTER_TYPES,
+    }
+    types = groups.get(program_id)
+    if types is None:
+        return filter_allows_unknown_log_event(event_type_filter)
+    include_only = getattr(event_type_filter, "include_only", None)
+    if include_only is not None:
+        return any(t in types for t in include_only)
+    return any(event_type_filter.should_include(t) for t in types)
+
+
 def filter_allows_unknown_log_event(event_type_filter: Any) -> bool:
     include_only = getattr(event_type_filter, "include_only", None)
     return include_only is None
@@ -2517,7 +2696,14 @@ def dispatch_program_data(
     buf: bytes,
     meta: dict,
     is_created_buy: bool,
+    program_id: Optional[str] = None,
 ) -> Optional[DexEvent]:
+    if program_id == RAYDIUM_LAUNCHLAB_PROGRAM_ID:
+        return parse_raydium_launchlab_from_discriminator(disc, data, meta)
+    if program_id == METEORA_DBC_PROGRAM_ID:
+        return parse_meteora_dbc_from_discriminator(disc, data, meta)
+    if program_id == METEORA_DLMM_PROGRAM_ID:
+        return parse_dlmm_from_program_data(buf, meta)
     if disc == PUMP_TRADE:
         return parse_trade_from_data(data, meta, is_created_buy)
     if disc == _d(248, 198, 158, 145, 225, 117, 135, 200):

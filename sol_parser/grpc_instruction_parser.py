@@ -11,10 +11,9 @@ from .account_dispatcher import fill_accounts_with_owned_keys, fill_data
 from .event_types import DexEvent
 from .grpc_types import (
     EventMetadata,
-    EventType,
     EventTypeFilter,
-    IncludeOnlyFilter,
     SubscribeUpdateTransactionInfo,
+    event_type_filter_allows_instruction_parsing,
 )
 from .inner_instruction_parser import parse_inner_instruction
 from .instructions import parse_instruction_unified
@@ -118,18 +117,11 @@ def should_parse_instructions(filter: Optional[EventTypeFilter]) -> bool:
     if filter is None:
         return True
     inc = getattr(filter, "include_only", None)
-    if inc is None or not inc:
+    if inc is None:
         return True
-    need = {
-        EventType.PUMP_FUN_MIGRATE,
-        EventType.METEORA_DAMM_V2_SWAP,
-        EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
-        EventType.METEORA_DAMM_V2_CREATE_POSITION,
-        EventType.METEORA_DAMM_V2_CLOSE_POSITION,
-        EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
-        EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
-    }
-    return any(t in need for t in inc)
+    if not inc:
+        return False
+    return event_type_filter_allows_instruction_parsing(list(inc))
 
 
 def merge_instruction_events(
@@ -228,8 +220,6 @@ def parse_instructions_enhanced_from_parsed(
         return []
 
     grpc_us = int(time.time() * 1_000_000) if grpc_recv_us is None else grpc_recv_us
-    f: EventTypeFilter = filter if filter is not None else IncludeOnlyFilter([])
-
     try:
         from . import solana_storage_pb2 as sol_pb
     except ImportError:
@@ -279,7 +269,7 @@ def parse_instructions_enhanced_from_parsed(
         acct_bytes = bytes(ix.accounts)
         accounts = [get_key_b58(b) for b in acct_bytes]
         ev = parse_instruction_unified(
-            data, accounts, signature, slot, tx_index, block_time_us, grpc_us, f, pid
+            data, accounts, signature, slot, tx_index, block_time_us, grpc_us, filter, pid
         )
         if ev:
             result.append((i, None, ev))
@@ -293,7 +283,7 @@ def parse_instructions_enhanced_from_parsed(
                 data,
                 pid,
                 _meta_dict(signature, slot, tx_index, block_time_us, grpc_us, recent_bh),
-                f,
+                filter,
                 is_created_buy,
             )
             if ev:

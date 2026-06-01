@@ -2,7 +2,11 @@ import struct
 
 from sol_parser.dex_parsers import Z
 from sol_parser.grpc_types import EventType, IncludeOnlyFilter
-from sol_parser.shredstream_client import _filter_parsed_event, _static_ix_account_strings
+from sol_parser.shredstream_client import (
+    _filter_parsed_event,
+    _should_parse_shred_instructions,
+    _static_ix_account_strings,
+)
 from sol_parser.shredstream_pumpfun import parse_pumpfun_shred_ix
 
 
@@ -107,3 +111,7 @@ def test_shredstream_filter_applies_to_pumpfun_fast_path() -> None:
     assert ev is not None
     assert _filter_parsed_event(ev, IncludeOnlyFilter([EventType.PUMP_FUN_SELL])) is None
     assert _filter_parsed_event(ev, IncludeOnlyFilter([EventType.PUMP_FUN_TRADE])) is ev
+    assert not _should_parse_shred_instructions(
+        IncludeOnlyFilter([EventType.ACCOUNT_PUMP_FUN_GLOBAL])
+    )
+    assert not _should_parse_shred_instructions(IncludeOnlyFilter([]))

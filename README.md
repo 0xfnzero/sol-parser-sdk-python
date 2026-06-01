@@ -51,6 +51,14 @@
 
 ## Release notes
 
+### v0.5.6
+
+- Adds Meteora DBC log parsing with program-context routing and filter parity.
+- Adds Raydium CLMM/CPMM and Orca account parsers and exports.
+- Fixes default no-filter RPC/Yellowstone instruction parsing so it no longer behaves like an empty include-only filter.
+- Merges RPC ALT loaded writable/readonly keys into the full instruction account table.
+- Skips ShredStream/RPC instruction parsing early for account-only or empty include-only filters.
+
 ### v0.5.5
 
 - Aligns ShredStream parsing with Rust/Node.js/Go for low-latency static-account paths.
@@ -68,7 +76,7 @@
 **From PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.5.5
+pip install sol-parser-sdk-python==0.5.6
 ```
 
 **From source**

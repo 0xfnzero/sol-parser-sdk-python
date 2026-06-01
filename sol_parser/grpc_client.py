@@ -452,7 +452,7 @@ class YellowstoneGrpc:
             enrich_dex_events_with_subscribe_tx_info,
             parse_instructions_enhanced_from_subscribe_tx_info,
         )
-        from .parser import parse_log_optimized
+        from .parser import parse_invoke_info, parse_log_optimized_with_program_id, parse_program_complete_info
         from .log_instr_dedup import dedupe_log_instruction_events
         from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
         from .grpc_types import EventType
@@ -467,8 +467,15 @@ class YellowstoneGrpc:
 
         log_events = []
         is_created_buy = False
+        active_program_stack = []
         for log in info.log_messages:
-            ev = parse_log_optimized(
+            invoke = parse_invoke_info(log)
+            if invoke is not None:
+                program_id, depth = invoke
+                del active_program_stack[max(0, depth - 1):]
+                active_program_stack.append(program_id)
+
+            ev = parse_log_optimized_with_program_id(
                 log,
                 signature,
                 slot,
@@ -478,12 +485,25 @@ class YellowstoneGrpc:
                 event_type_filter,
                 is_created_buy,
                 "",
+                active_program_stack[-1] if active_program_stack else None,
             )
             if ev is None:
+                completed = parse_program_complete_info(log)
+                if completed is not None:
+                    for i in range(len(active_program_stack) - 1, -1, -1):
+                        if active_program_stack[i] == completed:
+                            del active_program_stack[i:]
+                            break
                 continue
             if ev.type in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
                 is_created_buy = True
             log_events.append(ev)
+            completed = parse_program_complete_info(log)
+            if completed is not None:
+                for i in range(len(active_program_stack) - 1, -1, -1):
+                    if active_program_stack[i] == completed:
+                        del active_program_stack[i:]
+                        break
 
         enrich_dex_events_with_subscribe_tx_info(instruction_events, info)
         enrich_dex_events_with_subscribe_tx_info(log_events, info)

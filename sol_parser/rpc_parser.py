@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import base58
 
 from .dex_parsers import DexEvent, dispatch_program_data, parse_trade_from_data
-from .grpc_types import EventTypeFilter, EventType, IncludeOnlyFilter
+from .grpc_types import EventTypeFilter, EventType, event_type_filter_allows_instruction_parsing
 from .instructions import parse_instruction_unified
 from .log_instr_dedup import dedupe_log_instruction_events
 from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
@@ -112,6 +112,31 @@ class RpcTransactionResponse:
     transaction_index: int = 0
 
 
+def _merge_rpc_full_account_keys(
+    account_keys: List[str],
+    meta: Optional[RpcTransactionMeta],
+) -> List[str]:
+    """Merge static keys with ALT loaded writable + readonly keys in Solana runtime order."""
+    if meta is None or meta.loaded_addresses is None:
+        return list(account_keys)
+    return [
+        *account_keys,
+        *meta.loaded_addresses.writable,
+        *meta.loaded_addresses.readonly,
+    ]
+
+
+def _should_parse_rpc_instructions(filter: Optional[EventTypeFilter]) -> bool:
+    if filter is None:
+        return True
+    include_only = getattr(filter, "include_only", None)
+    if include_only is None:
+        return True
+    if not include_only:
+        return False
+    return event_type_filter_allows_instruction_parsing(list(include_only))
+
+
 class RpcClient:
     """RPC 客户端接口"""
     def get_transaction(
@@ -185,32 +210,18 @@ def parse_rpc_transaction(
         )
 
     slot = tx.slot
-    block_time_us = tx.block_time * 1_000_000 if tx.block_time else None
+    block_time_us = tx.block_time * 1_000_000 if tx.block_time is not None else None
     block_tx_index = int(getattr(tx, "transaction_index", 0) or 0)
+    full_account_keys = _merge_rpc_full_account_keys(msg.account_keys, meta)
 
     instruction_events: List[DexEvent] = []
 
-    # 解析外层指令
-    for i, ix in enumerate(msg.instructions):
-        ev = _parse_rpc_instruction(
-            ix,
-            msg.account_keys,
-            signature,
-            slot,
-            block_tx_index,
-            block_time_us,
-            grpc_recv_us,
-            filter,
-        )
-        if ev:
-            instruction_events.append(ev)
-
-    # 解析内层指令
-    for group in meta.inner_instructions:
-        for ix in group.instructions:
+    if _should_parse_rpc_instructions(filter):
+        # 解析外层指令
+        for ix in msg.instructions:
             ev = _parse_rpc_instruction(
                 ix,
-                msg.account_keys,
+                full_account_keys,
                 signature,
                 slot,
                 block_tx_index,
@@ -221,15 +232,38 @@ def parse_rpc_transaction(
             if ev:
                 instruction_events.append(ev)
 
+        # 解析内层指令
+        for group in meta.inner_instructions:
+            for ix in group.instructions:
+                ev = _parse_rpc_instruction(
+                    ix,
+                    full_account_keys,
+                    signature,
+                    slot,
+                    block_tx_index,
+                    block_time_us,
+                    grpc_recv_us,
+                    filter,
+                )
+                if ev:
+                    instruction_events.append(ev)
+
     # 解析日志
     is_created_buy = False
     recent_blockhash = msg.recent_blockhash
     log_events: List[DexEvent] = []
 
-    from .parser import parse_log_optimized
+    from .parser import parse_invoke_info, parse_log_optimized_with_program_id, parse_program_complete_info
 
+    active_program_stack: List[str] = []
     for log in meta.log_messages:
-        ev = parse_log_optimized(
+        invoke = parse_invoke_info(log)
+        if invoke is not None:
+            program_id, depth = invoke
+            del active_program_stack[max(0, depth - 1):]
+            active_program_stack.append(program_id)
+
+        ev = parse_log_optimized_with_program_id(
             log,
             signature,
             slot,
@@ -239,11 +273,19 @@ def parse_rpc_transaction(
             filter,
             is_created_buy,
             recent_blockhash,
+            active_program_stack[-1] if active_program_stack else None,
         )
         if ev:
             if ev.type in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
                 is_created_buy = True
             log_events.append(ev)
+
+        completed = parse_program_complete_info(log)
+        if completed is not None:
+            for i in range(len(active_program_stack) - 1, -1, -1):
+                if active_program_stack[i] == completed:
+                    del active_program_stack[i:]
+                    break
 
     tx_pb, meta_pb = rpc_response_to_solana_storage(tx)
     if tx_pb is not None and meta_pb is not None:
@@ -292,9 +334,8 @@ def _parse_rpc_instruction(
         if acc_idx < len(account_keys):
             accounts.append(account_keys[acc_idx])
 
-    f: EventTypeFilter = filter if filter is not None else IncludeOnlyFilter([])
     return parse_instruction_unified(
-        data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us, f, program_id
+        data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us, filter, program_id
     )
 
 

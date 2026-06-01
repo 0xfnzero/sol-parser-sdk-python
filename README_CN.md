@@ -51,6 +51,14 @@
 
 ## 发布说明
 
+### v0.5.6
+
+- 新增 Meteora DBC 日志解析，并按当前 program context 做路由与过滤。
+- 新增 Raydium CLMM/CPMM、Orca account parser 与导出。
+- 修复默认无 filter 的 RPC/Yellowstone 指令解析，不再被误当作空 include-only filter。
+- RPC 指令账户表合并 ALT loaded writable/readonly keys。
+- ShredStream/RPC 对 account-only 或空 include-only filter 直接跳过指令解析。
+
 ### v0.5.5
 
 - ShredStream 低延迟静态账户路径与 Rust/Node.js/Go 对齐。
@@ -68,7 +76,7 @@
 **PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.5.5
+pip install sol-parser-sdk-python==0.5.6
 ```
 
 **源码**

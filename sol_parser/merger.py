@@ -60,48 +60,123 @@ def _fill_attr_if_empty(base: Any, attr: str, source: Any) -> None:
         setattr(base, attr, value)
 
 
+def _put_attr_if_set(base: Any, attr: str, source: Any) -> None:
+    value = getattr(source, attr, None)
+    if not _empty(value):
+        setattr(base, attr, value)
+
+
+def _put_num_if_nonzero(base: Any, attr: str, source: Any) -> None:
+    value = getattr(source, attr, 0)
+    if value:
+        setattr(base, attr, value)
+
+
 def merge_pumpfun_trade(base: PumpFunTradeEvent, inner: PumpFunTradeEvent) -> None:
-    base.mint = inner.mint
-    base.sol_amount = inner.sol_amount
-    base.token_amount = inner.token_amount
-    base.is_buy = inner.is_buy
-    base.user = inner.user
-    base.timestamp = inner.timestamp
-    base.virtual_sol_reserves = inner.virtual_sol_reserves
-    base.virtual_token_reserves = inner.virtual_token_reserves
-    base.real_sol_reserves = inner.real_sol_reserves
-    base.real_token_reserves = inner.real_token_reserves
-    base.fee_recipient = inner.fee_recipient
-    base.fee_basis_points = inner.fee_basis_points
-    base.fee = inner.fee
-    base.creator = inner.creator
-    base.creator_fee_basis_points = inner.creator_fee_basis_points
-    base.creator_fee = inner.creator_fee
-    base.track_volume = inner.track_volume
-    base.total_unclaimed_tokens = inner.total_unclaimed_tokens
-    base.total_claimed_tokens = inner.total_claimed_tokens
-    base.current_sol_volume = inner.current_sol_volume
-    base.last_update_timestamp = inner.last_update_timestamp
-    base.ix_name = inner.ix_name
-    base.is_created_buy = inner.is_created_buy
-    base.mayhem_mode = inner.mayhem_mode
-    base.cashback_fee_basis_points = inner.cashback_fee_basis_points
-    base.cashback = inner.cashback
-    if inner.buyback_fee_basis_points != 0:
-        base.buyback_fee_basis_points = inner.buyback_fee_basis_points
-    if inner.buyback_fee != 0:
-        base.buyback_fee = inner.buyback_fee
-    if inner.shareholders:
+    leg = inner.sol_amount != 0 or inner.token_amount != 0
+
+    for attr in ("mint", "user", "fee_recipient", "creator"):
+        _put_attr_if_set(base, attr, inner)
+
+    if leg:
+        for attr in (
+            "sol_amount",
+            "token_amount",
+            "timestamp",
+            "virtual_sol_reserves",
+            "virtual_token_reserves",
+            "real_sol_reserves",
+            "real_token_reserves",
+            "fee_basis_points",
+            "fee",
+            "creator_fee_basis_points",
+            "creator_fee",
+            "total_unclaimed_tokens",
+            "total_claimed_tokens",
+            "current_sol_volume",
+            "last_update_timestamp",
+        ):
+            setattr(base, attr, getattr(inner, attr))
+        base.is_buy = inner.is_buy
+        base.track_volume = bool(base.track_volume) or bool(inner.track_volume)
+        base.mayhem_mode = bool(base.mayhem_mode) or bool(inner.mayhem_mode)
+        if inner.ix_name:
+            base.ix_name = inner.ix_name
+        base.is_cashback_coin = bool(base.is_cashback_coin) or bool(inner.is_cashback_coin)
+    else:
+        for attr in (
+            "fee",
+            "creator_fee",
+            "fee_basis_points",
+            "creator_fee_basis_points",
+            "virtual_sol_reserves",
+            "virtual_token_reserves",
+            "real_sol_reserves",
+            "real_token_reserves",
+            "total_unclaimed_tokens",
+            "total_claimed_tokens",
+            "current_sol_volume",
+            "timestamp",
+            "last_update_timestamp",
+        ):
+            _put_num_if_nonzero(base, attr, inner)
+        base.track_volume = bool(base.track_volume) or bool(inner.track_volume)
+        base.mayhem_mode = bool(base.mayhem_mode) or bool(inner.mayhem_mode)
+        if inner.ix_name:
+            base.ix_name = inner.ix_name
+        base.is_cashback_coin = bool(base.is_cashback_coin) or bool(inner.is_cashback_coin)
+
+    for attr in (
+        "cashback_fee_basis_points",
+        "cashback",
+        "buyback_fee_basis_points",
+        "buyback_fee",
+        "quote_amount",
+        "virtual_quote_reserves",
+        "real_quote_reserves",
+        "amount",
+        "max_sol_cost",
+        "min_sol_output",
+        "spendable_sol_in",
+        "spendable_quote_in",
+        "min_tokens_out",
+    ):
+        _put_num_if_nonzero(base, attr, inner)
+
+    if inner.shareholders and not base.shareholders:
         base.shareholders = inner.shareholders
-    if not _empty(inner.quote_mint):
-        base.quote_mint = inner.quote_mint
-    if inner.quote_amount != 0:
-        base.quote_amount = inner.quote_amount
-    if inner.virtual_quote_reserves != 0:
-        base.virtual_quote_reserves = inner.virtual_quote_reserves
-    if inner.real_quote_reserves != 0:
-        base.real_quote_reserves = inner.real_quote_reserves
-    base.is_cashback_coin = inner.is_cashback_coin
+
+    for attr in (
+        "quote_mint",
+        "global_account",
+        "bonding_curve",
+        "bonding_curve_v2",
+        "associated_bonding_curve",
+        "associated_user",
+        "system_program",
+        "token_program",
+        "quote_token_program",
+        "associated_token_program",
+        "creator_vault",
+        "associated_quote_fee_recipient",
+        "buyback_fee_recipient",
+        "associated_quote_buyback_fee_recipient",
+        "associated_quote_bonding_curve",
+        "associated_quote_user",
+        "associated_creator_vault",
+        "sharing_config",
+        "event_authority",
+        "program",
+        "global_volume_accumulator",
+        "user_volume_accumulator",
+        "associated_user_volume_accumulator",
+        "fee_config",
+        "fee_program",
+        "extra_instruction_account",
+    ):
+        _put_attr_if_set(base, attr, inner)
+
+    base.is_created_buy = bool(base.is_created_buy) or bool(inner.is_created_buy)
 
 
 def merge_pumpswap_buy(base: PumpSwapBuyEvent, inner: PumpSwapBuyEvent) -> None:
@@ -199,7 +274,6 @@ def merge_dex_events(base: DexEvent, inner: DexEvent) -> None:
             EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
         ):
             merge_pumpfun_trade(bd, ind)
-            base.type = inner.type
         return
 
     if isinstance(bd, PumpFunCreateEvent) and isinstance(ind, PumpFunCreateEvent):

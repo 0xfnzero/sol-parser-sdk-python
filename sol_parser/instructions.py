@@ -102,17 +102,23 @@ _DISC_CLMM_SWAP_V2 = _d(43, 4, 237, 11, 26, 201, 30, 98)
 _DISC_CLMM_INC_LIQ = _d(133, 29, 89, 223, 69, 238, 176, 10)
 _DISC_CLMM_DEC_LIQ = _d(58, 127, 188, 62, 79, 82, 196, 96)
 _DISC_CLMM_CREATE  = _d(233, 146, 209, 142, 207, 104, 64, 188)
+_DISC_CLMM_CREATE_CUSTOMIZABLE_POOL = _d(43, 68, 212, 167, 89, 47, 164, 1)
+_DISC_CLMM_OPEN_POSITION = _d(135, 128, 47, 77, 15, 152, 240, 49)
 _DISC_CLMM_OPEN_POSITION_V2 = _d(77, 184, 74, 214, 112, 86, 241, 199)
 _DISC_CLMM_OPEN_POSITION_WITH_TOKEN_22_NFT = _d(77, 255, 174, 82, 125, 29, 201, 46)
 _DISC_CLMM_CLOSE_POSITION = _d(123, 134, 81, 0, 49, 68, 98, 98)
 
 _DISC_CPMM_SWAP    = _d(143, 190, 90, 218, 196, 30, 51, 222)
+_DISC_CPMM_SWAP_OUT = _d(55, 217, 98, 86, 163, 74, 180, 173)
+_DISC_CPMM_INITIALIZE = _d(175, 175, 109, 31, 13, 152, 155, 237)
 _DISC_CPMM_DEP     = _d(242, 35, 198, 137, 82, 225, 242, 182)
 _DISC_CPMM_WIT     = _d(183, 18, 70, 156, 148, 109, 161, 34)
 
-_DISC_ORCA_SWAP    = _d(225, 202, 73, 175, 147, 43, 160, 150)
-_DISC_ORCA_INC_LIQ = _d(30, 7, 144, 181, 102, 254, 155, 161)
-_DISC_ORCA_DEC_LIQ = _d(166, 1, 36, 71, 112, 202, 181, 171)
+_DISC_ORCA_SWAP    = _d(248, 198, 158, 145, 225, 117, 135, 200)
+_DISC_ORCA_SWAP_V2 = _d(43, 4, 237, 11, 26, 201, 30, 98)
+_DISC_ORCA_INC_LIQ = _d(46, 156, 243, 118, 13, 205, 251, 178)
+_DISC_ORCA_DEC_LIQ = _d(160, 38, 208, 111, 104, 91, 44, 1)
+_DISC_ORCA_INIT_POOL = _d(17, 43, 80, 74, 168, 202, 6, 113)
 
 _DISC_RAYDIUM_LAUNCHLAB_TRADE       = _d(189, 219, 127, 211, 78, 230, 97, 238)
 _DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE = _d(151, 215, 226, 9, 118, 161, 115, 174)
@@ -129,11 +135,13 @@ _IX_RAYDIUM_LAUNCHLAB_SELL_EXACT_OUT = _d(95, 200, 71, 34, 8, 9, 11, 166)
 _DISC_PFEES_CREATE_FEE_SHARING = _d(195, 78, 86, 76, 111, 52, 251, 213)
 _DISC_PFEES_INITIALIZE_FEE_CONFIG = _d(62, 162, 20, 133, 121, 65, 145, 27)
 _DISC_PFEES_RESET_FEE_SHARING = _d(10, 2, 182, 95, 16, 127, 129, 186)
+_DISC_PFEES_RESET_FEE_SHARING_V2 = _d(169, 245, 17, 209, 94, 91, 248, 128)
 _DISC_PFEES_REVOKE_FEE_SHARING = _d(18, 233, 158, 39, 185, 207, 58, 104)
 _DISC_PFEES_TRANSFER_FEE_SHARING = _d(202, 10, 75, 200, 164, 34, 210, 96)
 _DISC_PFEES_UPDATE_ADMIN = _d(161, 176, 40, 213, 60, 184, 179, 228)
 _DISC_PFEES_UPDATE_FEE_CONFIG = _d(104, 184, 103, 242, 88, 151, 107, 20)
 _DISC_PFEES_UPDATE_FEE_SHARES = _d(189, 13, 136, 99, 187, 164, 237, 35)
+_DISC_PFEES_UPDATE_FEE_SHARES_V2 = _d(111, 251, 49, 6, 78, 78, 106, 18)
 _DISC_PFEES_UPSERT_FEE_TIERS = _d(227, 23, 150, 12, 77, 86, 94, 4)
 
 _DISC_PUMPFUN_CREATE = _d(24, 30, 200, 40, 5, 28, 7, 119)
@@ -302,6 +310,133 @@ def parse_instruction_unified(
         )
 
     return None
+
+
+def _disc8(instruction_data: bytes) -> Optional[int]:
+    if len(instruction_data) < 8:
+        return None
+    return struct.unpack_from("<Q", instruction_data, 0)[0]
+
+
+def normal_instruction_data_may_parse(program_id: str, instruction_data: bytes) -> bool:
+    if not instruction_data:
+        return False
+    if program_id == RAYDIUM_AMM_V4_PROGRAM_ID:
+        return instruction_data[0] in (1, 3, 4, 7, 9, 11)
+    if program_id == METEORA_DLMM_PROGRAM_ID:
+        return instruction_data[0] in (0, 1, 2, 7, 8, 11, 13, 14)
+    disc = _disc8(instruction_data)
+    if disc is None:
+        return False
+    if program_id == METEORA_DAMM_V2_PROGRAM_ID:
+        return disc == _DISC_DAMM_INIT
+    if program_id == PUMPFUN_PROGRAM_ID:
+        return disc in (
+            _DISC_PUMPFUN_CREATE,
+            _DISC_PUMPFUN_CREATE_V2,
+            _DISC_PUMPFUN_BUY,
+            _DISC_PUMPFUN_SELL,
+            _DISC_PUMPFUN_BUY_EXACT_SOL_IN,
+            _DISC_PUMPFUN_BUY_V2,
+            _DISC_PUMPFUN_BUY_EXACT_QUOTE_IN_V2,
+            _DISC_PUMPFUN_SELL_V2,
+        )
+    if program_id == PUMPSWAP_PROGRAM_ID:
+        return disc in (
+            _DISC_PUMPSWAP_BUY,
+            _DISC_PUMPSWAP_SELL,
+            _d(233, 146, 209, 142, 207, 104, 64, 188),
+            _DISC_PUMPSWAP_BUY_EXACT_QUOTE_IN,
+            _d(242, 35, 198, 137, 82, 225, 242, 182),
+            _d(183, 18, 70, 156, 148, 109, 161, 34),
+        )
+    if program_id == PUMP_FEES_PROGRAM_ID:
+        return disc in (
+            _DISC_PFEES_CREATE_FEE_SHARING,
+            _DISC_PFEES_INITIALIZE_FEE_CONFIG,
+            _DISC_PFEES_RESET_FEE_SHARING,
+            _DISC_PFEES_RESET_FEE_SHARING_V2,
+            _DISC_PFEES_REVOKE_FEE_SHARING,
+            _DISC_PFEES_TRANSFER_FEE_SHARING,
+            _DISC_PFEES_UPDATE_ADMIN,
+            _DISC_PFEES_UPDATE_FEE_CONFIG,
+            _DISC_PFEES_UPDATE_FEE_SHARES,
+            _DISC_PFEES_UPDATE_FEE_SHARES_V2,
+            _DISC_PFEES_UPSERT_FEE_TIERS,
+        )
+    if program_id == RAYDIUM_LAUNCHLAB_PROGRAM_ID:
+        return disc in (
+            _IX_RAYDIUM_LAUNCHLAB_BUY_EXACT_IN,
+            _IX_RAYDIUM_LAUNCHLAB_BUY_EXACT_OUT,
+            _IX_RAYDIUM_LAUNCHLAB_SELL_EXACT_IN,
+            _IX_RAYDIUM_LAUNCHLAB_SELL_EXACT_OUT,
+            _IX_RAYDIUM_LAUNCHLAB_INITIALIZE,
+            _IX_RAYDIUM_LAUNCHLAB_INITIALIZE_V2,
+            _IX_RAYDIUM_LAUNCHLAB_INITIALIZE_WITH_TOKEN_2022,
+        )
+    if program_id == RAYDIUM_CPMM_PROGRAM_ID:
+        return disc in (
+            _DISC_CPMM_SWAP,
+            _DISC_CPMM_SWAP_OUT,
+            _DISC_CPMM_INITIALIZE,
+            _DISC_CPMM_DEP,
+            _DISC_CPMM_WIT,
+        )
+    if program_id == RAYDIUM_CLMM_PROGRAM_ID:
+        return disc in (
+            _DISC_CLMM_SWAP,
+            _DISC_CLMM_SWAP_V2,
+            _DISC_CLMM_INC_LIQ,
+            _DISC_CLMM_DEC_LIQ,
+            _DISC_CLMM_CREATE,
+            _DISC_CLMM_CREATE_CUSTOMIZABLE_POOL,
+            _DISC_CLMM_OPEN_POSITION,
+            _DISC_CLMM_OPEN_POSITION_V2,
+            _DISC_CLMM_OPEN_POSITION_WITH_TOKEN_22_NFT,
+            _DISC_CLMM_CLOSE_POSITION,
+        )
+    if program_id == ORCA_WHIRLPOOL_PROGRAM_ID:
+        return disc in (
+            _DISC_ORCA_SWAP,
+            _DISC_ORCA_SWAP_V2,
+            _DISC_ORCA_INC_LIQ,
+            _DISC_ORCA_DEC_LIQ,
+            _DISC_ORCA_INIT_POOL,
+        )
+    if program_id == METEORA_POOLS_PROGRAM_ID:
+        return disc in (
+            _DISC_METEORA_POOLS_SWAP,
+            _DISC_METEORA_POOLS_ADD_LIQUIDITY,
+            _DISC_METEORA_POOLS_REMOVE_LIQUIDITY,
+            _DISC_METEORA_POOLS_CREATE_POOL,
+        )
+    return False
+
+
+def parse_inner_compiled_instruction_if_supported(
+    instruction_data: bytes,
+    accounts: List[str],
+    signature: str,
+    slot: int,
+    tx_index: int,
+    block_time_us: Optional[int],
+    grpc_recv_us: int,
+    filter: Optional[EventTypeFilter],
+    program_id: str,
+) -> Optional[DexEvent]:
+    if not normal_instruction_data_may_parse(program_id, instruction_data):
+        return None
+    return parse_instruction_unified(
+        instruction_data,
+        accounts,
+        signature,
+        slot,
+        tx_index,
+        block_time_us,
+        grpc_recv_us,
+        filter,
+        program_id,
+    )
 
 
 def parse_pumpfun_instruction(
@@ -661,7 +796,9 @@ def _parse_pumpfun_create_v2(data: bytes, accounts: List[str], meta: EventMetada
             token_total_supply=0,
             is_mayhem_mode=is_mayhem_mode,
             is_cashback_enabled=is_cashback_enabled,
-            quote_mint=Z,
+            quote_mint=_get_account_safe(accounts, 16) or Z,
+            quote_vault=_get_account_safe(accounts, 17),
+            quote_token_program=_get_account_safe(accounts, 18),
             virtual_quote_reserves=0,
             observed_fee_recipient="",
         ),
@@ -1066,7 +1203,7 @@ def parse_pump_fees_instruction(
             ),
         )
 
-    if discriminator == _DISC_PFEES_UPDATE_FEE_SHARES:
+    if discriminator in (_DISC_PFEES_UPDATE_FEE_SHARES, _DISC_PFEES_UPDATE_FEE_SHARES_V2):
         if len(accounts) < 8:
             return None
         o = [8]
@@ -1100,19 +1237,19 @@ def parse_pump_fees_instruction(
             ),
         )
 
-    if discriminator == _DISC_PFEES_RESET_FEE_SHARING:
-        if len(accounts) < 5:
+    if discriminator in (_DISC_PFEES_RESET_FEE_SHARING, _DISC_PFEES_RESET_FEE_SHARING_V2):
+        if len(accounts) < 7:
             return None
         return DexEvent(
             type=EventType.PUMP_FEES_RESET_FEE_SHARING_CONFIG,
             data=PumpFeesResetFeeSharingConfigEvent(
                 metadata=meta,
                 timestamp=0,
-                mint=accounts[3],
-                sharing_config=accounts[4],
-                old_admin=accounts[0],
+                mint=accounts[5],
+                sharing_config=accounts[6],
+                old_admin=accounts[3],
                 old_shareholders=[],
-                new_admin=accounts[2],
+                new_admin=accounts[0],
                 new_shareholders=[],
             ),
         )
@@ -1224,61 +1361,93 @@ def parse_raydium_clmm_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if discriminator in (_DISC_CLMM_SWAP, _DISC_CLMM_SWAP_V2):
-        if len(data) < 8 + 8 + 8 + 8 + 1:
+        if len(data) < 8 + 8 + 8 + 16 + 1:
             return None
-        sqrt_price_x64 = struct.unpack_from("<Q", data, 24)[0]
-        is_base_input = data[32] == 1
+        sqrt_price_x64 = int.from_bytes(data[24:40], "little")
+        is_base_input = data[40] == 1
         return legacy_dict_to_dex_event({"RaydiumClmmSwap": {
             "metadata": meta,
-            "pool_state": _get_account_safe(accounts, 0),
-            "sender": _get_account_safe(accounts, 1),
-            "token_account_0": Z, "token_account_1": Z,
+            "pool_state": _get_account_safe(accounts, 2),
+            "sender": _get_account_safe(accounts, 0),
+            "token_account_0": _get_account_safe(accounts, 3), "token_account_1": _get_account_safe(accounts, 4),
             "amount_0": 0, "amount_1": 0, "zero_for_one": is_base_input,
             "sqrt_price_x64": str(sqrt_price_x64), "liquidity": "0",
             "transfer_fee_0": 0, "transfer_fee_1": 0, "tick": 0,
         }})
     if discriminator == _DISC_CLMM_INC_LIQ:
-        if len(data) < 8 + 8 + 8 + 8:
+        if len(data) < 8 + 16 + 8 + 8:
             return None
-        liquidity, amount0_max, amount1_max = struct.unpack_from("<QQQ", data, 8)
+        liquidity = int.from_bytes(data[8:24], "little")
+        amount0_max, amount1_max = struct.unpack_from("<QQ", data, 24)
         return legacy_dict_to_dex_event({"RaydiumClmmIncreaseLiquidity": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 0),
+            "pool": _get_account_safe(accounts, 2),
             "position_nft_mint": _get_account_safe(accounts, 1),
-            "user": _get_account_safe(accounts, 2),
-            "liquidity": str(liquidity), "amount0_max": amount0_max, "amount1_max": amount1_max,
+            "user": _get_account_safe(accounts, 0),
+            "liquidity": str(liquidity),
+            "amount_0": 0, "amount_1": 0,
+            "amount_0_transfer_fee": 0, "amount_1_transfer_fee": 0,
+            "amount0_max": amount0_max, "amount1_max": amount1_max,
         }})
     if discriminator == _DISC_CLMM_DEC_LIQ:
-        if len(data) < 8 + 8 + 8 + 8:
+        if len(data) < 8 + 16 + 8 + 8:
             return None
-        liquidity, amount0_min, amount1_min = struct.unpack_from("<QQQ", data, 8)
+        liquidity = int.from_bytes(data[8:24], "little")
+        amount0_min, amount1_min = struct.unpack_from("<QQ", data, 24)
         return legacy_dict_to_dex_event({"RaydiumClmmDecreaseLiquidity": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 0),
+            "pool": _get_account_safe(accounts, 3),
             "position_nft_mint": _get_account_safe(accounts, 1),
-            "user": _get_account_safe(accounts, 2),
-            "liquidity": str(liquidity), "amount0_min": amount0_min, "amount1_min": amount1_min,
+            "user": _get_account_safe(accounts, 0),
+            "liquidity": str(liquidity),
+            "decrease_amount_0": 0, "decrease_amount_1": 0,
+            "fee_amount_0": 0, "fee_amount_1": 0,
+            "reward_amounts": [0, 0, 0],
+            "transfer_fee_0": 0, "transfer_fee_1": 0,
+            "amount0_min": amount0_min, "amount1_min": amount1_min,
         }})
     if discriminator == _DISC_CLMM_CREATE:
-        if len(data) < 8 + 8 + 8:
+        if len(data) < 8 + 16 + 8:
             return None
-        sqrt_price_x64, open_time = struct.unpack_from("<QQ", data, 8)
+        sqrt_price_x64 = int.from_bytes(data[8:24], "little")
+        open_time = struct.unpack_from("<Q", data, 24)[0]
         return legacy_dict_to_dex_event({"RaydiumClmmCreatePool": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 0),
-            "creator": _get_account_safe(accounts, 1),
-            "token_0_mint": _get_account_safe(accounts, 2),
-            "token_1_mint": _get_account_safe(accounts, 3),
-            "tick_spacing": 0, "fee_rate": 0, "sqrt_price_x64": str(sqrt_price_x64), "open_time": open_time,
+            "pool": _get_account_safe(accounts, 2),
+            "creator": _get_account_safe(accounts, 0),
+            "token_0_mint": _get_account_safe(accounts, 3),
+            "token_1_mint": _get_account_safe(accounts, 4),
+            "tick_spacing": 0, "fee_rate": 0, "sqrt_price_x64": str(sqrt_price_x64),
+            "tick": 0, "token_vault_0": _get_account_safe(accounts, 5), "token_vault_1": _get_account_safe(accounts, 6),
+            "open_time": open_time,
         }})
-    if discriminator in (_DISC_CLMM_OPEN_POSITION_V2, _DISC_CLMM_OPEN_POSITION_WITH_TOKEN_22_NFT):
-        if len(data) < 8 + 4 + 4 + 4 + 4 + 8 + 8 + 8:
+    if discriminator == _DISC_CLMM_CREATE_CUSTOMIZABLE_POOL:
+        if len(data) < 8 + 16:
+            return None
+        sqrt_price_x64 = int.from_bytes(data[8:24], "little")
+        return legacy_dict_to_dex_event({"RaydiumClmmCreatePool": {
+            "metadata": meta,
+            "pool": _get_account_safe(accounts, 2),
+            "creator": _get_account_safe(accounts, 0),
+            "token_0_mint": _get_account_safe(accounts, 3),
+            "token_1_mint": _get_account_safe(accounts, 4),
+            "tick_spacing": 0, "fee_rate": 0, "sqrt_price_x64": str(sqrt_price_x64),
+            "tick": 0, "token_vault_0": _get_account_safe(accounts, 5), "token_vault_1": _get_account_safe(accounts, 6),
+            "open_time": 0,
+        }})
+    if discriminator in (
+        _DISC_CLMM_OPEN_POSITION,
+        _DISC_CLMM_OPEN_POSITION_V2,
+        _DISC_CLMM_OPEN_POSITION_WITH_TOKEN_22_NFT,
+    ):
+        if len(data) < 8 + 4 + 4 + 4 + 4 + 16 + 8 + 8:
             return None
         tick_lower_index, tick_upper_index = struct.unpack_from("<ii", data, 8)
-        liquidity = struct.unpack_from("<Q", data, 24)[0]
+        liquidity = int.from_bytes(data[24:40], "little")
+        pool_index = 4 if discriminator == _DISC_CLMM_OPEN_POSITION_WITH_TOKEN_22_NFT else 5
         return legacy_dict_to_dex_event({"RaydiumClmmOpenPosition": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 0),
+            "pool": _get_account_safe(accounts, pool_index),
             "user": _get_account_safe(accounts, 1),
             "position_nft_mint": _get_account_safe(accounts, 2),
             "tick_lower_index": tick_lower_index,
@@ -1288,9 +1457,9 @@ def parse_raydium_clmm_instruction(
     if discriminator == _DISC_CLMM_CLOSE_POSITION:
         return legacy_dict_to_dex_event({"RaydiumClmmClosePosition": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 0),
-            "user": _get_account_safe(accounts, 1),
-            "position_nft_mint": _get_account_safe(accounts, 2),
+            "pool": Z,
+            "user": _get_account_safe(accounts, 0),
+            "position_nft_mint": _get_account_safe(accounts, 1),
         }})
 
     return None
@@ -1313,27 +1482,58 @@ def parse_raydium_cpmm_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if discriminator == _DISC_CPMM_SWAP:
+        if len(data) < 8 + 8 + 8:
+            return None
         return legacy_dict_to_dex_event({"RaydiumCpmmSwap": {
             "metadata": meta,
-            "pool_id": _get_account_safe(accounts, 2),
+            "pool_id": Z,
             "input_amount": 0, "output_amount": 0,
             "input_vault_before": 0, "output_vault_before": 0,
             "input_transfer_fee": 0, "output_transfer_fee": 0,
             "base_input": True,
         }})
+    if discriminator == _DISC_CPMM_SWAP_OUT:
+        if len(data) < 8 + 8 + 8:
+            return None
+        return legacy_dict_to_dex_event({"RaydiumCpmmSwap": {
+            "metadata": meta,
+            "pool_id": Z,
+            "input_amount": 0, "output_amount": 0,
+            "input_vault_before": 0, "output_vault_before": 0,
+            "input_transfer_fee": 0, "output_transfer_fee": 0,
+            "base_input": False,
+        }})
+    if discriminator == _DISC_CPMM_INITIALIZE:
+        if len(data) < 8 + 8 + 8:
+            return None
+        return legacy_dict_to_dex_event({"RaydiumCpmmInitialize": {
+            "metadata": meta,
+            "pool": _get_account_safe(accounts, 0),
+            "creator": _get_account_safe(accounts, 1),
+            "init_amount0": struct.unpack_from("<Q", data, 8)[0],
+            "init_amount1": struct.unpack_from("<Q", data, 16)[0],
+        }})
     if discriminator == _DISC_CPMM_DEP:
+        if len(data) < 8 + 8 + 8 + 8:
+            return None
         return legacy_dict_to_dex_event({"RaydiumCpmmDeposit": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 2),
-            "user": _get_account_safe(accounts, 0),
-            "lp_token_amount": 0, "token0_amount": 0, "token1_amount": 0,
+            "pool": _get_account_safe(accounts, 0),
+            "user": _get_account_safe(accounts, 1),
+            "lp_token_amount": struct.unpack_from("<Q", data, 8)[0],
+            "token0_amount": struct.unpack_from("<Q", data, 16)[0],
+            "token1_amount": struct.unpack_from("<Q", data, 24)[0],
         }})
     if discriminator == _DISC_CPMM_WIT:
+        if len(data) < 8 + 8 + 8 + 8:
+            return None
         return legacy_dict_to_dex_event({"RaydiumCpmmWithdraw": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 2),
-            "user": _get_account_safe(accounts, 0),
-            "lp_token_amount": 0, "token0_amount": 0, "token1_amount": 0,
+            "pool": _get_account_safe(accounts, 0),
+            "user": _get_account_safe(accounts, 1),
+            "lp_token_amount": struct.unpack_from("<Q", data, 8)[0],
+            "token0_amount": struct.unpack_from("<Q", data, 16)[0],
+            "token1_amount": struct.unpack_from("<Q", data, 24)[0],
         }})
 
     return None
@@ -1391,35 +1591,71 @@ def parse_orca_whirlpool_instruction(
     discriminator = struct.unpack_from("<Q", data, 0)[0]
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
-    if discriminator == _DISC_ORCA_SWAP:
+    if discriminator in (_DISC_ORCA_SWAP, _DISC_ORCA_SWAP_V2):
+        if len(data) < 8 + 8 + 8 + 16 + 1 + 1:
+            return None
+        amount = struct.unpack_from("<Q", data, 8)[0]
+        other_amount_threshold = struct.unpack_from("<Q", data, 16)[0]
+        sqrt_price_limit = int.from_bytes(data[24:40], "little")
+        amount_specified_is_input = data[40] != 0
+        a_to_b = data[41] != 0
         return legacy_dict_to_dex_event({"OrcaWhirlpoolSwap": {
             "metadata": meta,
-            "whirlpool": _get_account_safe(accounts, 2),
-            "a_to_b": True,
-            "pre_sqrt_price": "0", "post_sqrt_price": "0",
-            "input_amount": 0, "output_amount": 0,
+            "whirlpool": _get_account_safe(accounts, 1),
+            "a_to_b": a_to_b,
+            "pre_sqrt_price": str(sqrt_price_limit), "post_sqrt_price": "0",
+            "input_amount": amount if amount_specified_is_input else 0,
+            "output_amount": other_amount_threshold if amount_specified_is_input else amount,
             "input_transfer_fee": 0, "output_transfer_fee": 0,
             "lp_fee": 0, "protocol_fee": 0,
         }})
     if discriminator == _DISC_ORCA_INC_LIQ:
+        if len(data) < 8 + 16 + 8 + 8:
+            return None
+        liquidity = int.from_bytes(data[8:24], "little")
+        token_max_a = struct.unpack_from("<Q", data, 24)[0]
+        token_max_b = struct.unpack_from("<Q", data, 32)[0]
         return legacy_dict_to_dex_event({"OrcaWhirlpoolLiquidityIncreased": {
             "metadata": meta,
             "whirlpool": _get_account_safe(accounts, 1),
             "position": _get_account_safe(accounts, 3),
             "tick_lower_index": 0, "tick_upper_index": 0,
-            "liquidity": "0",
-            "token_a_amount": 0, "token_b_amount": 0,
+            "liquidity": str(liquidity),
+            "token_a_amount": token_max_a, "token_b_amount": token_max_b,
             "token_a_transfer_fee": 0, "token_b_transfer_fee": 0,
         }})
     if discriminator == _DISC_ORCA_DEC_LIQ:
+        if len(data) < 8 + 16 + 8 + 8:
+            return None
+        liquidity = int.from_bytes(data[8:24], "little")
+        token_min_a = struct.unpack_from("<Q", data, 24)[0]
+        token_min_b = struct.unpack_from("<Q", data, 32)[0]
         return legacy_dict_to_dex_event({"OrcaWhirlpoolLiquidityDecreased": {
             "metadata": meta,
             "whirlpool": _get_account_safe(accounts, 1),
             "position": _get_account_safe(accounts, 3),
             "tick_lower_index": 0, "tick_upper_index": 0,
-            "liquidity": "0",
-            "token_a_amount": 0, "token_b_amount": 0,
+            "liquidity": str(liquidity),
+            "token_a_amount": token_min_a, "token_b_amount": token_min_b,
             "token_a_transfer_fee": 0, "token_b_transfer_fee": 0,
+        }})
+    if discriminator == _DISC_ORCA_INIT_POOL:
+        if len(data) < 8 + 2 + 16:
+            return None
+        tick_spacing = struct.unpack_from("<H", data, 8)[0]
+        initial_sqrt_price = int.from_bytes(data[10:26], "little")
+        return legacy_dict_to_dex_event({"OrcaWhirlpoolPoolInitialized": {
+            "metadata": meta,
+            "whirlpool": _get_account_safe(accounts, 1),
+            "whirlpools_config": _get_account_safe(accounts, 2),
+            "token_mint_a": _get_account_safe(accounts, 3),
+            "token_mint_b": _get_account_safe(accounts, 4),
+            "tick_spacing": tick_spacing,
+            "token_program_a": _get_account_safe(accounts, 8),
+            "token_program_b": _get_account_safe(accounts, 9),
+            "decimals_a": 0,
+            "decimals_b": 0,
+            "initial_sqrt_price": str(initial_sqrt_price),
         }})
 
     return None

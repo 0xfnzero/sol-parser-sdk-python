@@ -167,6 +167,8 @@ def fill_accounts_with_owned_keys(
         run(METEORA_DAMM_V2_PROGRAM_ID, lambda g: meteora.fill_damm_v2_add_liquidity_accounts(data, g))
     elif et == EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY:
         run(METEORA_DAMM_V2_PROGRAM_ID, lambda g: meteora.fill_damm_v2_remove_liquidity_accounts(data, g))
+    elif et == EventType.METEORA_DAMM_V2_INITIALIZE_POOL:
+        run(METEORA_DAMM_V2_PROGRAM_ID, lambda g: meteora.fill_damm_v2_initialize_pool_accounts(data, g))
     elif et == EventType.METEORA_POOLS_SWAP:
         run(METEORA_POOLS_PROGRAM_ID, lambda g: meteora.fill_pools_swap_accounts(data, g))
     elif et == EventType.METEORA_POOLS_ADD_LIQUIDITY:

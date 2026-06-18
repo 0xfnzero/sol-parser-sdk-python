@@ -27,6 +27,21 @@ def fill_damm_v2_remove_liquidity_accounts(_e: Any, _get: AccountGetter) -> None
     pass
 
 
+def fill_damm_v2_initialize_pool_accounts(e: Any, get: AccountGetter) -> None:
+    if getattr(e, "creator", "") == "":
+        e.creator = get(0)
+    if getattr(e, "position_nft_mint", "") == "":
+        e.position_nft_mint = get(1)
+    if getattr(e, "pool", "") == "":
+        e.pool = get(6)
+    if getattr(e, "position", "") == "":
+        e.position = get(7)
+    if getattr(e, "token_a_mint", "") == "":
+        e.token_a_mint = get(8)
+    if getattr(e, "token_b_mint", "") == "":
+        e.token_b_mint = get(9)
+
+
 def fill_pools_swap_accounts(_e: Any, _get: AccountGetter) -> None:
     pass
 

@@ -8,12 +8,16 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from .dex_parsers import (
     DexEvent,
+    PUMPFUN_PROGRAM_ID,
+    PUMP_TRADE,
     apply_event_type_filter,
     dispatch_program_data,
     event_type_for_discriminator,
     event_type_for_program_discriminator,
     filter_allows_unknown_log_event,
+    filter_allows_unscoped_discriminator,
     filter_includes_program,
+    filter_wants_pumpfun_trade,
     parse_trade_from_data,
 )
 
@@ -32,13 +36,11 @@ def decode_program_data_line(log: str) -> Optional[bytes]:
     if i < 0:
         return None
     s = log[i + len(p) :].strip()
-    if len(s) > 2700:
-        return None
     try:
         raw = base64.standard_b64decode(s)
     except Exception:
         return None
-    if len(raw) < 8 or len(raw) > 2048:
+    if len(raw) < 8:
         return None
     return raw
 
@@ -82,19 +84,37 @@ def parse_log_optimized(
         return None
     disc = _disc8(buf[:8])
     if event_type_filter is not None:
+        is_unscoped_shared_discriminator = program_id is None and disc in (
+            _disc8(bytes([189, 219, 127, 211, 78, 230, 97, 238])),
+            _disc8(bytes([143, 190, 90, 218, 196, 30, 51, 222])),
+        )
         event_type = event_type_for_program_discriminator(program_id, disc)
-        if event_type is not None:
+        if is_unscoped_shared_discriminator:
+            if not filter_allows_unscoped_discriminator(event_type_filter, disc):
+                return None
+        elif program_id == PUMPFUN_PROGRAM_ID and disc == PUMP_TRADE:
+            if not filter_wants_pumpfun_trade(event_type_filter):
+                return None
+        elif event_type is not None:
             if not event_type_filter.should_include(event_type):
                 return None
         elif program_id:
             if not filter_includes_program(event_type_filter, program_id):
                 return None
-        elif not filter_allows_unknown_log_event(event_type_filter):
+        elif not filter_allows_unscoped_discriminator(event_type_filter, disc):
             return None
     data = buf[8:]
     meta = _meta(signature, slot, tx_index, block_time_us, grpc, recent_blockhash)
     return apply_event_type_filter(
-        dispatch_program_data(disc, data, buf, meta, is_created_buy, program_id),
+        dispatch_program_data(
+            disc,
+            data,
+            buf,
+            meta,
+            is_created_buy,
+            program_id,
+            event_type_filter,
+        ),
         event_type_filter,
     )
 

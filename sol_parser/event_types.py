@@ -207,6 +207,8 @@ class PumpFunCreateEvent(DexEventBase):
     is_mayhem_mode: bool = False
     is_cashback_enabled: bool = False
     quote_mint: str = ""
+    quote_vault: str = ""
+    quote_token_program: str = ""
     virtual_quote_reserves: int = 0
 
 
@@ -233,6 +235,8 @@ class PumpFunCreateV2TokenEvent(DexEventBase):
     is_mayhem_mode: bool = False
     is_cashback_enabled: bool = False
     quote_mint: str = ""
+    quote_vault: str = ""
+    quote_token_program: str = ""
     virtual_quote_reserves: int = 0
     mint_authority: str = ""
     associated_bonding_curve: str = ""
@@ -698,6 +702,10 @@ class RaydiumClmmIncreaseLiquidityEvent(DexEventBase):
     position_nft_mint: str = ""
     user: str = ""
     liquidity: str = ""
+    amount_0: int = 0
+    amount_1: int = 0
+    amount_0_transfer_fee: int = 0
+    amount_1_transfer_fee: int = 0
     amount0_max: int = 0
     amount1_max: int = 0
 
@@ -709,6 +717,13 @@ class RaydiumClmmDecreaseLiquidityEvent(DexEventBase):
     position_nft_mint: str = ""
     user: str = ""
     liquidity: str = ""
+    decrease_amount_0: int = 0
+    decrease_amount_1: int = 0
+    fee_amount_0: int = 0
+    fee_amount_1: int = 0
+    reward_amounts: List[int] = field(default_factory=list)
+    transfer_fee_0: int = 0
+    transfer_fee_1: int = 0
     amount0_min: int = 0
     amount1_min: int = 0
 
@@ -753,6 +768,9 @@ class RaydiumClmmCreatePoolEvent(DexEventBase):
     tick_spacing: int = 0
     fee_rate: int = 0
     sqrt_price_x64: str = ""
+    tick: int = 0
+    token_vault_0: str = ""
+    token_vault_1: str = ""
     open_time: int = 0
 
 
@@ -761,8 +779,107 @@ class RaydiumClmmCollectFeeEvent(DexEventBase):
     """Raydium CLMM 收取费用事件"""
     pool_state: str = ""
     position_nft_mint: str = ""
+    recipient_token_account_0: str = ""
+    recipient_token_account_1: str = ""
     amount_0: int = 0
     amount_1: int = 0
+
+
+@dataclass
+class RaydiumClmmLiquidityChangeEvent(DexEventBase):
+    pool_state: str = ""
+    tick: int = 0
+    tick_lower: int = 0
+    tick_upper: int = 0
+    liquidity_before: str = ""
+    liquidity_after: str = ""
+
+
+@dataclass
+class RaydiumClmmConfigChangeEvent(DexEventBase):
+    index: int = 0
+    owner: str = ""
+    protocol_fee_rate: int = 0
+    trade_fee_rate: int = 0
+    tick_spacing: int = 0
+    fund_fee_rate: int = 0
+    fund_owner: str = ""
+
+
+@dataclass
+class RaydiumClmmCreatePersonalPositionEvent(DexEventBase):
+    pool_state: str = ""
+    minter: str = ""
+    nft_owner: str = ""
+    tick_lower_index: int = 0
+    tick_upper_index: int = 0
+    liquidity: str = ""
+    deposit_amount_0: int = 0
+    deposit_amount_1: int = 0
+    deposit_amount_0_transfer_fee: int = 0
+    deposit_amount_1_transfer_fee: int = 0
+
+
+@dataclass
+class RaydiumClmmLiquidityCalculateEvent(DexEventBase):
+    pool_liquidity: str = ""
+    pool_sqrt_price_x64: str = ""
+    pool_tick: int = 0
+    calc_amount_0: int = 0
+    calc_amount_1: int = 0
+    trade_fee_owed_0: int = 0
+    trade_fee_owed_1: int = 0
+    transfer_fee_0: int = 0
+    transfer_fee_1: int = 0
+
+
+@dataclass
+class RaydiumClmmOpenLimitOrderEvent(DexEventBase):
+    pool_id: str = ""
+    limit_order: str = ""
+    zero_for_one: bool = False
+    tick_index: int = 0
+    total_amount: int = 0
+    transfer_fee: int = 0
+
+
+@dataclass
+class RaydiumClmmIncreaseLimitOrderEvent(DexEventBase):
+    pool_id: str = ""
+    limit_order: str = ""
+    zero_for_one: bool = False
+    tick_index: int = 0
+    total_amount: int = 0
+    increased_amount: int = 0
+    transfer_fee: int = 0
+
+
+@dataclass
+class RaydiumClmmDecreaseLimitOrderEvent(DexEventBase):
+    pool_id: str = ""
+    limit_order: str = ""
+    zero_for_one: bool = False
+    tick_index: int = 0
+    total_amount: int = 0
+    filled_amount: int = 0
+    settled_output_amount: int = 0
+    decreased_amount: int = 0
+
+
+@dataclass
+class RaydiumClmmSettleLimitOrderEvent(DexEventBase):
+    pool_id: str = ""
+    limit_order: str = ""
+    zero_for_one: bool = False
+    tick_index: int = 0
+    total_amount: int = 0
+    filled_amount: int = 0
+    settled_amount_out: int = 0
+
+
+@dataclass
+class RaydiumClmmUpdateRewardInfosEvent(DexEventBase):
+    reward_growth_global_x64: List[str] = field(default_factory=list)
 
 
 # ============================================================
@@ -1096,6 +1213,8 @@ class MeteoraDammV2RemoveLiquidityEvent(DexEventBase):
 class MeteoraDammV2InitializePoolEvent(DexEventBase):
     """Meteora DAMM v2 初始化池子事件"""
     pool: str = ""
+    position: str = ""
+    position_nft_mint: str = ""
     token_a_mint: str = ""
     token_b_mint: str = ""
     creator: str = ""
@@ -1451,6 +1570,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             is_mayhem_mode=_get_bool(data, "is_mayhem_mode"),
             is_cashback_enabled=_get_bool(data, "is_cashback_enabled"),
             quote_mint=_get_str(data, "quote_mint"),
+            quote_vault=_get_str(data, "quote_vault"),
+            quote_token_program=_get_str(data, "quote_token_program"),
             virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
         )
 
@@ -1474,6 +1595,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             is_mayhem_mode=_get_bool(data, "is_mayhem_mode"),
             is_cashback_enabled=_get_bool(data, "is_cashback_enabled"),
             quote_mint=_get_str(data, "quote_mint"),
+            quote_vault=_get_str(data, "quote_vault"),
+            quote_token_program=_get_str(data, "quote_token_program"),
             virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
             mint_authority=_get_str(data, "mint_authority"),
             associated_bonding_curve=_get_str(data, "associated_bonding_curve"),
@@ -1702,6 +1825,10 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             position_nft_mint=_get_str(data, "position_nft_mint"),
             user=_get_str(data, "user"),
             liquidity=_get_str(data, "liquidity"),
+            amount_0=_get_int(data, "amount_0"),
+            amount_1=_get_int(data, "amount_1"),
+            amount_0_transfer_fee=_get_int(data, "amount_0_transfer_fee"),
+            amount_1_transfer_fee=_get_int(data, "amount_1_transfer_fee"),
             amount0_max=_get_int(data, "amount0_max"),
             amount1_max=_get_int(data, "amount1_max"),
         )
@@ -1712,6 +1839,13 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             position_nft_mint=_get_str(data, "position_nft_mint"),
             user=_get_str(data, "user"),
             liquidity=_get_str(data, "liquidity"),
+            decrease_amount_0=_get_int(data, "decrease_amount_0"),
+            decrease_amount_1=_get_int(data, "decrease_amount_1"),
+            fee_amount_0=_get_int(data, "fee_amount_0"),
+            fee_amount_1=_get_int(data, "fee_amount_1"),
+            reward_amounts=list(data.get("reward_amounts", [])) if isinstance(data, dict) else [],
+            transfer_fee_0=_get_int(data, "transfer_fee_0"),
+            transfer_fee_1=_get_int(data, "transfer_fee_1"),
             amount0_min=_get_int(data, "amount0_min"),
             amount1_min=_get_int(data, "amount1_min"),
         )
@@ -1725,6 +1859,9 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             tick_spacing=_get_int(data, "tick_spacing"),
             fee_rate=_get_int(data, "fee_rate"),
             sqrt_price_x64=_get_str(data, "sqrt_price_x64"),
+            tick=_get_int(data, "tick"),
+            token_vault_0=_get_str(data, "token_vault_0"),
+            token_vault_1=_get_str(data, "token_vault_1"),
             open_time=_get_int(data, "open_time"),
         )
     if event_type == EventType.RAYDIUM_CLMM_OPEN_POSITION:
@@ -1759,8 +1896,109 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             metadata=meta,
             pool_state=_get_str(data, "pool_state"),
             position_nft_mint=_get_str(data, "position_nft_mint"),
+            recipient_token_account_0=_get_str(data, "recipient_token_account_0"),
+            recipient_token_account_1=_get_str(data, "recipient_token_account_1"),
             amount_0=_get_int(data, "amount_0"),
             amount_1=_get_int(data, "amount_1"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_LIQUIDITY_CHANGE:
+        return RaydiumClmmLiquidityChangeEvent(
+            metadata=meta,
+            pool_state=_get_str(data, "pool_state"),
+            tick=_get_int(data, "tick"),
+            tick_lower=_get_int(data, "tick_lower"),
+            tick_upper=_get_int(data, "tick_upper"),
+            liquidity_before=_get_str(data, "liquidity_before"),
+            liquidity_after=_get_str(data, "liquidity_after"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_CONFIG_CHANGE:
+        return RaydiumClmmConfigChangeEvent(
+            metadata=meta,
+            index=_get_int(data, "index"),
+            owner=_get_str(data, "owner"),
+            protocol_fee_rate=_get_int(data, "protocol_fee_rate"),
+            trade_fee_rate=_get_int(data, "trade_fee_rate"),
+            tick_spacing=_get_int(data, "tick_spacing"),
+            fund_fee_rate=_get_int(data, "fund_fee_rate"),
+            fund_owner=_get_str(data, "fund_owner"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_CREATE_PERSONAL_POSITION:
+        return RaydiumClmmCreatePersonalPositionEvent(
+            metadata=meta,
+            pool_state=_get_str(data, "pool_state"),
+            minter=_get_str(data, "minter"),
+            nft_owner=_get_str(data, "nft_owner"),
+            tick_lower_index=_get_int(data, "tick_lower_index"),
+            tick_upper_index=_get_int(data, "tick_upper_index"),
+            liquidity=_get_str(data, "liquidity"),
+            deposit_amount_0=_get_int(data, "deposit_amount_0"),
+            deposit_amount_1=_get_int(data, "deposit_amount_1"),
+            deposit_amount_0_transfer_fee=_get_int(data, "deposit_amount_0_transfer_fee"),
+            deposit_amount_1_transfer_fee=_get_int(data, "deposit_amount_1_transfer_fee"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_LIQUIDITY_CALCULATE:
+        return RaydiumClmmLiquidityCalculateEvent(
+            metadata=meta,
+            pool_liquidity=_get_str(data, "pool_liquidity"),
+            pool_sqrt_price_x64=_get_str(data, "pool_sqrt_price_x64"),
+            pool_tick=_get_int(data, "pool_tick"),
+            calc_amount_0=_get_int(data, "calc_amount_0"),
+            calc_amount_1=_get_int(data, "calc_amount_1"),
+            trade_fee_owed_0=_get_int(data, "trade_fee_owed_0"),
+            trade_fee_owed_1=_get_int(data, "trade_fee_owed_1"),
+            transfer_fee_0=_get_int(data, "transfer_fee_0"),
+            transfer_fee_1=_get_int(data, "transfer_fee_1"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_OPEN_LIMIT_ORDER:
+        return RaydiumClmmOpenLimitOrderEvent(
+            metadata=meta,
+            pool_id=_get_str(data, "pool_id"),
+            limit_order=_get_str(data, "limit_order"),
+            zero_for_one=_get_bool(data, "zero_for_one"),
+            tick_index=_get_int(data, "tick_index"),
+            total_amount=_get_int(data, "total_amount"),
+            transfer_fee=_get_int(data, "transfer_fee"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_INCREASE_LIMIT_ORDER:
+        return RaydiumClmmIncreaseLimitOrderEvent(
+            metadata=meta,
+            pool_id=_get_str(data, "pool_id"),
+            limit_order=_get_str(data, "limit_order"),
+            zero_for_one=_get_bool(data, "zero_for_one"),
+            tick_index=_get_int(data, "tick_index"),
+            total_amount=_get_int(data, "total_amount"),
+            increased_amount=_get_int(data, "increased_amount"),
+            transfer_fee=_get_int(data, "transfer_fee"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_DECREASE_LIMIT_ORDER:
+        return RaydiumClmmDecreaseLimitOrderEvent(
+            metadata=meta,
+            pool_id=_get_str(data, "pool_id"),
+            limit_order=_get_str(data, "limit_order"),
+            zero_for_one=_get_bool(data, "zero_for_one"),
+            tick_index=_get_int(data, "tick_index"),
+            total_amount=_get_int(data, "total_amount"),
+            filled_amount=_get_int(data, "filled_amount"),
+            settled_output_amount=_get_int(data, "settled_output_amount"),
+            decreased_amount=_get_int(data, "decreased_amount"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_SETTLE_LIMIT_ORDER:
+        return RaydiumClmmSettleLimitOrderEvent(
+            metadata=meta,
+            pool_id=_get_str(data, "pool_id"),
+            limit_order=_get_str(data, "limit_order"),
+            zero_for_one=_get_bool(data, "zero_for_one"),
+            tick_index=_get_int(data, "tick_index"),
+            total_amount=_get_int(data, "total_amount"),
+            filled_amount=_get_int(data, "filled_amount"),
+            settled_amount_out=_get_int(data, "settled_amount_out"),
+        )
+    if event_type == EventType.RAYDIUM_CLMM_UPDATE_REWARD_INFOS:
+        raw = data.get("reward_growth_global_x64", [])
+        rewards = [str(v) for v in raw] if isinstance(raw, list) else []
+        return RaydiumClmmUpdateRewardInfosEvent(
+            metadata=meta,
+            reward_growth_global_x64=rewards,
         )
 
     if event_type == EventType.RAYDIUM_CPMM_SWAP:
@@ -1859,6 +2097,20 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             token_b_amount=_get_int(data, "token_b_amount"),
             token_a_transfer_fee=_get_int(data, "token_a_transfer_fee"),
             token_b_transfer_fee=_get_int(data, "token_b_transfer_fee"),
+        )
+    if event_type == EventType.ORCA_WHIRLPOOL_POOL_INITIALIZED:
+        return OrcaWhirlpoolPoolInitializedEvent(
+            metadata=meta,
+            whirlpool=_get_str(data, "whirlpool"),
+            whirlpools_config=_get_str(data, "whirlpools_config"),
+            token_mint_a=_get_str(data, "token_mint_a"),
+            token_mint_b=_get_str(data, "token_mint_b"),
+            tick_spacing=_get_int(data, "tick_spacing"),
+            token_program_a=_get_str(data, "token_program_a"),
+            token_program_b=_get_str(data, "token_program_b"),
+            decimals_a=_get_int(data, "decimals_a"),
+            decimals_b=_get_int(data, "decimals_b"),
+            initial_sqrt_price=_get_str(data, "initial_sqrt_price"),
         )
 
     # RaydiumLaunchlab events

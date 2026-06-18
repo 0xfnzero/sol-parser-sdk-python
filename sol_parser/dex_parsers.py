@@ -27,8 +27,14 @@ from .event_types import (
     RaydiumAmmV4WithdrawPnlEvent, RaydiumAmmV4Initialize2Event,
     RaydiumClmmSwapEvent, RaydiumClmmIncreaseLiquidityEvent,
     RaydiumClmmDecreaseLiquidityEvent, RaydiumClmmCreatePoolEvent,
-    RaydiumClmmCollectFeeEvent, RaydiumCpmmSwapEvent, RaydiumCpmmDepositEvent,
-    RaydiumCpmmWithdrawEvent, OrcaWhirlpoolSwapEvent, OrcaWhirlpoolLiquidityIncreasedEvent,
+    RaydiumClmmCollectFeeEvent, RaydiumClmmLiquidityChangeEvent,
+    RaydiumClmmConfigChangeEvent, RaydiumClmmCreatePersonalPositionEvent,
+    RaydiumClmmLiquidityCalculateEvent, RaydiumClmmOpenLimitOrderEvent,
+    RaydiumClmmIncreaseLimitOrderEvent, RaydiumClmmDecreaseLimitOrderEvent,
+    RaydiumClmmSettleLimitOrderEvent, RaydiumClmmUpdateRewardInfosEvent,
+    RaydiumCpmmSwapEvent, RaydiumCpmmDepositEvent,
+    RaydiumCpmmWithdrawEvent, RaydiumCpmmInitializeEvent,
+    OrcaWhirlpoolSwapEvent, OrcaWhirlpoolLiquidityIncreasedEvent,
     OrcaWhirlpoolLiquidityDecreasedEvent, OrcaWhirlpoolPoolInitializedEvent,
     MeteoraDlmmSwapEvent, MeteoraDlmmAddLiquidityEvent, MeteoraDlmmRemoveLiquidityEvent,
     MeteoraDlmmInitializePoolEvent, MeteoraDlmmInitializeBinArrayEvent,
@@ -752,128 +758,178 @@ def parse_pump_fees_upsert_fee_tiers_from_data(data: bytes, meta: dict) -> DexEv
 
 
 def parse_clmm_swap_from_data(data: bytes, meta: dict) -> DexEvent:
-    if len(data) < 32 + 32 + 8 + 8 + 16 + 1:
+    if len(data) < 32 + 32 + 32 + 32 + 8 + 8 + 8 + 8 + 1 + 16 + 16 + 4:
         return DexEvent()
     o = 0
     ps = _pub(data, o)
     o += 32
-    user = _pub(data, o)
-    o += 32 + 8 + 8
+    sender = _pub(data, o)
+    o += 32
+    token_account_0 = _pub(data, o)
+    o += 32
+    token_account_1 = _pub(data, o)
+    o += 32
+    amount_0 = _u64le(data, o)
+    o += 8
+    transfer_fee_0 = _u64le(data, o)
+    o += 8
+    amount_1 = _u64le(data, o)
+    o += 8
+    transfer_fee_1 = _u64le(data, o)
+    o += 8
+    zfo = _bool(data, o)
+    o += 1
     sqrt = str(_u128le_int(data, o))
     o += 16
-    zfo = _bool(data, o)
+    liq = str(_u128le_int(data, o))
+    o += 16
+    tick = _i32le(data, o)
     
     return DexEvent(
         type=EventType.RAYDIUM_CLMM_SWAP,
         data=RaydiumClmmSwapEvent(
             metadata=_make_meta(meta),
             pool_state=ps,
-            sender=user,
-            token_account_0=Z,
-            token_account_1=Z,
-            amount_0=0,
-            amount_1=0,
+            sender=sender,
+            token_account_0=token_account_0,
+            token_account_1=token_account_1,
+            amount_0=amount_0,
+            amount_1=amount_1,
             zero_for_one=zfo,
             sqrt_price_x64=sqrt,
-            liquidity="0",
-            transfer_fee_0=0,
-            transfer_fee_1=0,
-            tick=0,
+            liquidity=liq,
+            transfer_fee_0=transfer_fee_0,
+            transfer_fee_1=transfer_fee_1,
+            tick=tick,
         ),
     )
 
 
 def parse_clmm_inc_from_data(data: bytes, meta: dict) -> DexEvent:
-    if len(data) < 32 + 32 + 16 + 8 + 8:
+    if len(data) < 32 + 16 + 8 + 8 + 8 + 8:
         return DexEvent()
     o = 0
-    pool = _pub(data, o)
-    o += 32
-    user = _pub(data, o)
+    position_nft_mint = _pub(data, o)
     o += 32
     liq = str(_u128le_int(data, o))
     o += 16
-    a0 = _u64le(data, o)
+    amount_0 = _u64le(data, o)
     o += 8
-    a1 = _u64le(data, o)
+    amount_1 = _u64le(data, o)
+    o += 8
+    amount_0_transfer_fee = _u64le(data, o)
+    o += 8
+    amount_1_transfer_fee = _u64le(data, o)
     
     return DexEvent(
         type=EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
         data=RaydiumClmmIncreaseLiquidityEvent(
             metadata=_make_meta(meta),
-            pool=pool,
-            position_nft_mint=Z,
-            user=user,
+            pool=Z,
+            position_nft_mint=position_nft_mint,
+            user=Z,
             liquidity=liq,
-            amount0_max=a0,
-            amount1_max=a1,
+            amount_0=amount_0,
+            amount_1=amount_1,
+            amount_0_transfer_fee=amount_0_transfer_fee,
+            amount_1_transfer_fee=amount_1_transfer_fee,
+            amount0_max=0,
+            amount1_max=0,
         ),
     )
 
 
 def parse_clmm_dec_from_data(data: bytes, meta: dict) -> DexEvent:
-    if len(data) < 32 + 32 + 16 + 8 + 8:
+    if len(data) < 32 + 16 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8:
         return DexEvent()
     o = 0
-    pool = _pub(data, o)
-    o += 32
-    user = _pub(data, o)
+    position_nft_mint = _pub(data, o)
     o += 32
     liq = str(_u128le_int(data, o))
     o += 16
-    a0 = _u64le(data, o)
+    decrease_amount_0 = _u64le(data, o)
     o += 8
-    a1 = _u64le(data, o)
+    decrease_amount_1 = _u64le(data, o)
+    o += 8
+    fee_amount_0 = _u64le(data, o)
+    o += 8
+    fee_amount_1 = _u64le(data, o)
+    o += 8
+    reward_amounts = [_u64le(data, o), _u64le(data, o + 8), _u64le(data, o + 16)]
+    o += 24
+    transfer_fee_0 = _u64le(data, o)
+    o += 8
+    transfer_fee_1 = _u64le(data, o)
     
     return DexEvent(
         type=EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
         data=RaydiumClmmDecreaseLiquidityEvent(
             metadata=_make_meta(meta),
-            pool=pool,
-            position_nft_mint=Z,
-            user=user,
+            pool=Z,
+            position_nft_mint=position_nft_mint,
+            user=Z,
             liquidity=liq,
-            amount0_min=a0,
-            amount1_min=a1,
+            decrease_amount_0=decrease_amount_0,
+            decrease_amount_1=decrease_amount_1,
+            fee_amount_0=fee_amount_0,
+            fee_amount_1=fee_amount_1,
+            reward_amounts=reward_amounts,
+            transfer_fee_0=transfer_fee_0,
+            transfer_fee_1=transfer_fee_1,
+            amount0_min=0,
+            amount1_min=0,
         ),
     )
 
 
 def parse_clmm_create_from_data(data: bytes, meta: dict) -> DexEvent:
-    if len(data) < 32 + 32 + 16 + 8:
+    if len(data) < 32 + 32 + 2 + 32 + 16 + 4 + 32 + 32:
         return DexEvent()
     o = 0
-    pool = _pub(data, o)
+    token_0_mint = _pub(data, o)
     o += 32
-    cr = _pub(data, o)
+    token_1_mint = _pub(data, o)
+    o += 32
+    tick_spacing = _u16le(data, o)
+    o += 2
+    pool = _pub(data, o)
     o += 32
     sqrt = str(_u128le_int(data, o))
     o += 16
-    ot = _u64le(data, o)
+    tick = _i32le(data, o)
+    o += 4
+    token_vault_0 = _pub(data, o)
+    o += 32
+    token_vault_1 = _pub(data, o)
     
     return DexEvent(
         type=EventType.RAYDIUM_CLMM_CREATE_POOL,
         data=RaydiumClmmCreatePoolEvent(
             metadata=_make_meta(meta),
             pool=pool,
-            creator=cr,
-            token_0_mint=Z,
-            token_1_mint=Z,
-            tick_spacing=0,
+            creator=Z,
+            token_0_mint=token_0_mint,
+            token_1_mint=token_1_mint,
+            tick_spacing=tick_spacing,
             fee_rate=0,
             sqrt_price_x64=sqrt,
-            open_time=ot,
+            tick=tick,
+            token_vault_0=token_vault_0,
+            token_vault_1=token_vault_1,
+            open_time=0,
         ),
     )
 
 
-def parse_clmm_collect_from_data(data: bytes, meta: dict) -> DexEvent:
-    if len(data) < 32 + 32 + 8 + 8:
+def parse_clmm_collect_personal_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 32 + 32 + 32 + 8 + 8:
         return DexEvent()
     o = 0
-    ps = _pub(data, o)
-    o += 32
     pn = _pub(data, o)
+    o += 32
+    recipient_0 = _pub(data, o)
+    o += 32
+    recipient_1 = _pub(data, o)
     o += 32
     a0 = _u64le(data, o)
     o += 8
@@ -883,10 +939,321 @@ def parse_clmm_collect_from_data(data: bytes, meta: dict) -> DexEvent:
         type=EventType.RAYDIUM_CLMM_COLLECT_FEE,
         data=RaydiumClmmCollectFeeEvent(
             metadata=_make_meta(meta),
-            pool_state=ps,
+            pool_state=Z,
             position_nft_mint=pn,
+            recipient_token_account_0=recipient_0,
+            recipient_token_account_1=recipient_1,
             amount_0=a0,
             amount_1=a1,
+        ),
+    )
+
+
+def parse_clmm_collect_protocol_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 32 + 32 + 32 + 8 + 8:
+        return DexEvent()
+    o = 0
+    ps = _pub(data, o)
+    o += 32
+    recipient_0 = _pub(data, o)
+    o += 32
+    recipient_1 = _pub(data, o)
+    o += 32
+    a0 = _u64le(data, o)
+    o += 8
+    a1 = _u64le(data, o)
+
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_COLLECT_FEE,
+        data=RaydiumClmmCollectFeeEvent(
+            metadata=_make_meta(meta),
+            pool_state=ps,
+            position_nft_mint=Z,
+            recipient_token_account_0=recipient_0,
+            recipient_token_account_1=recipient_1,
+            amount_0=a0,
+            amount_1=a1,
+        ),
+    )
+
+
+def parse_clmm_liquidity_change_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 32 + 4 + 4 + 4 + 16 + 16:
+        return DexEvent()
+    o = 0
+    pool_state = _pub(data, o)
+    o += 32
+    tick = _i32le(data, o)
+    o += 4
+    tick_lower = _i32le(data, o)
+    o += 4
+    tick_upper = _i32le(data, o)
+    o += 4
+    before = str(_u128le_int(data, o))
+    o += 16
+    after = str(_u128le_int(data, o))
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_LIQUIDITY_CHANGE,
+        data=RaydiumClmmLiquidityChangeEvent(
+            metadata=_make_meta(meta),
+            pool_state=pool_state,
+            tick=tick,
+            tick_lower=tick_lower,
+            tick_upper=tick_upper,
+            liquidity_before=before,
+            liquidity_after=after,
+        ),
+    )
+
+
+def parse_clmm_config_change_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 2 + 32 + 4 + 4 + 2 + 4 + 32:
+        return DexEvent()
+    o = 0
+    index = _u16le(data, o)
+    o += 2
+    owner = _pub(data, o)
+    o += 32
+    protocol_fee_rate = _u32le(data, o)
+    o += 4
+    trade_fee_rate = _u32le(data, o)
+    o += 4
+    tick_spacing = _u16le(data, o)
+    o += 2
+    fund_fee_rate = _u32le(data, o)
+    o += 4
+    fund_owner = _pub(data, o)
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_CONFIG_CHANGE,
+        data=RaydiumClmmConfigChangeEvent(
+            metadata=_make_meta(meta),
+            index=index,
+            owner=owner,
+            protocol_fee_rate=protocol_fee_rate,
+            trade_fee_rate=trade_fee_rate,
+            tick_spacing=tick_spacing,
+            fund_fee_rate=fund_fee_rate,
+            fund_owner=fund_owner,
+        ),
+    )
+
+
+def parse_clmm_create_personal_position_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 32 + 32 + 32 + 4 + 4 + 16 + 8 + 8 + 8 + 8:
+        return DexEvent()
+    o = 0
+    pool_state = _pub(data, o)
+    o += 32
+    minter = _pub(data, o)
+    o += 32
+    nft_owner = _pub(data, o)
+    o += 32
+    tick_lower_index = _i32le(data, o)
+    o += 4
+    tick_upper_index = _i32le(data, o)
+    o += 4
+    liquidity = str(_u128le_int(data, o))
+    o += 16
+    deposit_amount_0 = _u64le(data, o)
+    o += 8
+    deposit_amount_1 = _u64le(data, o)
+    o += 8
+    deposit_amount_0_transfer_fee = _u64le(data, o)
+    o += 8
+    deposit_amount_1_transfer_fee = _u64le(data, o)
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_CREATE_PERSONAL_POSITION,
+        data=RaydiumClmmCreatePersonalPositionEvent(
+            metadata=_make_meta(meta),
+            pool_state=pool_state,
+            minter=minter,
+            nft_owner=nft_owner,
+            tick_lower_index=tick_lower_index,
+            tick_upper_index=tick_upper_index,
+            liquidity=liquidity,
+            deposit_amount_0=deposit_amount_0,
+            deposit_amount_1=deposit_amount_1,
+            deposit_amount_0_transfer_fee=deposit_amount_0_transfer_fee,
+            deposit_amount_1_transfer_fee=deposit_amount_1_transfer_fee,
+        ),
+    )
+
+
+def parse_clmm_liquidity_calculate_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 16 + 16 + 4 + 8 + 8 + 8 + 8 + 8 + 8:
+        return DexEvent()
+    o = 0
+    pool_liquidity = str(_u128le_int(data, o))
+    o += 16
+    pool_sqrt_price_x64 = str(_u128le_int(data, o))
+    o += 16
+    pool_tick = _i32le(data, o)
+    o += 4
+    calc_amount_0 = _u64le(data, o)
+    o += 8
+    calc_amount_1 = _u64le(data, o)
+    o += 8
+    trade_fee_owed_0 = _u64le(data, o)
+    o += 8
+    trade_fee_owed_1 = _u64le(data, o)
+    o += 8
+    transfer_fee_0 = _u64le(data, o)
+    o += 8
+    transfer_fee_1 = _u64le(data, o)
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_LIQUIDITY_CALCULATE,
+        data=RaydiumClmmLiquidityCalculateEvent(
+            metadata=_make_meta(meta),
+            pool_liquidity=pool_liquidity,
+            pool_sqrt_price_x64=pool_sqrt_price_x64,
+            pool_tick=pool_tick,
+            calc_amount_0=calc_amount_0,
+            calc_amount_1=calc_amount_1,
+            trade_fee_owed_0=trade_fee_owed_0,
+            trade_fee_owed_1=trade_fee_owed_1,
+            transfer_fee_0=transfer_fee_0,
+            transfer_fee_1=transfer_fee_1,
+        ),
+    )
+
+
+def parse_clmm_open_limit_order_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 32 + 32 + 1 + 4 + 8 + 8:
+        return DexEvent()
+    o = 0
+    pool_id = _pub(data, o)
+    o += 32
+    limit_order = _pub(data, o)
+    o += 32
+    zero_for_one = _bool(data, o)
+    o += 1
+    tick_index = _i32le(data, o)
+    o += 4
+    total_amount = _u64le(data, o)
+    o += 8
+    transfer_fee = _u64le(data, o)
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_OPEN_LIMIT_ORDER,
+        data=RaydiumClmmOpenLimitOrderEvent(
+            metadata=_make_meta(meta),
+            pool_id=pool_id,
+            limit_order=limit_order,
+            zero_for_one=zero_for_one,
+            tick_index=tick_index,
+            total_amount=total_amount,
+            transfer_fee=transfer_fee,
+        ),
+    )
+
+
+def parse_clmm_increase_limit_order_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 32 + 32 + 1 + 4 + 8 + 8 + 8:
+        return DexEvent()
+    o = 0
+    pool_id = _pub(data, o)
+    o += 32
+    limit_order = _pub(data, o)
+    o += 32
+    zero_for_one = _bool(data, o)
+    o += 1
+    tick_index = _i32le(data, o)
+    o += 4
+    total_amount = _u64le(data, o)
+    o += 8
+    increased_amount = _u64le(data, o)
+    o += 8
+    transfer_fee = _u64le(data, o)
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_INCREASE_LIMIT_ORDER,
+        data=RaydiumClmmIncreaseLimitOrderEvent(
+            metadata=_make_meta(meta),
+            pool_id=pool_id,
+            limit_order=limit_order,
+            zero_for_one=zero_for_one,
+            tick_index=tick_index,
+            total_amount=total_amount,
+            increased_amount=increased_amount,
+            transfer_fee=transfer_fee,
+        ),
+    )
+
+
+def parse_clmm_decrease_limit_order_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 32 + 32 + 1 + 4 + 8 + 8 + 8 + 8:
+        return DexEvent()
+    o = 0
+    pool_id = _pub(data, o)
+    o += 32
+    limit_order = _pub(data, o)
+    o += 32
+    zero_for_one = _bool(data, o)
+    o += 1
+    tick_index = _i32le(data, o)
+    o += 4
+    total_amount = _u64le(data, o)
+    o += 8
+    filled_amount = _u64le(data, o)
+    o += 8
+    settled_output_amount = _u64le(data, o)
+    o += 8
+    decreased_amount = _u64le(data, o)
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_DECREASE_LIMIT_ORDER,
+        data=RaydiumClmmDecreaseLimitOrderEvent(
+            metadata=_make_meta(meta),
+            pool_id=pool_id,
+            limit_order=limit_order,
+            zero_for_one=zero_for_one,
+            tick_index=tick_index,
+            total_amount=total_amount,
+            filled_amount=filled_amount,
+            settled_output_amount=settled_output_amount,
+            decreased_amount=decreased_amount,
+        ),
+    )
+
+
+def parse_clmm_settle_limit_order_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 32 + 32 + 1 + 4 + 8 + 8 + 8:
+        return DexEvent()
+    o = 0
+    pool_id = _pub(data, o)
+    o += 32
+    limit_order = _pub(data, o)
+    o += 32
+    zero_for_one = _bool(data, o)
+    o += 1
+    tick_index = _i32le(data, o)
+    o += 4
+    total_amount = _u64le(data, o)
+    o += 8
+    filled_amount = _u64le(data, o)
+    o += 8
+    settled_amount_out = _u64le(data, o)
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_SETTLE_LIMIT_ORDER,
+        data=RaydiumClmmSettleLimitOrderEvent(
+            metadata=_make_meta(meta),
+            pool_id=pool_id,
+            limit_order=limit_order,
+            zero_for_one=zero_for_one,
+            tick_index=tick_index,
+            total_amount=total_amount,
+            filled_amount=filled_amount,
+            settled_amount_out=settled_amount_out,
+        ),
+    )
+
+
+def parse_clmm_update_reward_infos_from_data(data: bytes, meta: dict) -> DexEvent:
+    if len(data) < 16 * 3:
+        return DexEvent()
+    rewards = [str(_u128le_int(data, i * 16)) for i in range(3)]
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_UPDATE_REWARD_INFOS,
+        data=RaydiumClmmUpdateRewardInfosEvent(
+            metadata=_make_meta(meta),
+            reward_growth_global_x64=rewards,
         ),
     )
 
@@ -1080,6 +1447,31 @@ def parse_cpmm_swap_out_from_data(data: bytes, meta: dict) -> Optional[DexEvent]
             input_amount=ai,
             output_amount=ao,
             base_input=not bo,
+        ),
+    )
+
+
+def parse_cpmm_create_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 32 + 32 + 32 + 32 + 8 + 8:
+        return None
+    o = 0
+    pool = _pub(data, o)
+    o += 32
+    o += 32
+    o += 32
+    creator = _pub(data, o)
+    o += 32
+    init_amount0 = _u64le(data, o)
+    o += 8
+    init_amount1 = _u64le(data, o)
+    return DexEvent(
+        type=EventType.RAYDIUM_CPMM_INITIALIZE,
+        data=RaydiumCpmmInitializeEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            creator=creator,
+            init_amount0=init_amount0,
+            init_amount1=init_amount1,
         ),
     )
 
@@ -2567,13 +2959,24 @@ _LOG_DISCRIMINATOR_EVENT_TYPES = {
     _d(177, 49, 12, 210, 160, 118, 167, 116): EventType.PUMP_SWAP_CREATE_POOL,
     _d(120, 248, 61, 83, 31, 142, 107, 144): EventType.PUMP_SWAP_LIQUIDITY_ADDED,
     _d(22, 9, 133, 26, 160, 44, 71, 192): EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
-    _d(248, 198, 158, 145, 225, 117, 135, 200): EventType.RAYDIUM_CLMM_SWAP,
-    _d(133, 29, 89, 223, 69, 238, 176, 10): EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
-    _d(160, 38, 208, 111, 104, 91, 44, 1): EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
-    _d(233, 146, 209, 142, 207, 104, 64, 188): EventType.RAYDIUM_CLMM_CREATE_POOL,
-    _d(164, 152, 207, 99, 187, 104, 171, 119): EventType.RAYDIUM_CLMM_COLLECT_FEE,
+    _d(64, 198, 205, 232, 38, 8, 113, 226): EventType.RAYDIUM_CLMM_SWAP,
+    _d(49, 79, 105, 212, 32, 34, 30, 84): EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
+    _d(58, 222, 86, 58, 68, 50, 85, 56): EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
+    _d(126, 240, 175, 206, 158, 88, 153, 107): EventType.RAYDIUM_CLMM_LIQUIDITY_CHANGE,
+    _d(247, 189, 7, 119, 106, 112, 95, 151): EventType.RAYDIUM_CLMM_CONFIG_CHANGE,
+    _d(100, 30, 87, 249, 196, 223, 154, 206): EventType.RAYDIUM_CLMM_CREATE_PERSONAL_POSITION,
+    _d(237, 112, 148, 230, 57, 84, 180, 162): EventType.RAYDIUM_CLMM_LIQUIDITY_CALCULATE,
+    _d(106, 24, 71, 85, 57, 169, 158, 216): EventType.RAYDIUM_CLMM_OPEN_LIMIT_ORDER,
+    _d(11, 120, 13, 204, 199, 87, 19, 200): EventType.RAYDIUM_CLMM_INCREASE_LIMIT_ORDER,
+    _d(70, 48, 40, 221, 219, 237, 212, 163): EventType.RAYDIUM_CLMM_DECREASE_LIMIT_ORDER,
+    _d(88, 119, 77, 164, 125, 124, 10, 194): EventType.RAYDIUM_CLMM_SETTLE_LIMIT_ORDER,
+    _d(109, 127, 186, 78, 114, 65, 37, 236): EventType.RAYDIUM_CLMM_UPDATE_REWARD_INFOS,
+    _d(25, 94, 75, 47, 112, 99, 53, 63): EventType.RAYDIUM_CLMM_CREATE_POOL,
+    _d(166, 174, 105, 192, 81, 161, 83, 105): EventType.RAYDIUM_CLMM_COLLECT_FEE,
+    _d(206, 87, 17, 79, 45, 41, 213, 61): EventType.RAYDIUM_CLMM_COLLECT_FEE,
     _d(143, 190, 90, 218, 196, 30, 51, 222): EventType.RAYDIUM_CPMM_SWAP,
     _d(55, 217, 98, 86, 163, 74, 180, 173): EventType.RAYDIUM_CPMM_SWAP,
+    _d(233, 146, 209, 142, 207, 104, 64, 188): EventType.RAYDIUM_CPMM_INITIALIZE,
     _d(242, 35, 198, 137, 82, 225, 242, 182): EventType.RAYDIUM_CPMM_DEPOSIT,
     _d(183, 18, 70, 156, 148, 109, 161, 34): EventType.RAYDIUM_CPMM_WITHDRAW,
     _d(0, 0, 0, 0, 0, 0, 0, 9): EventType.RAYDIUM_AMM_V4_SWAP,
@@ -2615,18 +3018,114 @@ def event_type_for_discriminator(disc: int) -> Optional[EventType]:
 
 
 RAYDIUM_LAUNCHLAB_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj"
+PUMPFUN_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+PUMP_FEES_PROGRAM_ID = "pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ"
+PUMPSWAP_PROGRAM_ID = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
+RAYDIUM_CLMM_PROGRAM_ID = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
+RAYDIUM_CPMM_PROGRAM_ID = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+RAYDIUM_AMM_V4_PROGRAM_ID = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+ORCA_WHIRLPOOL_PROGRAM_ID = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
+METEORA_POOLS_PROGRAM_ID = "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB"
 METEORA_DAMM_V2_PROGRAM_ID = "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG"
 METEORA_DBC_PROGRAM_ID = "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN"
 METEORA_DLMM_PROGRAM_ID = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
 
 
 def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -> Optional[EventType]:
+    if program_id == PUMPFUN_PROGRAM_ID:
+        if disc == PUMP_CREATE:
+            return EventType.PUMP_FUN_CREATE
+        if disc == PUMP_TRADE:
+            return EventType.PUMP_FUN_TRADE
+        if disc == PUMP_MIGRATE:
+            return EventType.PUMP_FUN_MIGRATE
+        if disc == PUMP_MIGRATE_BONDING_CURVE_CREATOR:
+            return EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR
+        return None
+    if program_id == PUMP_FEES_PROGRAM_ID:
+        mapping = {
+            PUMP_FEES_CREATE_FEE_SHARING_CONFIG: EventType.PUMP_FEES_CREATE_FEE_SHARING_CONFIG,
+            PUMP_FEES_INITIALIZE_FEE_CONFIG: EventType.PUMP_FEES_INITIALIZE_FEE_CONFIG,
+            PUMP_FEES_RESET_FEE_SHARING_CONFIG: EventType.PUMP_FEES_RESET_FEE_SHARING_CONFIG,
+            PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY: EventType.PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY,
+            PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY: EventType.PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY,
+            PUMP_FEES_UPDATE_ADMIN: EventType.PUMP_FEES_UPDATE_ADMIN,
+            PUMP_FEES_UPDATE_FEE_CONFIG: EventType.PUMP_FEES_UPDATE_FEE_CONFIG,
+            PUMP_FEES_UPDATE_FEE_SHARES: EventType.PUMP_FEES_UPDATE_FEE_SHARES,
+            PUMP_FEES_UPSERT_FEE_TIERS: EventType.PUMP_FEES_UPSERT_FEE_TIERS,
+        }
+        return mapping.get(disc)
+    if program_id == PUMPSWAP_PROGRAM_ID:
+        mapping = {
+            _d(103, 244, 82, 31, 44, 245, 119, 119): EventType.PUMP_SWAP_BUY,
+            _d(62, 47, 55, 10, 165, 3, 220, 42): EventType.PUMP_SWAP_SELL,
+            _d(177, 49, 12, 210, 160, 118, 167, 116): EventType.PUMP_SWAP_CREATE_POOL,
+            _d(120, 248, 61, 83, 31, 142, 107, 144): EventType.PUMP_SWAP_LIQUIDITY_ADDED,
+            _d(22, 9, 133, 26, 160, 44, 71, 192): EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
+        }
+        return mapping.get(disc)
     if program_id == RAYDIUM_LAUNCHLAB_PROGRAM_ID:
         if disc == DISC_RAYDIUM_LAUNCHLAB_TRADE:
             return EventType.RAYDIUM_LAUNCHLAB_TRADE
         if disc == DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE:
             return EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE
         return None
+    if program_id == RAYDIUM_CLMM_PROGRAM_ID:
+        mapping = {
+            _d(64, 198, 205, 232, 38, 8, 113, 226): EventType.RAYDIUM_CLMM_SWAP,
+            _d(49, 79, 105, 212, 32, 34, 30, 84): EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
+            _d(58, 222, 86, 58, 68, 50, 85, 56): EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
+            _d(126, 240, 175, 206, 158, 88, 153, 107): EventType.RAYDIUM_CLMM_LIQUIDITY_CHANGE,
+            _d(247, 189, 7, 119, 106, 112, 95, 151): EventType.RAYDIUM_CLMM_CONFIG_CHANGE,
+            _d(100, 30, 87, 249, 196, 223, 154, 206): EventType.RAYDIUM_CLMM_CREATE_PERSONAL_POSITION,
+            _d(237, 112, 148, 230, 57, 84, 180, 162): EventType.RAYDIUM_CLMM_LIQUIDITY_CALCULATE,
+            _d(106, 24, 71, 85, 57, 169, 158, 216): EventType.RAYDIUM_CLMM_OPEN_LIMIT_ORDER,
+            _d(11, 120, 13, 204, 199, 87, 19, 200): EventType.RAYDIUM_CLMM_INCREASE_LIMIT_ORDER,
+            _d(70, 48, 40, 221, 219, 237, 212, 163): EventType.RAYDIUM_CLMM_DECREASE_LIMIT_ORDER,
+            _d(88, 119, 77, 164, 125, 124, 10, 194): EventType.RAYDIUM_CLMM_SETTLE_LIMIT_ORDER,
+            _d(109, 127, 186, 78, 114, 65, 37, 236): EventType.RAYDIUM_CLMM_UPDATE_REWARD_INFOS,
+            _d(25, 94, 75, 47, 112, 99, 53, 63): EventType.RAYDIUM_CLMM_CREATE_POOL,
+            _d(166, 174, 105, 192, 81, 161, 83, 105): EventType.RAYDIUM_CLMM_COLLECT_FEE,
+            _d(206, 87, 17, 79, 45, 41, 213, 61): EventType.RAYDIUM_CLMM_COLLECT_FEE,
+        }
+        return mapping.get(disc)
+    if program_id == RAYDIUM_CPMM_PROGRAM_ID:
+        mapping = {
+            _d(143, 190, 90, 218, 196, 30, 51, 222): EventType.RAYDIUM_CPMM_SWAP,
+            _d(55, 217, 98, 86, 163, 74, 180, 173): EventType.RAYDIUM_CPMM_SWAP,
+            _d(233, 146, 209, 142, 207, 104, 64, 188): EventType.RAYDIUM_CPMM_INITIALIZE,
+            _d(242, 35, 198, 137, 82, 225, 242, 182): EventType.RAYDIUM_CPMM_DEPOSIT,
+            _d(183, 18, 70, 156, 148, 109, 161, 34): EventType.RAYDIUM_CPMM_WITHDRAW,
+        }
+        return mapping.get(disc)
+    if program_id == RAYDIUM_AMM_V4_PROGRAM_ID:
+        mapping = {
+            _d(0, 0, 0, 0, 0, 0, 0, 9): EventType.RAYDIUM_AMM_V4_SWAP,
+            _d(0, 0, 0, 0, 0, 0, 0, 11): EventType.RAYDIUM_AMM_V4_SWAP,
+            _d(0, 0, 0, 0, 0, 0, 0, 3): EventType.RAYDIUM_AMM_V4_DEPOSIT,
+            _d(0, 0, 0, 0, 0, 0, 0, 4): EventType.RAYDIUM_AMM_V4_WITHDRAW,
+            _d(0, 0, 0, 0, 0, 0, 0, 1): EventType.RAYDIUM_AMM_V4_INITIALIZE2,
+            _d(0, 0, 0, 0, 0, 0, 0, 7): EventType.RAYDIUM_AMM_V4_WITHDRAW_PNL,
+        }
+        return mapping.get(disc)
+    if program_id == ORCA_WHIRLPOOL_PROGRAM_ID:
+        mapping = {
+            _d(225, 202, 73, 175, 147, 43, 160, 150): EventType.ORCA_WHIRLPOOL_SWAP,
+            _d(30, 7, 144, 181, 102, 254, 155, 161): EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED,
+            _d(166, 1, 36, 71, 112, 202, 181, 171): EventType.ORCA_WHIRLPOOL_LIQUIDITY_DECREASED,
+            _d(100, 118, 173, 87, 12, 198, 254, 229): EventType.ORCA_WHIRLPOOL_POOL_INITIALIZED,
+        }
+        return mapping.get(disc)
+    if program_id == METEORA_POOLS_PROGRAM_ID:
+        mapping = {
+            _d(81, 108, 227, 190, 205, 208, 10, 196): EventType.METEORA_POOLS_SWAP,
+            _d(31, 94, 125, 90, 227, 52, 61, 186): EventType.METEORA_POOLS_ADD_LIQUIDITY,
+            _d(116, 244, 97, 232, 103, 31, 152, 58): EventType.METEORA_POOLS_REMOVE_LIQUIDITY,
+            _d(121, 127, 38, 136, 92, 55, 14, 247): EventType.METEORA_POOLS_BOOTSTRAP_LIQUIDITY,
+            _d(202, 44, 41, 88, 104, 220, 157, 82): EventType.METEORA_POOLS_POOL_CREATED,
+            _d(245, 26, 198, 164, 88, 18, 75, 9): EventType.METEORA_POOLS_SET_POOL_FEES,
+        }
+        return mapping.get(disc)
     if program_id == METEORA_DAMM_V2_PROGRAM_ID:
         if disc in (DAMM_SWAP, DAMM_SWAP2):
             return EventType.METEORA_DAMM_V2_SWAP
@@ -2649,7 +3148,193 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
         if disc == DBC_CURVE_COMPLETE:
             return EventType.METEORA_DBC_CURVE_COMPLETE
         return None
+    if program_id == METEORA_DLMM_PROGRAM_ID:
+        if disc == DLMM_SWAP:
+            return EventType.METEORA_DLMM_SWAP
+        if disc == DLMM_ADD_LIQ:
+            return EventType.METEORA_DLMM_ADD_LIQUIDITY
+        if disc == DLMM_REMOVE_LIQ:
+            return EventType.METEORA_DLMM_REMOVE_LIQUIDITY
+        if disc == DLMM_INIT_POOL:
+            return EventType.METEORA_DLMM_INITIALIZE_POOL
+        if disc == DLMM_INIT_BIN:
+            return EventType.METEORA_DLMM_INITIALIZE_BIN_ARRAY
+        if disc == DLMM_CREATE_POS:
+            return EventType.METEORA_DLMM_CREATE_POSITION
+        if disc == DLMM_CLOSE_POS:
+            return EventType.METEORA_DLMM_CLOSE_POSITION
+        if disc == DLMM_CLAIM_FEE:
+            return EventType.METEORA_DLMM_CLAIM_FEE
+        return None
     return event_type_for_discriminator(disc)
+
+
+def filter_wants_pumpfun_trade(event_type_filter: Any) -> bool:
+    return event_type_filter is None or any(
+        event_type_filter.should_include(t)
+        for t in (
+            EventType.PUMP_FUN_TRADE,
+            EventType.PUMP_FUN_BUY,
+            EventType.PUMP_FUN_SELL,
+            EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
+        )
+    )
+
+
+def filter_wants_raydium_launchlab_trade(event_type_filter: Any) -> bool:
+    return event_type_filter is None or event_type_filter.should_include(
+        EventType.RAYDIUM_LAUNCHLAB_TRADE
+    )
+
+
+def filter_allows_unscoped_discriminator(event_type_filter: Any, disc: int) -> bool:
+    if event_type_filter is None:
+        return True
+    if disc == PUMP_TRADE:
+        return filter_wants_pumpfun_trade(event_type_filter) or filter_wants_raydium_launchlab_trade(
+            event_type_filter
+        )
+    if disc == DLMM_SWAP:
+        return event_type_filter.should_include(EventType.RAYDIUM_CPMM_SWAP) or event_type_filter.should_include(
+            EventType.METEORA_DLMM_SWAP
+        )
+    event_type = event_type_for_discriminator(disc)
+    if event_type is not None:
+        return event_type_filter.should_include(event_type)
+    return filter_wants_supported_logs(event_type_filter)
+
+
+def filter_wants_supported_logs(event_type_filter: Any) -> bool:
+    return any(
+        filter_includes_program(event_type_filter, program_id)
+        for program_id in (
+            PUMPFUN_PROGRAM_ID,
+            PUMP_FEES_PROGRAM_ID,
+            PUMPSWAP_PROGRAM_ID,
+            RAYDIUM_LAUNCHLAB_PROGRAM_ID,
+            RAYDIUM_CLMM_PROGRAM_ID,
+            RAYDIUM_CPMM_PROGRAM_ID,
+            RAYDIUM_AMM_V4_PROGRAM_ID,
+            ORCA_WHIRLPOOL_PROGRAM_ID,
+            METEORA_POOLS_PROGRAM_ID,
+            METEORA_DAMM_V2_PROGRAM_ID,
+            METEORA_DLMM_PROGRAM_ID,
+            METEORA_DBC_PROGRAM_ID,
+        )
+    )
+
+
+def dispatch_unscoped_pumpfun_launchlab_trade(
+    data: bytes,
+    meta: dict,
+    is_created_buy: bool,
+    event_type_filter: Any = None,
+) -> Optional[DexEvent]:
+    if filter_wants_pumpfun_trade(event_type_filter):
+        pumpfun = apply_event_type_filter(
+            parse_trade_from_data(data, meta, is_created_buy),
+            event_type_filter,
+        )
+        if pumpfun is not None:
+            return pumpfun
+    if filter_wants_raydium_launchlab_trade(event_type_filter):
+        return apply_event_type_filter(
+            parse_raydium_launchlab_from_discriminator(PUMP_TRADE, data, meta),
+            event_type_filter,
+        )
+    return None
+
+
+def _pumpfun_trade_matches_include_only(ev: DexEvent, include_only: List[EventType]) -> bool:
+    if ev.type == EventType.PUMP_FUN_BUY:
+        return EventType.PUMP_FUN_BUY in include_only or EventType.PUMP_FUN_BUY_EXACT_SOL_IN in include_only
+    if ev.type == EventType.PUMP_FUN_SELL:
+        return EventType.PUMP_FUN_SELL in include_only
+    if ev.type == EventType.PUMP_FUN_BUY_EXACT_SOL_IN:
+        return EventType.PUMP_FUN_BUY in include_only or EventType.PUMP_FUN_BUY_EXACT_SOL_IN in include_only
+    if ev.type == EventType.PUMP_FUN_TRADE:
+        return EventType.PUMP_FUN_TRADE in include_only
+    if ev.type in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
+        return EventType.PUMP_FUN_CREATE in include_only or EventType.PUMP_FUN_CREATE_V2 in include_only
+    return False
+
+
+def apply_pumpfun_secondary_filter(ev: Optional[DexEvent], event_type_filter: Any) -> Optional[DexEvent]:
+    if ev is None or not ev.is_valid():
+        return None
+    include_only = getattr(event_type_filter, "include_only", None)
+    if include_only:
+        has_specific = any(
+            t
+            in (
+                EventType.PUMP_FUN_BUY,
+                EventType.PUMP_FUN_SELL,
+                EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
+                EventType.PUMP_FUN_CREATE,
+                EventType.PUMP_FUN_CREATE_V2,
+            )
+            for t in include_only
+        )
+        if has_specific and not _pumpfun_trade_matches_include_only(ev, include_only):
+            return None
+    return apply_event_type_filter(ev, event_type_filter)
+
+
+def dispatch_scoped_pumpfun_data(
+    disc: int,
+    data: bytes,
+    meta: dict,
+    is_created_buy: bool,
+    event_type_filter: Any = None,
+) -> Optional[DexEvent]:
+    if disc == PUMP_TRADE:
+        return apply_pumpfun_secondary_filter(
+            parse_trade_from_data(data, meta, is_created_buy),
+            event_type_filter,
+        )
+    if disc == PUMP_CREATE:
+        return parse_create_from_data(data, meta)
+    if disc == PUMP_MIGRATE:
+        return parse_migrate_from_data(data, meta)
+    if disc == PUMP_MIGRATE_BONDING_CURVE_CREATOR:
+        return parse_migrate_bonding_curve_creator_from_data(data, meta)
+    return None
+
+
+def dispatch_scoped_pump_fees_data(disc: int, data: bytes, meta: dict) -> Optional[DexEvent]:
+    if disc == PUMP_FEES_CREATE_FEE_SHARING_CONFIG:
+        return parse_pump_fees_create_fee_sharing_config_from_data(data, meta)
+    if disc == PUMP_FEES_INITIALIZE_FEE_CONFIG:
+        return parse_pump_fees_initialize_fee_config_from_data(data, meta)
+    if disc == PUMP_FEES_RESET_FEE_SHARING_CONFIG:
+        return parse_pump_fees_reset_fee_sharing_config_from_data(data, meta)
+    if disc == PUMP_FEES_REVOKE_FEE_SHARING_AUTHORITY:
+        return parse_pump_fees_revoke_fee_sharing_authority_from_data(data, meta)
+    if disc == PUMP_FEES_TRANSFER_FEE_SHARING_AUTHORITY:
+        return parse_pump_fees_transfer_fee_sharing_authority_from_data(data, meta)
+    if disc == PUMP_FEES_UPDATE_ADMIN:
+        return parse_pump_fees_update_admin_from_data(data, meta)
+    if disc == PUMP_FEES_UPDATE_FEE_CONFIG:
+        return parse_pump_fees_update_fee_config_from_data(data, meta)
+    if disc == PUMP_FEES_UPDATE_FEE_SHARES:
+        return parse_pump_fees_update_fee_shares_from_data(data, meta)
+    if disc == PUMP_FEES_UPSERT_FEE_TIERS:
+        return parse_pump_fees_upsert_fee_tiers_from_data(data, meta)
+    return None
+
+
+def dispatch_scoped_pumpswap_data(disc: int, data: bytes, meta: dict) -> Optional[DexEvent]:
+    if disc == _d(103, 244, 82, 31, 44, 245, 119, 119):
+        return parse_ps_buy_from_data(data, meta)
+    if disc == _d(62, 47, 55, 10, 165, 3, 220, 42):
+        return parse_ps_sell_from_data(data, meta)
+    if disc == _d(177, 49, 12, 210, 160, 118, 167, 116):
+        return parse_ps_create_pool_from_data(data, meta)
+    if disc == _d(120, 248, 61, 83, 31, 142, 107, 144):
+        return parse_ps_add_liq_from_data(data, meta)
+    if disc == _d(22, 9, 133, 26, 160, 44, 71, 192):
+        return parse_ps_remove_liq_from_data(data, meta)
+    return None
 
 
 def filter_includes_program(event_type_filter: Any, program_id: Optional[str]) -> bool:
@@ -2657,11 +3342,27 @@ def filter_includes_program(event_type_filter: Any, program_id: Optional[str]) -
         METEORA_DAMM_V2_FILTER_TYPES,
         METEORA_DBC_FILTER_TYPES,
         METEORA_DLMM_FILTER_TYPES,
+        METEORA_POOLS_FILTER_TYPES,
+        ORCA_WHIRLPOOL_FILTER_TYPES,
+        PUMP_FEES_EVENT_TYPES,
+        PUMPFUN_FILTER_TYPES,
+        PUMPSWAP_FILTER_TYPES,
+        RAYDIUM_AMM_V4_FILTER_TYPES,
+        RAYDIUM_CLMM_FILTER_TYPES,
+        RAYDIUM_CPMM_FILTER_TYPES,
         RAYDIUM_LAUNCHLAB_FILTER_TYPES,
     )
 
     groups = {
+        PUMPFUN_PROGRAM_ID: PUMPFUN_FILTER_TYPES,
+        PUMP_FEES_PROGRAM_ID: PUMP_FEES_EVENT_TYPES,
+        PUMPSWAP_PROGRAM_ID: PUMPSWAP_FILTER_TYPES,
         RAYDIUM_LAUNCHLAB_PROGRAM_ID: RAYDIUM_LAUNCHLAB_FILTER_TYPES,
+        RAYDIUM_CLMM_PROGRAM_ID: RAYDIUM_CLMM_FILTER_TYPES,
+        RAYDIUM_CPMM_PROGRAM_ID: RAYDIUM_CPMM_FILTER_TYPES,
+        RAYDIUM_AMM_V4_PROGRAM_ID: RAYDIUM_AMM_V4_FILTER_TYPES,
+        ORCA_WHIRLPOOL_PROGRAM_ID: ORCA_WHIRLPOOL_FILTER_TYPES,
+        METEORA_POOLS_PROGRAM_ID: METEORA_POOLS_FILTER_TYPES,
         METEORA_DAMM_V2_PROGRAM_ID: METEORA_DAMM_V2_FILTER_TYPES,
         METEORA_DBC_PROGRAM_ID: METEORA_DBC_FILTER_TYPES,
         METEORA_DLMM_PROGRAM_ID: METEORA_DLMM_FILTER_TYPES,
@@ -2697,16 +3398,112 @@ def dispatch_program_data(
     meta: dict,
     is_created_buy: bool,
     program_id: Optional[str] = None,
+    event_type_filter: Any = None,
 ) -> Optional[DexEvent]:
+    if program_id == PUMPFUN_PROGRAM_ID:
+        return dispatch_scoped_pumpfun_data(disc, data, meta, is_created_buy, event_type_filter)
+    if program_id == PUMP_FEES_PROGRAM_ID:
+        return dispatch_scoped_pump_fees_data(disc, data, meta)
+    if program_id == PUMPSWAP_PROGRAM_ID:
+        return dispatch_scoped_pumpswap_data(disc, data, meta)
     if program_id == RAYDIUM_LAUNCHLAB_PROGRAM_ID:
         return parse_raydium_launchlab_from_discriminator(disc, data, meta)
+    if program_id == RAYDIUM_CLMM_PROGRAM_ID:
+        if disc == _d(64, 198, 205, 232, 38, 8, 113, 226):
+            return parse_clmm_swap_from_data(data, meta)
+        if disc == _d(49, 79, 105, 212, 32, 34, 30, 84):
+            return parse_clmm_inc_from_data(data, meta)
+        if disc == _d(58, 222, 86, 58, 68, 50, 85, 56):
+            return parse_clmm_dec_from_data(data, meta)
+        if disc == _d(126, 240, 175, 206, 158, 88, 153, 107):
+            return parse_clmm_liquidity_change_from_data(data, meta)
+        if disc == _d(247, 189, 7, 119, 106, 112, 95, 151):
+            return parse_clmm_config_change_from_data(data, meta)
+        if disc == _d(100, 30, 87, 249, 196, 223, 154, 206):
+            return parse_clmm_create_personal_position_from_data(data, meta)
+        if disc == _d(237, 112, 148, 230, 57, 84, 180, 162):
+            return parse_clmm_liquidity_calculate_from_data(data, meta)
+        if disc == _d(106, 24, 71, 85, 57, 169, 158, 216):
+            return parse_clmm_open_limit_order_from_data(data, meta)
+        if disc == _d(11, 120, 13, 204, 199, 87, 19, 200):
+            return parse_clmm_increase_limit_order_from_data(data, meta)
+        if disc == _d(70, 48, 40, 221, 219, 237, 212, 163):
+            return parse_clmm_decrease_limit_order_from_data(data, meta)
+        if disc == _d(88, 119, 77, 164, 125, 124, 10, 194):
+            return parse_clmm_settle_limit_order_from_data(data, meta)
+        if disc == _d(109, 127, 186, 78, 114, 65, 37, 236):
+            return parse_clmm_update_reward_infos_from_data(data, meta)
+        if disc == _d(25, 94, 75, 47, 112, 99, 53, 63):
+            return parse_clmm_create_from_data(data, meta)
+        if disc == _d(166, 174, 105, 192, 81, 161, 83, 105):
+            return parse_clmm_collect_personal_from_data(data, meta)
+        if disc == _d(206, 87, 17, 79, 45, 41, 213, 61):
+            return parse_clmm_collect_protocol_from_data(data, meta)
+        return None
+    if program_id == RAYDIUM_CPMM_PROGRAM_ID:
+        if disc == _d(143, 190, 90, 218, 196, 30, 51, 222):
+            return parse_cpmm_swap_in_from_data(data, meta)
+        if disc == _d(55, 217, 98, 86, 163, 74, 180, 173):
+            return parse_cpmm_swap_out_from_data(data, meta)
+        if disc == _d(233, 146, 209, 142, 207, 104, 64, 188):
+            return parse_cpmm_create_from_data(data, meta)
+        if disc == _d(242, 35, 198, 137, 82, 225, 242, 182):
+            return parse_cpmm_deposit_from_data(data, meta)
+        if disc == _d(183, 18, 70, 156, 148, 109, 161, 34):
+            return parse_cpmm_withdraw_from_data(data, meta)
+        return None
+    if program_id == RAYDIUM_AMM_V4_PROGRAM_ID:
+        if disc == _d(0, 0, 0, 0, 0, 0, 0, 9):
+            return parse_amm_swap_in_from_data(data, meta)
+        if disc == _d(0, 0, 0, 0, 0, 0, 0, 11):
+            return parse_amm_swap_out_from_data(data, meta)
+        if disc == _d(0, 0, 0, 0, 0, 0, 0, 3):
+            return parse_amm_deposit_from_data(data, meta)
+        if disc == _d(0, 0, 0, 0, 0, 0, 0, 4):
+            return parse_amm_withdraw_from_data(data, meta)
+        if disc == _d(0, 0, 0, 0, 0, 0, 0, 1):
+            return parse_amm_init2_from_data(data, meta)
+        if disc == _d(0, 0, 0, 0, 0, 0, 0, 7):
+            return parse_amm_withdraw_pnl_from_data(data, meta)
+        return None
+    if program_id == ORCA_WHIRLPOOL_PROGRAM_ID:
+        if disc == _d(225, 202, 73, 175, 147, 43, 160, 150):
+            return parse_orca_traded_from_data(data, meta)
+        if disc == _d(30, 7, 144, 181, 102, 254, 155, 161):
+            return parse_orca_liq_inc_from_data(data, meta)
+        if disc == _d(166, 1, 36, 71, 112, 202, 181, 171):
+            return parse_orca_liq_dec_from_data(data, meta)
+        if disc == _d(100, 118, 173, 87, 12, 198, 254, 229):
+            return parse_orca_pool_init_from_data(data, meta)
+        return None
+    if program_id == METEORA_POOLS_PROGRAM_ID:
+        if disc == _d(81, 108, 227, 190, 205, 208, 10, 196):
+            return parse_meteora_swap_from_data(data, meta)
+        if disc == _d(31, 94, 125, 90, 227, 52, 61, 186):
+            return parse_meteora_add_from_data(data, meta)
+        if disc == _d(116, 244, 97, 232, 103, 31, 152, 58):
+            return parse_meteora_remove_from_data(data, meta)
+        if disc == _d(121, 127, 38, 136, 92, 55, 14, 247):
+            return parse_meteora_bootstrap_from_data(data, meta)
+        if disc == _d(202, 44, 41, 88, 104, 220, 157, 82):
+            return parse_meteora_pool_created_from_data(data, meta)
+        if disc == _d(245, 26, 198, 164, 88, 18, 75, 9):
+            return parse_meteora_pools_set_pool_fees_from_data(data, meta)
+        return None
+    if program_id == METEORA_DAMM_V2_PROGRAM_ID:
+        return parse_meteora_damm_from_buf(buf, meta)
     if program_id == METEORA_DBC_PROGRAM_ID:
         return parse_meteora_dbc_from_discriminator(disc, data, meta)
     if program_id == METEORA_DLMM_PROGRAM_ID:
         return parse_dlmm_from_program_data(buf, meta)
     if disc == PUMP_TRADE:
-        return parse_trade_from_data(data, meta, is_created_buy)
-    if disc == _d(248, 198, 158, 145, 225, 117, 135, 200):
+        return dispatch_unscoped_pumpfun_launchlab_trade(
+            data,
+            meta,
+            is_created_buy,
+            event_type_filter,
+        )
+    if disc == _d(64, 198, 205, 232, 38, 8, 113, 226):
         return parse_clmm_swap_from_data(data, meta)
     if disc == _d(0, 0, 0, 0, 0, 0, 0, 9):
         return parse_amm_swap_in_from_data(data, meta)
@@ -2744,16 +3541,36 @@ def dispatch_program_data(
         return parse_ps_add_liq_from_data(data, meta)
     if disc == _d(22, 9, 133, 26, 160, 44, 71, 192):
         return parse_ps_remove_liq_from_data(data, meta)
-    if disc == _d(133, 29, 89, 223, 69, 238, 176, 10):
+    if disc == _d(49, 79, 105, 212, 32, 34, 30, 84):
         return parse_clmm_inc_from_data(data, meta)
-    if disc == _d(160, 38, 208, 111, 104, 91, 44, 1):
+    if disc == _d(58, 222, 86, 58, 68, 50, 85, 56):
         return parse_clmm_dec_from_data(data, meta)
-    if disc == _d(233, 146, 209, 142, 207, 104, 64, 188):
+    if disc == _d(126, 240, 175, 206, 158, 88, 153, 107):
+        return parse_clmm_liquidity_change_from_data(data, meta)
+    if disc == _d(247, 189, 7, 119, 106, 112, 95, 151):
+        return parse_clmm_config_change_from_data(data, meta)
+    if disc == _d(100, 30, 87, 249, 196, 223, 154, 206):
+        return parse_clmm_create_personal_position_from_data(data, meta)
+    if disc == _d(237, 112, 148, 230, 57, 84, 180, 162):
+        return parse_clmm_liquidity_calculate_from_data(data, meta)
+    if disc == _d(106, 24, 71, 85, 57, 169, 158, 216):
+        return parse_clmm_open_limit_order_from_data(data, meta)
+    if disc == _d(11, 120, 13, 204, 199, 87, 19, 200):
+        return parse_clmm_increase_limit_order_from_data(data, meta)
+    if disc == _d(70, 48, 40, 221, 219, 237, 212, 163):
+        return parse_clmm_decrease_limit_order_from_data(data, meta)
+    if disc == _d(88, 119, 77, 164, 125, 124, 10, 194):
+        return parse_clmm_settle_limit_order_from_data(data, meta)
+    if disc == _d(109, 127, 186, 78, 114, 65, 37, 236):
+        return parse_clmm_update_reward_infos_from_data(data, meta)
+    if disc == _d(25, 94, 75, 47, 112, 99, 53, 63):
         return parse_clmm_create_from_data(data, meta)
-    if disc == _d(164, 152, 207, 99, 187, 104, 171, 119):
-        return parse_clmm_collect_from_data(data, meta)
+    if disc == _d(166, 174, 105, 192, 81, 161, 83, 105):
+        return parse_clmm_collect_personal_from_data(data, meta)
+    if disc == _d(206, 87, 17, 79, 45, 41, 213, 61):
+        return parse_clmm_collect_protocol_from_data(data, meta)
     if disc == _d(143, 190, 90, 218, 196, 30, 51, 222):
-        return parse_cpmm_swap_in_from_data(data, meta)
+        return apply_event_type_filter(parse_cpmm_swap_in_from_data(data, meta), event_type_filter)
     if disc == _d(55, 217, 98, 86, 163, 74, 180, 173):
         return parse_cpmm_swap_out_from_data(data, meta)
     if disc == _d(242, 35, 198, 137, 82, 225, 242, 182):

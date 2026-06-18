@@ -78,7 +78,7 @@ def _dedupe_key(ev: DexEvent, pumpfun_lane_counts: Dict[PumpfunLaneBase, int]) -
     if t == EventType.PUMP_FUN_CREATE:
         return f"PumpFunCreate|{getattr(data, 'mint', '')}"
     if t == EventType.PUMP_FUN_CREATE_V2:
-        return f"PumpFunCreateV2|{getattr(data, 'mint', '')}"
+        return f"PumpFunCreate|{getattr(data, 'mint', '')}"
     if t == EventType.PUMP_FUN_MIGRATE:
         return (
             f"PumpFunMigrate|{getattr(data, 'mint', '')}|"
@@ -174,10 +174,36 @@ def _merge_pumpfun_trade(log: Any, ix: Any) -> None:
 
 
 def _merge_pumpfun_create(log: Any, ix: Any) -> None:
-    for attr in ("name", "symbol", "uri", "bonding_curve", "user", "creator", "token_program", "quote_mint"):
+    for attr in (
+        "name",
+        "symbol",
+        "uri",
+        "mint",
+        "bonding_curve",
+        "user",
+        "creator",
+        "token_program",
+        "quote_mint",
+        "quote_vault",
+        "quote_token_program",
+    ):
         _fill_attr(log, attr, ix)
-    if getattr(log, "virtual_quote_reserves", 0) == 0 and getattr(ix, "virtual_quote_reserves", 0) != 0:
-        log.virtual_quote_reserves = ix.virtual_quote_reserves
+    for attr in (
+        "timestamp",
+        "virtual_token_reserves",
+        "virtual_sol_reserves",
+        "real_token_reserves",
+        "token_total_supply",
+        "virtual_quote_reserves",
+    ):
+        if getattr(log, attr, 0) == 0 and getattr(ix, attr, 0) != 0:
+            setattr(log, attr, getattr(ix, attr))
+    log.is_mayhem_mode = bool(getattr(log, "is_mayhem_mode", False)) or bool(
+        getattr(ix, "is_mayhem_mode", False)
+    )
+    log.is_cashback_enabled = bool(getattr(log, "is_cashback_enabled", False)) or bool(
+        getattr(ix, "is_cashback_enabled", False)
+    )
 
 
 def _merge_pumpfun_create_v2(log: Any, ix: Any) -> None:
@@ -232,6 +258,10 @@ def _merge_grpc_instruction_into_log(log_ev: DexEvent, ix_ev: DexEvent) -> None:
 
     if log_ev.type in PUMPFUN_TRADE_TYPES and ix_ev.type in PUMPFUN_TRADE_TYPES:
         _merge_pumpfun_trade(log, ix)
+    elif log_ev.type == EventType.PUMP_FUN_CREATE and ix_ev.type == EventType.PUMP_FUN_CREATE_V2:
+        _merge_pumpfun_create(log, ix)
+    elif log_ev.type == EventType.PUMP_FUN_CREATE_V2 and ix_ev.type == EventType.PUMP_FUN_CREATE:
+        _merge_pumpfun_create_v2(log, ix)
     elif log_ev.type == EventType.PUMP_FUN_CREATE and ix_ev.type == EventType.PUMP_FUN_CREATE:
         _merge_pumpfun_create(log, ix)
     elif log_ev.type == EventType.PUMP_FUN_CREATE_V2 and ix_ev.type == EventType.PUMP_FUN_CREATE_V2:

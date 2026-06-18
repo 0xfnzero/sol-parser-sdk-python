@@ -16,7 +16,7 @@ from .grpc_types import (
     event_type_filter_allows_instruction_parsing,
 )
 from .inner_instruction_parser import parse_inner_instruction
-from .instructions import parse_instruction_unified
+from .instructions import parse_inner_compiled_instruction_if_supported, parse_instruction_unified
 from .merger import merge_dex_events
 from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
@@ -145,7 +145,7 @@ def merge_instruction_events(
                 pending_outer = None
                 if po_idx == outer_idx:
                     merge_dex_events(mut_outer, event)
-                    result.append(mut_outer)
+                    pending_outer = (outer_idx, mut_outer)
                 else:
                     result.append(mut_outer)
                     result.append(event)
@@ -279,7 +279,18 @@ def parse_instructions_enhanced_from_parsed(
         for j, inner_ix in enumerate(inner.instructions):
             pid = get_key_b58(inner_ix.program_id_index)
             data = bytes(inner_ix.data)
-            ev = parse_inner_instruction(
+            accounts = [get_key_b58(b) for b in bytes(inner_ix.accounts)]
+            ev = parse_inner_compiled_instruction_if_supported(
+                data,
+                accounts,
+                signature,
+                slot,
+                tx_index,
+                block_time_us,
+                grpc_us,
+                filter,
+                pid,
+            ) or parse_inner_instruction(
                 data,
                 pid,
                 _meta_dict(signature, slot, tx_index, block_time_us, grpc_us, recent_bh),

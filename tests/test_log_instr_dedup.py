@@ -1,4 +1,9 @@
-from sol_parser.event_types import DexEvent, PumpFunTradeEvent
+from sol_parser.event_types import (
+    DexEvent,
+    PumpFunCreateEvent,
+    PumpFunCreateV2TokenEvent,
+    PumpFunTradeEvent,
+)
 from sol_parser.grpc_types import EventType
 from sol_parser.log_instr_dedup import dedupe_log_instruction_events
 
@@ -91,3 +96,62 @@ def test_dedupe_keeps_v2_buy_lanes_distinct_when_occurrence_order_differs():
     assert len(out) == 2
     assert out[0].data.bonding_curve == "BuyCurve22222222222222222222222222222222"
     assert out[1].data.bonding_curve == "ExactCurve2222222222222222222222222222222"
+
+
+def test_dedupe_collapses_pumpfun_create_and_create_v2_by_mint():
+    log_event = DexEvent(
+        type=EventType.PUMP_FUN_CREATE,
+        data=PumpFunCreateEvent(
+            mint="Mint333333333333333333333333333333333333",
+            name="Log Name",
+            symbol="LOG",
+            uri="https://log.example/token.json",
+            bonding_curve=Z,
+            user=Z,
+            creator=Z,
+            token_program=Z,
+            quote_mint=Z,
+            quote_vault=Z,
+            quote_token_program=Z,
+            virtual_quote_reserves=0,
+        ),
+    )
+    ix_event = DexEvent(
+        type=EventType.PUMP_FUN_CREATE_V2,
+        data=PumpFunCreateV2TokenEvent(
+            mint="Mint333333333333333333333333333333333333",
+            name="",
+            symbol="",
+            uri="",
+            bonding_curve="Curve333333333333333333333333333333333333",
+            user="User333333333333333333333333333333333333",
+            creator="Creator3333333333333333333333333333333333",
+            token_program="Token33333333333333333333333333333333333",
+            quote_mint="Quote33333333333333333333333333333333333",
+            quote_vault="Vault33333333333333333333333333333333333",
+            quote_token_program="QToken333333333333333333333333333333333",
+            timestamp=456,
+            virtual_token_reserves=1,
+            virtual_sol_reserves=2,
+            real_token_reserves=3,
+            token_total_supply=4,
+            virtual_quote_reserves=123,
+            is_mayhem_mode=True,
+            is_cashback_enabled=True,
+        ),
+    )
+
+    out = dedupe_log_instruction_events([log_event], [ix_event])
+
+    assert len(out) == 1
+    assert out[0].type == EventType.PUMP_FUN_CREATE
+    create = out[0].data
+    assert isinstance(create, PumpFunCreateEvent)
+    assert create.name == "Log Name"
+    assert create.bonding_curve == "Curve333333333333333333333333333333333333"
+    assert create.quote_vault == "Vault33333333333333333333333333333333333"
+    assert create.timestamp == 456
+    assert create.token_total_supply == 4
+    assert create.virtual_quote_reserves == 123
+    assert create.is_mayhem_mode is True
+    assert create.is_cashback_enabled is True

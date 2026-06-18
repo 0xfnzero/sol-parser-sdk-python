@@ -8,9 +8,10 @@ from dataclasses import dataclass
 
 import base58
 
-from .dex_parsers import DexEvent, dispatch_program_data, parse_trade_from_data
+from .dex_parsers import DexEvent
 from .grpc_types import EventTypeFilter, EventType, event_type_filter_allows_instruction_parsing
-from .instructions import parse_instruction_unified
+from .inner_instruction_parser import parse_inner_instruction
+from .instructions import parse_inner_compiled_instruction_if_supported, parse_instruction_unified
 from .log_instr_dedup import dedupe_log_instruction_events
 from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
@@ -214,11 +215,16 @@ def parse_rpc_transaction(
     block_tx_index = int(getattr(tx, "transaction_index", 0) or 0)
     full_account_keys = _merge_rpc_full_account_keys(msg.account_keys, meta)
 
-    instruction_events: List[DexEvent] = []
+    indexed_instruction_events: List[Tuple[int, Optional[int], DexEvent]] = []
+    from .grpc_instruction_parser import (
+        detect_pumpfun_create_from_logs,
+        merge_instruction_events,
+    )
+    has_pumpfun_create_log = detect_pumpfun_create_from_logs(list(meta.log_messages))
 
     if _should_parse_rpc_instructions(filter):
         # 解析外层指令
-        for ix in msg.instructions:
+        for outer_idx, ix in enumerate(msg.instructions):
             ev = _parse_rpc_instruction(
                 ix,
                 full_account_keys,
@@ -228,13 +234,15 @@ def parse_rpc_transaction(
                 block_time_us,
                 grpc_recv_us,
                 filter,
+                inner=False,
+                is_created_buy=has_pumpfun_create_log,
             )
             if ev:
-                instruction_events.append(ev)
+                indexed_instruction_events.append((outer_idx, None, ev))
 
         # 解析内层指令
         for group in meta.inner_instructions:
-            for ix in group.instructions:
+            for inner_idx, ix in enumerate(group.instructions):
                 ev = _parse_rpc_instruction(
                     ix,
                     full_account_keys,
@@ -244,12 +252,20 @@ def parse_rpc_transaction(
                     block_time_us,
                     grpc_recv_us,
                     filter,
+                    inner=True,
+                    is_created_buy=has_pumpfun_create_log,
                 )
                 if ev:
-                    instruction_events.append(ev)
+                    indexed_instruction_events.append((int(group.index), inner_idx, ev))
+
+    instruction_events = merge_instruction_events(indexed_instruction_events)
+    enrich_pumpfun_same_tx_post_merge(instruction_events)
+    if msg.recent_blockhash:
+        for ev in instruction_events:
+            if hasattr(ev.data, "metadata"):
+                ev.data.metadata.recent_blockhash = msg.recent_blockhash
 
     # 解析日志
-    is_created_buy = False
     recent_blockhash = msg.recent_blockhash
     log_events: List[DexEvent] = []
 
@@ -271,13 +287,11 @@ def parse_rpc_transaction(
             block_time_us,
             grpc_recv_us,
             filter,
-            is_created_buy,
+            has_pumpfun_create_log,
             recent_blockhash,
             active_program_stack[-1] if active_program_stack else None,
         )
         if ev:
-            if ev.type in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
-                is_created_buy = True
             log_events.append(ev)
 
         completed = parse_program_complete_info(log)
@@ -315,6 +329,8 @@ def _parse_rpc_instruction(
     block_time_us: Optional[int],
     grpc_recv_us: int,
     filter: Optional[EventTypeFilter],
+    inner: bool = False,
+    is_created_buy: bool = False,
 ) -> Optional[DexEvent]:
     """解析 RPC 指令"""
     # 获取程序 ID
@@ -333,6 +349,35 @@ def _parse_rpc_instruction(
     for acc_idx in acc_iter:
         if acc_idx < len(account_keys):
             accounts.append(account_keys[acc_idx])
+
+    if inner:
+        ev = parse_inner_compiled_instruction_if_supported(
+            data,
+            accounts,
+            signature,
+            slot,
+            tx_index,
+            block_time_us,
+            grpc_recv_us,
+            filter,
+            program_id,
+        )
+        if ev:
+            return ev
+        return parse_inner_instruction(
+            data,
+            program_id,
+            {
+                "signature": signature,
+                "slot": slot,
+                "tx_index": tx_index,
+                "block_time_us": 0 if block_time_us is None else block_time_us,
+                "grpc_recv_us": grpc_recv_us,
+                "recent_blockhash": "",
+            },
+            filter,
+            is_created_buy,
+        )
 
     return parse_instruction_unified(
         data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us, filter, program_id

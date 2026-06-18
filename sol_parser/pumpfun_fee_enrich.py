@@ -82,7 +82,18 @@ def enrich_create_v2_from_create_events(events: List[DexEvent]) -> None:
         if c is None:
             continue
 
-        for attr in ("name", "symbol", "uri", "bonding_curve", "user", "creator", "token_program", "quote_mint"):
+        for attr in (
+            "name",
+            "symbol",
+            "uri",
+            "bonding_curve",
+            "user",
+            "creator",
+            "token_program",
+            "quote_mint",
+            "quote_vault",
+            "quote_token_program",
+        ):
             _fill_str_if_empty(c2, attr, getattr(c, attr))
         for attr in (
             "timestamp",

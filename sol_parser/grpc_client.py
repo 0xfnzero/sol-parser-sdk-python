@@ -449,6 +449,7 @@ class YellowstoneGrpc:
         signature = base58.b58encode(bytes(info.signature)).decode("ascii") if info.signature else ""
 
         from .grpc_instruction_parser import (
+            detect_pumpfun_create_from_logs,
             enrich_dex_events_with_subscribe_tx_info,
             parse_instructions_enhanced_from_subscribe_tx_info,
         )
@@ -466,7 +467,7 @@ class YellowstoneGrpc:
         )
 
         log_events = []
-        is_created_buy = False
+        has_pumpfun_create_log = detect_pumpfun_create_from_logs(list(info.log_messages))
         active_program_stack = []
         for log in info.log_messages:
             invoke = parse_invoke_info(log)
@@ -483,7 +484,7 @@ class YellowstoneGrpc:
                 block_time_us,
                 grpc_recv_us,
                 event_type_filter,
-                is_created_buy,
+                has_pumpfun_create_log,
                 "",
                 active_program_stack[-1] if active_program_stack else None,
             )
@@ -495,8 +496,6 @@ class YellowstoneGrpc:
                             del active_program_stack[i:]
                             break
                 continue
-            if ev.type in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
-                is_created_buy = True
             log_events.append(ev)
             completed = parse_program_complete_info(log)
             if completed is not None:

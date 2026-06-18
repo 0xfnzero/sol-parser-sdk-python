@@ -37,10 +37,11 @@ class EventType(str, Enum):
     """事件类型"""
     # Block
     BLOCK_META = "BlockMeta"
-    # PumpFun
+    # RaydiumLaunchlab
     RAYDIUM_LAUNCHLAB_TRADE = "RaydiumLaunchlabTrade"
     RAYDIUM_LAUNCHLAB_POOL_CREATE = "RaydiumLaunchlabPoolCreate"
     RAYDIUM_LAUNCHLAB_MIGRATE_AMM = "RaydiumLaunchlabMigrateAmm"
+    # PumpFun
     PUMP_FUN_TRADE = "PumpFunTrade"
     PUMP_FUN_BUY = "PumpFunBuy"
     PUMP_FUN_SELL = "PumpFunSell"
@@ -66,26 +67,35 @@ class EventType(str, Enum):
     PUMP_SWAP_CREATE_POOL = "PumpSwapCreatePool"
     PUMP_SWAP_LIQUIDITY_ADDED = "PumpSwapLiquidityAdded"
     PUMP_SWAP_LIQUIDITY_REMOVED = "PumpSwapLiquidityRemoved"
-    # Raydium CLMM
-    RAYDIUM_CLMM_SWAP = "RaydiumClmmSwap"
-    RAYDIUM_CLMM_INCREASE_LIQUIDITY = "RaydiumClmmIncreaseLiquidity"
-    RAYDIUM_CLMM_DECREASE_LIQUIDITY = "RaydiumClmmDecreaseLiquidity"
-    RAYDIUM_CLMM_CREATE_POOL = "RaydiumClmmCreatePool"
-    RAYDIUM_CLMM_OPEN_POSITION = "RaydiumClmmOpenPosition"
-    RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT = "RaydiumClmmOpenPositionWithTokenExtNft"
-    RAYDIUM_CLMM_CLOSE_POSITION = "RaydiumClmmClosePosition"
-    RAYDIUM_CLMM_COLLECT_FEE = "RaydiumClmmCollectFee"
     # Raydium CPMM
     RAYDIUM_CPMM_SWAP = "RaydiumCpmmSwap"
     RAYDIUM_CPMM_DEPOSIT = "RaydiumCpmmDeposit"
     RAYDIUM_CPMM_WITHDRAW = "RaydiumCpmmWithdraw"
     RAYDIUM_CPMM_INITIALIZE = "RaydiumCpmmInitialize"
+    # Raydium CLMM
+    RAYDIUM_CLMM_SWAP = "RaydiumClmmSwap"
+    RAYDIUM_CLMM_CREATE_POOL = "RaydiumClmmCreatePool"
+    RAYDIUM_CLMM_OPEN_POSITION = "RaydiumClmmOpenPosition"
+    RAYDIUM_CLMM_CLOSE_POSITION = "RaydiumClmmClosePosition"
+    RAYDIUM_CLMM_INCREASE_LIQUIDITY = "RaydiumClmmIncreaseLiquidity"
+    RAYDIUM_CLMM_DECREASE_LIQUIDITY = "RaydiumClmmDecreaseLiquidity"
+    RAYDIUM_CLMM_LIQUIDITY_CHANGE = "RaydiumClmmLiquidityChange"
+    RAYDIUM_CLMM_CONFIG_CHANGE = "RaydiumClmmConfigChange"
+    RAYDIUM_CLMM_CREATE_PERSONAL_POSITION = "RaydiumClmmCreatePersonalPosition"
+    RAYDIUM_CLMM_LIQUIDITY_CALCULATE = "RaydiumClmmLiquidityCalculate"
+    RAYDIUM_CLMM_OPEN_LIMIT_ORDER = "RaydiumClmmOpenLimitOrder"
+    RAYDIUM_CLMM_INCREASE_LIMIT_ORDER = "RaydiumClmmIncreaseLimitOrder"
+    RAYDIUM_CLMM_DECREASE_LIMIT_ORDER = "RaydiumClmmDecreaseLimitOrder"
+    RAYDIUM_CLMM_SETTLE_LIMIT_ORDER = "RaydiumClmmSettleLimitOrder"
+    RAYDIUM_CLMM_UPDATE_REWARD_INFOS = "RaydiumClmmUpdateRewardInfos"
+    RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT = "RaydiumClmmOpenPositionWithTokenExtNft"
+    RAYDIUM_CLMM_COLLECT_FEE = "RaydiumClmmCollectFee"
     # Raydium AMM V4
     RAYDIUM_AMM_V4_SWAP = "RaydiumAmmV4Swap"
     RAYDIUM_AMM_V4_DEPOSIT = "RaydiumAmmV4Deposit"
     RAYDIUM_AMM_V4_WITHDRAW = "RaydiumAmmV4Withdraw"
-    RAYDIUM_AMM_V4_WITHDRAW_PNL = "RaydiumAmmV4WithdrawPnl"
     RAYDIUM_AMM_V4_INITIALIZE2 = "RaydiumAmmV4Initialize2"
+    RAYDIUM_AMM_V4_WITHDRAW_PNL = "RaydiumAmmV4WithdrawPnl"
     # Orca Whirlpool
     ORCA_WHIRLPOOL_SWAP = "OrcaWhirlpoolSwap"
     ORCA_WHIRLPOOL_LIQUIDITY_INCREASED = "OrcaWhirlpoolLiquidityIncreased"
@@ -102,9 +112,9 @@ class EventType(str, Enum):
     METEORA_DAMM_V2_SWAP = "MeteoraDammV2Swap"
     METEORA_DAMM_V2_ADD_LIQUIDITY = "MeteoraDammV2AddLiquidity"
     METEORA_DAMM_V2_REMOVE_LIQUIDITY = "MeteoraDammV2RemoveLiquidity"
+    METEORA_DAMM_V2_INITIALIZE_POOL = "MeteoraDammV2InitializePool"
     METEORA_DAMM_V2_CREATE_POSITION = "MeteoraDammV2CreatePosition"
     METEORA_DAMM_V2_CLOSE_POSITION = "MeteoraDammV2ClosePosition"
-    METEORA_DAMM_V2_INITIALIZE_POOL = "MeteoraDammV2InitializePool"
     # Meteora DBC
     METEORA_DBC_SWAP = "MeteoraDbcSwap"
     METEORA_DBC_INITIALIZE_POOL = "MeteoraDbcInitializePool"
@@ -206,6 +216,15 @@ RAYDIUM_CLMM_FILTER_TYPES = (
     EventType.RAYDIUM_CLMM_SWAP,
     EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
     EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
+    EventType.RAYDIUM_CLMM_LIQUIDITY_CHANGE,
+    EventType.RAYDIUM_CLMM_CONFIG_CHANGE,
+    EventType.RAYDIUM_CLMM_CREATE_PERSONAL_POSITION,
+    EventType.RAYDIUM_CLMM_LIQUIDITY_CALCULATE,
+    EventType.RAYDIUM_CLMM_OPEN_LIMIT_ORDER,
+    EventType.RAYDIUM_CLMM_INCREASE_LIMIT_ORDER,
+    EventType.RAYDIUM_CLMM_DECREASE_LIMIT_ORDER,
+    EventType.RAYDIUM_CLMM_SETTLE_LIMIT_ORDER,
+    EventType.RAYDIUM_CLMM_UPDATE_REWARD_INFOS,
     EventType.RAYDIUM_CLMM_CREATE_POOL,
     EventType.RAYDIUM_CLMM_OPEN_POSITION,
     EventType.RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT,
@@ -305,26 +324,35 @@ def all_event_types() -> List[EventType]:
         EventType.PUMP_SWAP_CREATE_POOL,
         EventType.PUMP_SWAP_LIQUIDITY_ADDED,
         EventType.PUMP_SWAP_LIQUIDITY_REMOVED,
-        # Raydium CLMM
-        EventType.RAYDIUM_CLMM_SWAP,
-        EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
-        EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
-        EventType.RAYDIUM_CLMM_CREATE_POOL,
-        EventType.RAYDIUM_CLMM_OPEN_POSITION,
-        EventType.RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT,
-        EventType.RAYDIUM_CLMM_CLOSE_POSITION,
-        EventType.RAYDIUM_CLMM_COLLECT_FEE,
         # Raydium CPMM
         EventType.RAYDIUM_CPMM_SWAP,
         EventType.RAYDIUM_CPMM_DEPOSIT,
         EventType.RAYDIUM_CPMM_WITHDRAW,
         EventType.RAYDIUM_CPMM_INITIALIZE,
+        # Raydium CLMM
+        EventType.RAYDIUM_CLMM_SWAP,
+        EventType.RAYDIUM_CLMM_CREATE_POOL,
+        EventType.RAYDIUM_CLMM_OPEN_POSITION,
+        EventType.RAYDIUM_CLMM_CLOSE_POSITION,
+        EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY,
+        EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY,
+        EventType.RAYDIUM_CLMM_LIQUIDITY_CHANGE,
+        EventType.RAYDIUM_CLMM_CONFIG_CHANGE,
+        EventType.RAYDIUM_CLMM_CREATE_PERSONAL_POSITION,
+        EventType.RAYDIUM_CLMM_LIQUIDITY_CALCULATE,
+        EventType.RAYDIUM_CLMM_OPEN_LIMIT_ORDER,
+        EventType.RAYDIUM_CLMM_INCREASE_LIMIT_ORDER,
+        EventType.RAYDIUM_CLMM_DECREASE_LIMIT_ORDER,
+        EventType.RAYDIUM_CLMM_SETTLE_LIMIT_ORDER,
+        EventType.RAYDIUM_CLMM_UPDATE_REWARD_INFOS,
+        EventType.RAYDIUM_CLMM_OPEN_POSITION_WITH_TOKEN_EXT_NFT,
+        EventType.RAYDIUM_CLMM_COLLECT_FEE,
         # Raydium AMM V4
         EventType.RAYDIUM_AMM_V4_SWAP,
         EventType.RAYDIUM_AMM_V4_DEPOSIT,
         EventType.RAYDIUM_AMM_V4_WITHDRAW,
-        EventType.RAYDIUM_AMM_V4_WITHDRAW_PNL,
         EventType.RAYDIUM_AMM_V4_INITIALIZE2,
+        EventType.RAYDIUM_AMM_V4_WITHDRAW_PNL,
         # Orca Whirlpool
         EventType.ORCA_WHIRLPOOL_SWAP,
         EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED,
@@ -341,9 +369,9 @@ def all_event_types() -> List[EventType]:
         EventType.METEORA_DAMM_V2_SWAP,
         EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
         EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
+        EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
         EventType.METEORA_DAMM_V2_CREATE_POSITION,
         EventType.METEORA_DAMM_V2_CLOSE_POSITION,
-        EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
         # Meteora DBC
         EventType.METEORA_DBC_SWAP,
         EventType.METEORA_DBC_INITIALIZE_POOL,

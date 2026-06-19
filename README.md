@@ -49,6 +49,19 @@
 
 ---
 
+## What This SDK Is For
+
+This is the Python implementation of the FnZero Solana DEX parser SDK for asyncio services, research scripts, indexers, copy-trading systems, sniper pipelines, and backend jobs that need normalized real-time DEX events.
+
+| Area | Coverage |
+|------|----------|
+| Parser inputs | Yellowstone gRPC, ShredStream, RPC transactions, encoded transactions, protocol account data |
+| DEX protocols | PumpFun, PumpSwap, Pump Fees, Raydium LaunchLab, Raydium CPMM, Raydium CLMM, Raydium AMM V4, Meteora DAMM v2, Meteora DLMM, Meteora DBC, Orca Whirlpool |
+| Use cases | Real-time DEX event parsing, token launch monitoring, copy trading, sniper bots, analytics notebooks, JSON event pipelines |
+| Runtime | Python 3.10+, asyncio workers, backend services, data pipelines, low-latency bot infrastructure |
+
+---
+
 ## Release notes
 
 ### v0.5.6

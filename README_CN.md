@@ -49,6 +49,19 @@
 
 ---
 
+## 这个 SDK 适合什么场景
+
+这是 FnZero Solana DEX Parser SDK 的 Python 实现，适合 asyncio 服务、研究脚本、索引器、跟单系统、狙击交易管线和后端任务，把实时链上交易解析成统一的 DEX 事件。
+
+| 范围 | 覆盖内容 |
+|------|----------|
+| 解析输入 | Yellowstone gRPC、ShredStream、RPC transactions、encoded transactions、协议账户数据 |
+| DEX 协议 | PumpFun、PumpSwap、Pump Fees、Raydium LaunchLab、Raydium CPMM、Raydium CLMM、Raydium AMM V4、Meteora DAMM v2、Meteora DLMM、Meteora DBC、Orca Whirlpool |
+| 使用场景 | 实时 DEX 事件解析、代币发射监控、跟单交易、狙击机器人、分析脚本、JSON 事件管线 |
+| 运行环境 | Python 3.10+、asyncio worker、后端服务、数据管线、低延迟机器人基础设施 |
+
+---
+
 ## 发布说明
 
 ### v0.5.6

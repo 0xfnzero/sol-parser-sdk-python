@@ -89,7 +89,7 @@
 **PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.5.6
+pip install sol-parser-sdk-python==0.5.7
 ```
 
 **源码**

@@ -45,7 +45,8 @@ PUMPFUN_BONDING_CURVE_BODY = 107
 PUMPFUN_GLOBAL_VOLUME_ACCUMULATOR_BODY = 536
 PUMPFUN_USER_VOLUME_ACCUMULATOR_BODY = 98
 GLOBAL_CONFIG_BODY = 634
-POOL_BODY = 244
+POOL_LEGACY_BODY = 244
+POOL_BODY = 253
 MAX_PUMPFUN_FEE_TIERS = 64
 MAX_PUMPFUN_SHAREHOLDERS = 64
 
@@ -752,6 +753,10 @@ def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> 
     o += 32
     is_mayhem = data[o] != 0
     is_cashback = data[o + 1] != 0
+    o += 2
+    virtual_quote_reserves = (
+        int.from_bytes(data[o : o + 16], "little", signed=True) if len(data) >= POOL_BODY else 0
+    )
     return _account_event(
         EventType.ACCOUNT_PUMP_SWAP_POOL,
         {
@@ -770,6 +775,7 @@ def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> 
                 "coin_creator": coin_creator,
                 "is_mayhem_mode": is_mayhem,
                 "is_cashback_coin": is_cashback,
+                "virtual_quote_reserves": virtual_quote_reserves,
             },
         },
     )
@@ -861,7 +867,9 @@ def parse_pumpswap_global_config(account: AccountData, metadata: EventMetadata) 
 
 
 def parse_pumpswap_pool(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
-    if len(account.data) < 8 + POOL_BODY:
+    if len(account.data) < 8 + POOL_LEGACY_BODY:
+        return None
+    if len(account.data) != 8 + POOL_LEGACY_BODY and len(account.data) < 8 + POOL_BODY:
         return None
     if not has_discriminator(account.data, _DISC_POOL):
         return None

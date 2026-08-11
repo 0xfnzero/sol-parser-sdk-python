@@ -2406,9 +2406,49 @@ def _parse_raydium_launchlab_pool_create(data: bytes, meta: dict) -> Optional[De
 # --- PumpSwap ---
 
 
+def _parse_pumpswap_trade_tail(data: bytes) -> Optional[Dict[str, Any]]:
+    tail: Dict[str, Any] = {
+        "cashback_fee_basis_points": 0,
+        "cashback": 0,
+        "buyback_fee_basis_points": 0,
+        "buyback_fee": 0,
+        "virtual_quote_reserves": 0,
+        "can_boost": False,
+        "base_supply": 0,
+    }
+    if not data:
+        return tail
+    if len(data) < 16:
+        return None
+
+    tail["cashback_fee_basis_points"] = _u64le(data, 0)
+    tail["cashback"] = _u64le(data, 8)
+    if len(data) == 16:
+        return tail
+    if len(data) < 32:
+        return None
+
+    tail["buyback_fee_basis_points"] = _u64le(data, 16)
+    tail["buyback_fee"] = _u64le(data, 24)
+    if len(data) == 32:
+        return tail
+    if len(data) < 57:
+        return None
+
+    tail["virtual_quote_reserves"] = int.from_bytes(data[32:48], "little", signed=True)
+    if data[48] not in (0, 1):
+        return None
+    tail["can_boost"] = data[48] == 1
+    tail["base_supply"] = _u64le(data, 49)
+    return tail
+
+
 def parse_ps_buy_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
-    min_len = 16 * 8 + 7 * 32 + 1 + 5 * 8 + 4
-    if len(data) < min_len:
+    legacy_len = 16 * 8 + 7 * 32 + 1 + 4 * 8
+    min_required_len = legacy_len + 8 + 4
+    if len(data) != legacy_len and len(data) < min_required_len:
+        return None
+    if data[352] not in (0, 1):
         return None
     o = 0
 
@@ -2457,36 +2497,36 @@ def parse_ps_buy_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
         "coin_creator_fee_basis_points": rd(),
         "coin_creator_fee": rd(),
     }
-    tv = _bool(data, o)
+    tv = data[o] == 1
     o += 1
     ev["track_volume"] = tv
     ev["total_unclaimed_tokens"] = rd()
     ev["total_claimed_tokens"] = rd()
     ev["current_sol_volume"] = rd()
     ev["last_update_timestamp"] = ri()
-    ev["min_base_amount_out"] = rd()
-    ix = ""
-    if o + 4 <= len(data):
-        ln = _u32le(data, o)
+    ev["min_base_amount_out"] = 0
+    ev["ix_name"] = ""
+    tail = _parse_pumpswap_trade_tail(b"")
+    if len(data) != legacy_len:
+        ev["min_base_amount_out"] = rd()
+        if o + 4 > len(data):
+            return None
+        name_len = _u32le(data, o)
         o += 4
-        if o + ln <= len(data):
-            ix = data[o : o + ln].decode("utf-8", errors="replace")
-    ev["ix_name"] = ix
-    # Mayhem mode and cashback fields
-    mm = False
-    if o < len(data):
-        mm = _bool(data, o)
-        o += 1
-    cb_bps = 0
-    cb = 0
-    if o + 16 <= len(data):
-        cb_bps = _u64le(data, o)
-        o += 8
-        cb = _u64le(data, o)
-    ev["mayhem_mode"] = mm
-    ev["cashback_fee_basis_points"] = cb_bps
-    ev["cashback"] = cb
-    ev["is_cashback_coin"] = cb_bps > 0
+        name_end = o + name_len
+        if name_end > len(data):
+            return None
+        try:
+            ev["ix_name"] = data[o:name_end].decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        o = name_end
+        tail = _parse_pumpswap_trade_tail(data[o:])
+        if tail is None:
+            return None
+    assert tail is not None
+    ev.update(tail)
+    ev["is_cashback_coin"] = tail["cashback_fee_basis_points"] > 0
     md = ev.pop("metadata", meta)
     return DexEvent(
         type=EventType.PUMP_SWAP_BUY,
@@ -2495,8 +2535,11 @@ def parse_ps_buy_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
 
 
 def parse_ps_sell_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
-    req = 13 * 8 + 7 * 32
+    req = 14 * 8 + 7 * 32 + 2 * 8
     if len(data) < req:
+        return None
+    tail = _parse_pumpswap_trade_tail(data[req:])
+    if tail is None:
         return None
     o = 0
 
@@ -2544,12 +2587,7 @@ def parse_ps_sell_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
         "coin_creator_fee_basis_points": rd(),
         "coin_creator_fee": rd(),
     }
-    cash_bps, cash = 0, 0
-    if len(data) >= 368:
-        cash_bps = _u64le(data, 352)
-        cash = _u64le(data, 360)
-    ev["cashback_fee_basis_points"] = cash_bps
-    ev["cashback"] = cash
+    ev.update(tail)
     md = ev.pop("metadata", meta)
     return DexEvent(
         type=EventType.PUMP_SWAP_SELL,

@@ -418,6 +418,11 @@ class PumpSwapBuyEvent(DexEventBase):
     mayhem_mode: bool = False
     cashback_fee_basis_points: int = 0
     cashback: int = 0
+    buyback_fee_basis_points: int = 0
+    buyback_fee: int = 0
+    virtual_quote_reserves: int = 0
+    can_boost: bool = False
+    base_supply: int = 0
     is_cashback_coin: bool = False
     base_mint: str = ""
     quote_mint: str = ""
@@ -461,6 +466,11 @@ class PumpSwapSellEvent(DexEventBase):
     coin_creator_fee: int = 0
     cashback_fee_basis_points: int = 0
     cashback: int = 0
+    buyback_fee_basis_points: int = 0
+    buyback_fee: int = 0
+    virtual_quote_reserves: int = 0
+    can_boost: bool = False
+    base_supply: int = 0
     base_mint: str = ""
     quote_mint: str = ""
     pool_base_token_account: str = ""
@@ -1409,8 +1419,11 @@ def _get_int(m: dict, key: str) -> int:
     v = m.get(key, 0)
     if isinstance(v, int):
         return v
-    if isinstance(v, str) and v.isdigit():
-        return int(v)
+    if isinstance(v, str):
+        try:
+            return int(v, 10)
+        except ValueError:
+            pass
     return 0
 
 
@@ -1663,6 +1676,11 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             mayhem_mode=_get_bool(data, "mayhem_mode"),
             cashback_fee_basis_points=_get_int(data, "cashback_fee_basis_points"),
             cashback=_get_int(data, "cashback"),
+            buyback_fee_basis_points=_get_int(data, "buyback_fee_basis_points"),
+            buyback_fee=_get_int(data, "buyback_fee"),
+            virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
+            can_boost=_get_bool(data, "can_boost"),
+            base_supply=_get_int(data, "base_supply"),
             is_cashback_coin=_get_bool(data, "is_cashback_coin"),
             is_pump_pool=_get_bool(data, "is_pump_pool"),
             base_mint=_get_str(data, "base_mint"),
@@ -1706,6 +1724,11 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             coin_creator_fee=_get_int(data, "coin_creator_fee"),
             cashback_fee_basis_points=_get_int(data, "cashback_fee_basis_points"),
             cashback=_get_int(data, "cashback"),
+            buyback_fee_basis_points=_get_int(data, "buyback_fee_basis_points"),
+            buyback_fee=_get_int(data, "buyback_fee"),
+            virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
+            can_boost=_get_bool(data, "can_boost"),
+            base_supply=_get_int(data, "base_supply"),
             is_pump_pool=_get_bool(data, "is_pump_pool"),
             base_mint=_get_str(data, "base_mint"),
             quote_mint=_get_str(data, "quote_mint"),

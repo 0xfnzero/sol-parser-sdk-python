@@ -6,6 +6,7 @@ from sol_parser.event_types import (
 )
 from sol_parser.grpc_types import EventType
 from sol_parser.log_instr_dedup import dedupe_log_instruction_events
+from sol_parser.event_types import RaydiumClmmSwapEvent
 
 
 Z = "11111111111111111111111111111111"
@@ -155,3 +156,32 @@ def test_dedupe_collapses_pumpfun_create_and_create_v2_by_mint():
     assert create.virtual_quote_reserves == 123
     assert create.is_mayhem_mode is True
     assert create.is_cashback_enabled is True
+def _clmm_swap(zero_for_one: bool, amount_0: int) -> DexEvent:
+    return DexEvent(
+        type=EventType.RAYDIUM_CLMM_SWAP,
+        data=RaydiumClmmSwapEvent(
+            pool_state="clmm-pool",
+            zero_for_one=zero_for_one,
+            amount_0=amount_0,
+        ),
+    )
+
+
+def test_clmm_dedup_ignores_instruction_placeholder_direction() -> None:
+    out = dedupe_log_instruction_events(
+        [_clmm_swap(False, 123)],
+        [_clmm_swap(True, 0)],
+    )
+
+    assert len(out) == 1
+    assert out[0].data.amount_0 == 123
+    assert out[0].data.zero_for_one is False
+
+
+def test_clmm_same_pool_occurrences_are_retained() -> None:
+    out = dedupe_log_instruction_events(
+        [_clmm_swap(False, 1), _clmm_swap(True, 2)],
+        [_clmm_swap(True, 0), _clmm_swap(False, 0)],
+    )
+
+    assert len(out) == 2

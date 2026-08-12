@@ -6,8 +6,12 @@ import struct
 
 from sol_parser.dex_parsers import parse_ps_buy_from_data
 from sol_parser.inner_instruction_parser import parse_inner_instruction
+from sol_parser.event_types import DexEvent, MeteoraDlmmCreatePositionEvent, MeteoraDlmmSwapEvent
+from sol_parser.grpc_instruction_parser import merge_instruction_events
+from sol_parser.merger import try_merge_dex_events
 from sol_parser.grpc_types import EventType, IncludeOnlyFilter
 from sol_parser.instructions import (
+    METEORA_DLMM_PROGRAM_ID,
     METEORA_POOLS_PROGRAM_ID,
     PUMPFUN_PROGRAM_ID,
     PUMPSWAP_PROGRAM_ID,
@@ -30,6 +34,8 @@ RAYDIUM_LAUNCHLAB_OLD_INNER_TRADE = bytes(
 METEORA_POOLS_INNER_SWAP = bytes(
     [81, 108, 227, 190, 205, 208, 10, 196, 155, 167, 108, 32, 122, 76, 173, 64]
 )
+EVENT_CPI_PREFIX = bytes([228, 69, 165, 46, 81, 203, 154, 29])
+METEORA_DLMM_SWAP2_EVENT = bytes([46, 116, 82, 215, 148, 27, 84, 77])
 
 
 def test_parse_inner_none_filter_allows_pumpswap_buy() -> None:
@@ -98,6 +104,64 @@ def test_parse_inner_meteora_pools_uses_protocol_prefilter() -> None:
     )
     assert ev is not None
     assert ev.type == EventType.METEORA_POOLS_SWAP
+
+
+def test_parse_inner_meteora_dlmm_uses_current_anchor_event_cpi_layout() -> None:
+    payload = bytearray(147)
+    payload[72] = 1
+    struct.pack_into("<Q", payload, 89, 100)
+    struct.pack_into("<Q", payload, 105, 90)
+    ev = parse_inner_instruction(
+        EVENT_CPI_PREFIX + METEORA_DLMM_SWAP2_EVENT + payload,
+        METEORA_DLMM_PROGRAM_ID,
+        {},
+        IncludeOnlyFilter([EventType.METEORA_DLMM_SWAP]),
+        False,
+    )
+
+    assert ev is not None
+    assert ev.type == EventType.METEORA_DLMM_SWAP
+    assert ev.data.amount_in == 100
+    assert ev.data.amount_out == 90
+
+
+def test_merge_aggregator_dlmm_swaps_with_direct_event_cpi() -> None:
+    def swap(pool: str, amount_in: int, amount_out: int) -> DexEvent:
+        return DexEvent(
+            type=EventType.METEORA_DLMM_SWAP,
+            data=MeteoraDlmmSwapEvent(pool=pool, amount_in=amount_in, amount_out=amount_out),
+        )
+
+    events = merge_instruction_events([
+        (0, 0, 2, False, swap("pool-1", 1, 0)),
+        (0, 1, 3, True, swap("pool-1", 10, 9)),
+        (0, 2, 2, False, swap("pool-2", 2, 0)),
+        (0, 3, 3, True, swap("pool-2", 20, 18)),
+    ])
+
+    assert [(event.data.amount_in, event.data.amount_out) for event in events] == [
+        (10, 9),
+        (20, 18),
+    ]
+
+
+def test_merge_preserves_unrelated_inner_event() -> None:
+    swap = DexEvent(type=EventType.METEORA_DLMM_SWAP, data=MeteoraDlmmSwapEvent())
+    other = DexEvent(type=EventType.PUMP_FUN_TRADE, data=object())
+    assert merge_instruction_events([(0, None, swap), (0, 0, other)]) == [swap, other]
+
+
+def test_dlmm_position_merge_keeps_instruction_only_fields() -> None:
+    base = DexEvent(
+        type=EventType.METEORA_DLMM_CREATE_POSITION,
+        data=MeteoraDlmmCreatePositionEvent(lower_bin_id=-42, width=70),
+    )
+    inner = DexEvent(
+        type=EventType.METEORA_DLMM_CREATE_POSITION,
+        data=MeteoraDlmmCreatePositionEvent(),
+    )
+    assert try_merge_dex_events(base, inner)
+    assert (base.data.lower_bin_id, base.data.width) == (-42, 70)
 
 
 def test_parse_inner_raydium_launchlab_uses_real_cpi_discriminators() -> None:

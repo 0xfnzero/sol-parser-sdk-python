@@ -49,16 +49,19 @@ def _ix_lane(ix_name: Any) -> int:
     return 0
 
 
-PumpfunLaneBase = Tuple[str, str, bool, int]
+OccurrenceBase = Tuple[Any, ...]
 
 
-def _next_occurrence(base: PumpfunLaneBase, counts: Dict[PumpfunLaneBase, int]) -> int:
+def _next_occurrence(base: OccurrenceBase, counts: Dict[OccurrenceBase, int]) -> int:
     current = counts.get(base, 0)
     counts[base] = current + 1
     return current
 
 
-def _dedupe_key(ev: DexEvent, pumpfun_lane_counts: Dict[PumpfunLaneBase, int]) -> Optional[str]:
+def _dedupe_key(
+    ev: DexEvent,
+    occurrence_counts: Dict[OccurrenceBase, int],
+) -> Optional[str]:
     data = ev.data
     if data is None:
         return None
@@ -71,7 +74,7 @@ def _dedupe_key(ev: DexEvent, pumpfun_lane_counts: Dict[PumpfunLaneBase, int]) -
             bool(getattr(data, "is_buy", False)),
             lane,
         )
-        occ = _next_occurrence(base, pumpfun_lane_counts)
+        occ = _next_occurrence(("PumpFun", *base), occurrence_counts)
         return f"PumpFunTrade|{base[0]}|{base[1]}|{base[2]}|{base[3]}|{occ}"
 
     t = ev.type
@@ -110,13 +113,32 @@ def _dedupe_key(ev: DexEvent, pumpfun_lane_counts: Dict[PumpfunLaneBase, int]) -
     if t == EventType.PUMP_SWAP_LIQUIDITY_REMOVED:
         return f"PumpSwapLiquidityRemoved|{getattr(data, 'pool', '')}|{getattr(data, 'user', '')}"
     if t == EventType.RAYDIUM_CLMM_SWAP:
-        return f"RaydiumClmmSwap|{getattr(data, 'pool_state', '')}|{bool(getattr(data, 'zero_for_one', False))}"
+        pool = getattr(data, "pool_state", "")
+        occurrence = _next_occurrence(("RaydiumClmm", pool), occurrence_counts)
+        return f"RaydiumClmmSwap|{pool}|{occurrence}"
+    if t == EventType.RAYDIUM_CPMM_SWAP:
+        pool = getattr(data, "pool_id", "")
+        occurrence = _next_occurrence(("RaydiumCpmm", pool), occurrence_counts)
+        return f"RaydiumCpmmSwap|{pool}|{occurrence}"
     if t == EventType.RAYDIUM_AMM_V4_SWAP:
-        return f"RaydiumAmmV4Swap|{getattr(data, 'amm', '')}"
+        base_out = getattr(data, "max_amount_in", 0) != 0
+        amount = getattr(data, "amount_out" if base_out else "amount_in", 0)
+        base = (base_out, amount)
+        occurrence = _next_occurrence(("RaydiumAmmV4", *base), occurrence_counts)
+        return f"RaydiumAmmV4Swap|{base_out}|{amount}|{occurrence}"
+    if t == EventType.ORCA_WHIRLPOOL_SWAP:
+        whirlpool = getattr(data, "whirlpool", "")
+        occurrence = _next_occurrence(("OrcaWhirlpool", whirlpool), occurrence_counts)
+        return f"OrcaWhirlpoolSwap|{whirlpool}|{occurrence}"
     if t == EventType.METEORA_DLMM_SWAP:
+        base = (
+            getattr(data, "pool", ""),
+            getattr(data, "from_addr", ""),
+            bool(getattr(data, "swap_for_y", False)),
+        )
+        occurrence = _next_occurrence(("MeteoraDlmm", *base), occurrence_counts)
         return (
-            f"MeteoraDlmmSwap|{getattr(data, 'pool', '')}|"
-            f"{getattr(data, 'from_addr', '')}|{bool(getattr(data, 'swap_for_y', False))}"
+            f"MeteoraDlmmSwap|{base[0]}|{base[1]}|{base[2]}|{occurrence}"
         )
     return None
 
@@ -312,6 +334,8 @@ def _merge_grpc_instruction_into_log(log_ev: DexEvent, ix_ev: DexEvent) -> None:
             "serum_vault_signer",
             "user_source_token_account",
             "user_destination_token_account",
+            "user_source_owner",
+            "amm",
         ):
             _fill_attr(log, attr, ix)
     elif log_ev.type == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE and ix_ev.type == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
@@ -329,17 +353,17 @@ def dedupe_log_instruction_events(
 ) -> List[DexEvent]:
     out: List[DexEvent] = []
     index_by_key: Dict[str, int] = {}
-    log_pumpfun_counts: Dict[PumpfunLaneBase, int] = {}
-    ix_pumpfun_counts: Dict[PumpfunLaneBase, int] = {}
+    log_occurrences: Dict[OccurrenceBase, int] = {}
+    ix_occurrences: Dict[OccurrenceBase, int] = {}
 
     for ev in log_events:
-        key = _dedupe_key(ev, log_pumpfun_counts)
+        key = _dedupe_key(ev, log_occurrences)
         if key is not None:
             index_by_key[key] = len(out)
         out.append(ev)
 
     for ev in instruction_events:
-        key = _dedupe_key(ev, ix_pumpfun_counts)
+        key = _dedupe_key(ev, ix_occurrences)
         if key is None:
             out.append(ev)
             continue

@@ -11,7 +11,11 @@ import base58
 from .dex_parsers import DexEvent
 from .grpc_types import EventTypeFilter, EventType, event_type_filter_allows_instruction_parsing
 from .inner_instruction_parser import parse_inner_instruction
-from .instructions import parse_inner_compiled_instruction_if_supported, parse_instruction_unified
+from .instructions import (
+    METEORA_DLMM_PROGRAM_ID,
+    parse_inner_compiled_instruction_if_supported,
+    parse_instruction_unified,
+)
 from .log_instr_dedup import dedupe_log_instruction_events
 from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
@@ -30,6 +34,7 @@ class RpcCompiledInstruction:
     program_id_index: int
     accounts: Union[List[int], bytes]
     data: bytes
+    stack_height: Optional[int] = None
 
 
 @dataclass
@@ -215,8 +220,9 @@ def parse_rpc_transaction(
     block_tx_index = int(getattr(tx, "transaction_index", 0) or 0)
     full_account_keys = _merge_rpc_full_account_keys(msg.account_keys, meta)
 
-    indexed_instruction_events: List[Tuple[int, Optional[int], DexEvent]] = []
+    indexed_instruction_events: List[Tuple[Any, ...]] = []
     from .grpc_instruction_parser import (
+        _is_dlmm_event_cpi,
         detect_pumpfun_create_from_logs,
         merge_instruction_events,
     )
@@ -238,7 +244,7 @@ def parse_rpc_transaction(
                 is_created_buy=has_pumpfun_create_log,
             )
             if ev:
-                indexed_instruction_events.append((outer_idx, None, ev))
+                indexed_instruction_events.append((outer_idx, None, 1, False, ev))
 
         # 解析内层指令
         for group in meta.inner_instructions:
@@ -256,7 +262,18 @@ def parse_rpc_transaction(
                     is_created_buy=has_pumpfun_create_log,
                 )
                 if ev:
-                    indexed_instruction_events.append((int(group.index), inner_idx, ev))
+                    pid = (
+                        full_account_keys[ix.program_id_index]
+                        if ix.program_id_index < len(full_account_keys)
+                        else ""
+                    )
+                    indexed_instruction_events.append((
+                        int(group.index),
+                        inner_idx,
+                        ix.stack_height,
+                        pid == METEORA_DLMM_PROGRAM_ID and _is_dlmm_event_cpi(ix.data),
+                        ev,
+                    ))
 
     instruction_events = merge_instruction_events(indexed_instruction_events)
     enrich_pumpfun_same_tx_post_merge(instruction_events)
@@ -525,6 +542,13 @@ def _parse_rpc_compiled_ix(ix: dict, account_keys: List[str]) -> RpcCompiledInst
         program_id_index=pidx,
         accounts=acc_list,
         data=_ix_data_from_rpc(ix),
+        stack_height=(
+            int(ix["stackHeight"])
+            if ix.get("stackHeight") is not None
+            else int(ix["stack_height"])
+            if ix.get("stack_height") is not None
+            else None
+        ),
     )
 
 
@@ -717,6 +741,8 @@ def rpc_response_to_solana_storage(
             acc = ix.accounts
             ii.accounts = bytes(acc) if not isinstance(acc, bytes) else acc
             ii.data = ix.data
+            if ix.stack_height is not None:
+                ii.stack_height = ix.stack_height
     if m.loaded_addresses:
         for w in m.loaded_addresses.writable:
             meta.loaded_writable_addresses.append(base58.b58decode(w))

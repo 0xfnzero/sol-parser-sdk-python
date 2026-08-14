@@ -79,6 +79,17 @@ def parse_log_optimized(
 ) -> Optional[DexEvent]:
     """单次 base64 decode 后按 discriminator 做 early filter，再按实际事件类型二次过滤。"""
     grpc = int(time.time() * 1_000_000) if grpc_recv_us is None else grpc_recv_us
+    if program_id == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" and "ray_log: " in log:
+        from .dex_parsers import parse_amm_ray_log_swap
+        from .grpc_types import EventType
+
+        if event_type_filter is not None and not event_type_filter.should_include(
+            EventType.RAYDIUM_AMM_V4_SWAP
+        ):
+            return None
+        return parse_amm_ray_log_swap(
+            log, _meta(signature, slot, tx_index, block_time_us, grpc, recent_blockhash)
+        )
     buf = decode_program_data_line(log)
     if not buf:
         return None

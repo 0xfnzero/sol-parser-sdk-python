@@ -49,6 +49,7 @@ RAYDIUM_LAUNCHLAB_TRADE_DISC = bytes([189, 219, 127, 211, 78, 230, 97, 238])
 DLMM_SWAP_DISC = bytes([143, 190, 90, 218, 196, 30, 51, 222])
 RAYDIUM_LAUNCHLAB_BUY_EXACT_IN_DISC = bytes([250, 234, 13, 123, 213, 156, 19, 236])
 METEORA_POOLS_SWAP_DISC = bytes([248, 198, 158, 145, 225, 117, 135, 200])
+METEORA_DLMM_SWAP_DISC = bytes([248, 198, 158, 145, 225, 117, 135, 200])
 
 
 def _accounts(n: int) -> list[str]:
@@ -256,7 +257,7 @@ def test_parse_raydium_cpmm_normal_instruction_uses_rust_accounts_and_defaults()
     )
     assert swap is not None
     assert swap.type == EventType.RAYDIUM_CPMM_SWAP
-    assert swap.data.pool_id == "11111111111111111111111111111111"
+    assert swap.data.pool_id == "account_3"
     assert swap.data.input_amount == 0
     assert swap.data.output_amount == 0
     assert swap.data.base_input is True
@@ -339,8 +340,8 @@ def test_parse_meteora_pools_and_dlmm_outer_instructions_are_routed() -> None:
 
     assert event_type_filter_allows_instruction_parsing([EventType.METEORA_DLMM_SWAP])
     dlmm = parse_instruction_unified(
-        bytes([11]) + struct.pack("<QQ", 333, 444),
-        _accounts(3),
+        _u64_instruction(METEORA_DLMM_SWAP_DISC, 333, 444),
+        _accounts(11),
         "sig",
         1,
         0,
@@ -353,7 +354,7 @@ def test_parse_meteora_pools_and_dlmm_outer_instructions_are_routed() -> None:
     assert dlmm.type == EventType.METEORA_DLMM_SWAP
     assert isinstance(dlmm.data, MeteoraDlmmSwapEvent)
     assert dlmm.data.pool == "account_0"
-    assert dlmm.data.from_addr == "account_1"
+    assert dlmm.data.from_addr == "account_10"
     assert dlmm.data.amount_in == 333
 
 

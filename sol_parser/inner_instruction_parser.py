@@ -43,7 +43,7 @@ from .dex_parsers import (
     parse_cpmm_swap_in_from_data,
     parse_cpmm_swap_out_from_data,
     parse_cpmm_withdraw_from_data,
-    parse_dlmm_from_program_data,
+    parse_dlmm_event_from_data,
     parse_meteora_damm_from_buf,
     parse_meteora_add_from_data,
     parse_meteora_bootstrap_from_data,
@@ -183,11 +183,6 @@ def _damm_buf_from_inner(disc16: bytes, inner: bytes) -> bytes:
 # Raydium LaunchLab inner（event discriminator + Anchor CPI marker）
 _RAYDIUM_LAUNCHLAB_TRADE = bytes([189, 219, 127, 211, 78, 230, 97, 238, 155, 167, 108, 32, 122, 76, 173, 64])
 _RAYDIUM_LAUNCHLAB_POOL_CREATE = bytes([151, 215, 226, 9, 118, 161, 115, 174, 155, 167, 108, 32, 122, 76, 173, 64])
-
-# DLMM（8 字节 event disc + payload）
-def _dlmm_buf_from_inner(disc16: bytes, inner: bytes) -> bytes:
-    return disc16[:8] + inner
-
 
 def _meteora_pools_swap_inner(data: bytes, meta_d: dict) -> Optional[DexEvent]:
     if len(data) < 16:
@@ -440,6 +435,9 @@ def parse_inner_instruction(
     if program_id_b58 == METEORA_DLMM_PROGRAM_ID:
         if filter is not None and not event_type_filter_includes_meteora_dlmm(filter):
             return None
-        return emit(parse_dlmm_from_program_data(_dlmm_buf_from_inner(disc16, inner), meta_d))
+        event_disc = _event_cpi_disc8(disc16)
+        if event_disc is None:
+            return None
+        return emit(parse_dlmm_event_from_data(event_disc, inner, meta_d))
 
     return None

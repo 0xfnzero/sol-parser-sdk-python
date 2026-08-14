@@ -11,13 +11,14 @@ from .account_dispatcher import fill_accounts_with_owned_keys, fill_data
 from .event_types import DexEvent
 from .grpc_types import (
     EventMetadata,
+    EventType,
     EventTypeFilter,
     SubscribeUpdateTransactionInfo,
     event_type_filter_allows_instruction_parsing,
 )
 from .inner_instruction_parser import parse_inner_instruction
 from .instructions import parse_inner_compiled_instruction_if_supported, parse_instruction_unified
-from .merger import merge_dex_events
+from .merger import try_merge_dex_events
 from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
 
@@ -124,36 +125,86 @@ def should_parse_instructions(filter: Optional[EventTypeFilter]) -> bool:
     return event_type_filter_allows_instruction_parsing(list(inc))
 
 
-def merge_instruction_events(
-    events: List[Tuple[int, Optional[int], DexEvent]],
-) -> List[DexEvent]:
+_DLMM_EVENT_TYPES = {
+    EventType.METEORA_DLMM_SWAP,
+    EventType.METEORA_DLMM_ADD_LIQUIDITY,
+    EventType.METEORA_DLMM_REMOVE_LIQUIDITY,
+    EventType.METEORA_DLMM_INITIALIZE_POOL,
+    EventType.METEORA_DLMM_INITIALIZE_BIN_ARRAY,
+    EventType.METEORA_DLMM_CREATE_POSITION,
+    EventType.METEORA_DLMM_CLOSE_POSITION,
+    EventType.METEORA_DLMM_CLAIM_FEE,
+}
+
+
+def _is_dlmm_event_cpi(data: bytes) -> bool:
+    return len(data) >= 16 and (
+        data[:8] == bytes((228, 69, 165, 46, 81, 203, 154, 29))
+        or data[8:16] == bytes((155, 167, 108, 32, 122, 76, 173, 64))
+    )
+
+
+def merge_instruction_events(events: List[Tuple[Any, ...]]) -> List[DexEvent]:
     """对齐 Rust ``merge_instruction_events``。"""
     if not events:
         return []
-    events = sorted(events, key=lambda x: (x[0], 0 if x[1] is None else 1 + x[1]))
+    normalized = events if all(len(item) == 5 for item in events) else [
+        (item[0], item[1], None, False, item[2]) if len(item) == 3 else item
+        for item in events
+    ]
+    normalized.sort(key=lambda x: (x[0], 0 if x[1] is None else 1 + x[1]))
     result: List[DexEvent] = []
-    pending_outer: Optional[Tuple[int, DexEvent]] = None
+    outer_target: Optional[Tuple[int, int]] = None
+    dlmm_targets: List[Tuple[int, Optional[int], int]] = []
 
-    for outer_idx, inner_idx, event in events:
+    for outer_idx, inner_idx, stack_height, is_dlmm_event_cpi, event in normalized:
         if inner_idx is None:
-            if pending_outer is not None:
-                result.append(pending_outer[1])
-            pending_outer = (outer_idx, event)
-        else:
-            if pending_outer is not None:
-                po_idx, mut_outer = pending_outer
-                pending_outer = None
-                if po_idx == outer_idx:
-                    merge_dex_events(mut_outer, event)
-                    pending_outer = (outer_idx, mut_outer)
-                else:
-                    result.append(mut_outer)
-                    result.append(event)
+            result.append(event)
+            target_idx = len(result) - 1
+            outer_target = (outer_idx, target_idx)
+            dlmm_targets = (
+                [(outer_idx, stack_height, target_idx)] if event.type in _DLMM_EVENT_TYPES else []
+            )
+            continue
+
+        if is_dlmm_event_cpi:
+            for candidate_idx in range(len(dlmm_targets) - 1, -1, -1):
+                target_outer, target_height, target_idx = dlmm_targets[candidate_idx]
+                direct_child = (
+                    target_height is None
+                    or stack_height is None
+                    or stack_height == target_height + 1
+                )
+                if target_outer == outer_idx and direct_child:
+                    del dlmm_targets[candidate_idx + 1:]
+                    if try_merge_dex_events(result[target_idx], event):
+                        break
             else:
                 result.append(event)
+            continue
 
-    if pending_outer is not None:
-        result.append(pending_outer[1])
+        target_idx: Optional[int] = None
+        if outer_target is not None and outer_target[0] == outer_idx:
+            if try_merge_dex_events(result[outer_target[1]], event):
+                target_idx = outer_target[1]
+        if target_idx is None:
+            result.append(event)
+            target_idx = len(result) - 1
+
+        if event.type in _DLMM_EVENT_TYPES:
+            if stack_height is None:
+                dlmm_targets.clear()
+            else:
+                while dlmm_targets and (
+                    dlmm_targets[-1][0] != outer_idx
+                    or (
+                        dlmm_targets[-1][1] is not None
+                        and dlmm_targets[-1][1] >= stack_height
+                    )
+                ):
+                    dlmm_targets.pop()
+            dlmm_targets.append((outer_idx, stack_height, target_idx))
+
     return result
 
 
@@ -260,7 +311,7 @@ def parse_instructions_enhanced_from_parsed(
 
     is_created_buy = detect_pumpfun_create_from_logs(list(meta.log_messages))
 
-    result: List[Tuple[int, Optional[int], DexEvent]] = []
+    result: List[Tuple[Any, ...]] = []
 
     for i, ix in enumerate(msg.instructions):
         pid_idx = ix.program_id_index
@@ -272,7 +323,7 @@ def parse_instructions_enhanced_from_parsed(
             data, accounts, signature, slot, tx_index, block_time_us, grpc_us, filter, pid
         )
         if ev:
-            result.append((i, None, ev))
+            result.append((i, None, 1, False, ev))
 
     for inner in meta.inner_instructions:
         outer_idx = inner.index
@@ -298,7 +349,13 @@ def parse_instructions_enhanced_from_parsed(
                 is_created_buy,
             )
             if ev:
-                result.append((int(outer_idx), j, ev))
+                result.append((
+                    int(outer_idx),
+                    j,
+                    int(inner_ix.stack_height) if inner_ix.HasField("stack_height") else None,
+                    pid == METEORA_DLMM_PROGRAM_ID and _is_dlmm_event_cpi(data),
+                    ev,
+                ))
 
     merged = merge_instruction_events(result)
     enrich_pumpfun_same_tx_post_merge(merged)

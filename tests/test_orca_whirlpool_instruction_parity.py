@@ -66,7 +66,7 @@ def test_parse_orca_swap_and_swap_v2_instruction_fields() -> None:
     assert ev is not None
     assert ev.type == EventType.ORCA_WHIRLPOOL_SWAP
     assert isinstance(ev.data, OrcaWhirlpoolSwapEvent)
-    assert ev.data.whirlpool == "account_1"
+    assert ev.data.whirlpool == "account_2"
     assert ev.data.a_to_b is False
     assert ev.data.pre_sqrt_price == str(sqrt_price_limit)
     assert ev.data.post_sqrt_price == "0"
@@ -75,7 +75,7 @@ def test_parse_orca_swap_and_swap_v2_instruction_fields() -> None:
 
     swap_v2 = parse_instruction_unified(
         _swap_instruction(SWAP_V2_DISC, 333, 444, sqrt_price_limit + 1, False, True),
-        _accounts(4),
+        _accounts(5),
         "sig",
         1,
         0,
@@ -87,7 +87,7 @@ def test_parse_orca_swap_and_swap_v2_instruction_fields() -> None:
     assert swap_v2 is not None
     assert swap_v2.type == EventType.ORCA_WHIRLPOOL_SWAP
     assert isinstance(swap_v2.data, OrcaWhirlpoolSwapEvent)
-    assert swap_v2.data.whirlpool == "account_1"
+    assert swap_v2.data.whirlpool == "account_4"
     assert swap_v2.data.a_to_b is True
     assert swap_v2.data.pre_sqrt_price == str(sqrt_price_limit + 1)
     assert swap_v2.data.input_amount == 0

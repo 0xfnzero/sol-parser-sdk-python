@@ -32,6 +32,14 @@ from .event_types import (
     MeteoraDammV2CreatePositionEvent,
     MeteoraDammV2RemoveLiquidityEvent,
     MeteoraDammV2SwapEvent,
+    MeteoraDlmmAddLiquidityEvent,
+    MeteoraDlmmClaimFeeEvent,
+    MeteoraDlmmClosePositionEvent,
+    MeteoraDlmmCreatePositionEvent,
+    MeteoraDlmmInitializeBinArrayEvent,
+    MeteoraDlmmInitializePoolEvent,
+    MeteoraDlmmRemoveLiquidityEvent,
+    MeteoraDlmmSwapEvent,
     MeteoraPoolsAddLiquidityEvent,
     MeteoraPoolsRemoveLiquidityEvent,
     MeteoraPoolsSwapEvent,
@@ -43,6 +51,40 @@ from .event_types import (
 from .grpc_types import EventType
 
 ZERO = "11111111111111111111111111111111"
+
+GENERIC_MERGE_TYPES = (
+    PumpSwapCreatePoolEvent,
+    PumpSwapLiquidityAddedEvent,
+    PumpSwapLiquidityRemovedEvent,
+    RaydiumClmmSwapEvent,
+    RaydiumClmmIncreaseLiquidityEvent,
+    RaydiumClmmDecreaseLiquidityEvent,
+    RaydiumClmmCreatePoolEvent,
+    RaydiumClmmCollectFeeEvent,
+    RaydiumCpmmSwapEvent,
+    RaydiumCpmmDepositEvent,
+    RaydiumCpmmWithdrawEvent,
+    RaydiumAmmV4SwapEvent,
+    RaydiumAmmV4DepositEvent,
+    RaydiumAmmV4WithdrawEvent,
+    OrcaWhirlpoolSwapEvent,
+    OrcaWhirlpoolLiquidityIncreasedEvent,
+    OrcaWhirlpoolLiquidityDecreasedEvent,
+    MeteoraPoolsSwapEvent,
+    MeteoraPoolsAddLiquidityEvent,
+    MeteoraPoolsRemoveLiquidityEvent,
+    MeteoraDammV2SwapEvent,
+    MeteoraDammV2AddLiquidityEvent,
+    MeteoraDammV2RemoveLiquidityEvent,
+    MeteoraDammV2CreatePositionEvent,
+    MeteoraDammV2ClosePositionEvent,
+    MeteoraDlmmSwapEvent,
+    MeteoraDlmmAddLiquidityEvent,
+    MeteoraDlmmRemoveLiquidityEvent,
+    MeteoraDlmmInitializeBinArrayEvent,
+    MeteoraDlmmClaimFeeEvent,
+    RaydiumLaunchlabTradeEvent,
+)
 
 
 def _merge_generic(base: Any, inner: Any) -> None:
@@ -258,6 +300,11 @@ def merge_pumpfun_migrate(base: PumpFunMigrateEvent, inner: PumpFunMigrateEvent)
 
 def merge_dex_events(base: DexEvent, inner: DexEvent) -> None:
     """将 ``inner`` 合并进 ``base``（就地修改 ``base.data``）。"""
+    try_merge_dex_events(base, inner)
+
+
+def try_merge_dex_events(base: DexEvent, inner: DexEvent) -> bool:
+    """Merge compatible events and report success so unmatched events are retained."""
     bd = base.data
     ind = inner.data
 
@@ -274,108 +321,45 @@ def merge_dex_events(base: DexEvent, inner: DexEvent) -> None:
             EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
         ):
             merge_pumpfun_trade(bd, ind)
-        return
+            return True
+        return False
 
     if isinstance(bd, PumpFunCreateEvent) and isinstance(ind, PumpFunCreateEvent):
         merge_pumpfun_create(bd, ind)
-        return
+        return True
 
     if isinstance(bd, PumpFunCreateV2TokenEvent) and isinstance(ind, PumpFunCreateV2TokenEvent):
         _merge_generic(bd, ind)
-        return
+        return True
 
     if isinstance(bd, PumpFunMigrateEvent) and isinstance(ind, PumpFunMigrateEvent):
         merge_pumpfun_migrate(bd, ind)
-        return
+        return True
 
     if isinstance(bd, PumpSwapBuyEvent) and isinstance(ind, PumpSwapBuyEvent):
         merge_pumpswap_buy(bd, ind)
-        return
+        return True
     if isinstance(bd, PumpSwapSellEvent) and isinstance(ind, PumpSwapSellEvent):
         merge_pumpswap_sell(bd, ind)
-        return
-    if isinstance(bd, PumpSwapCreatePoolEvent) and isinstance(ind, PumpSwapCreatePoolEvent):
+        return True
+    if isinstance(bd, MeteoraDlmmInitializePoolEvent) and isinstance(ind, MeteoraDlmmInitializePoolEvent):
+        creator, active_bin_id = bd.creator, bd.active_bin_id
         _merge_generic(bd, ind)
-        return
-    if isinstance(bd, PumpSwapLiquidityAddedEvent) and isinstance(ind, PumpSwapLiquidityAddedEvent):
+        bd.creator, bd.active_bin_id = creator, active_bin_id
+        return True
+    if isinstance(bd, MeteoraDlmmCreatePositionEvent) and isinstance(ind, MeteoraDlmmCreatePositionEvent):
+        lower_bin_id, width = bd.lower_bin_id, bd.width
         _merge_generic(bd, ind)
-        return
-    if isinstance(bd, PumpSwapLiquidityRemovedEvent) and isinstance(ind, PumpSwapLiquidityRemovedEvent):
+        bd.lower_bin_id, bd.width = lower_bin_id, width
+        return True
+    if isinstance(bd, MeteoraDlmmClosePositionEvent) and isinstance(ind, MeteoraDlmmClosePositionEvent):
+        pool = bd.pool
         _merge_generic(bd, ind)
-        return
+        bd.pool = pool
+        return True
 
-    if isinstance(bd, RaydiumClmmSwapEvent) and isinstance(ind, RaydiumClmmSwapEvent):
+    if base.type == inner.type and type(bd) is type(ind) and isinstance(bd, GENERIC_MERGE_TYPES):
         _merge_generic(bd, ind)
-        return
-    if isinstance(bd, RaydiumClmmIncreaseLiquidityEvent) and isinstance(ind, RaydiumClmmIncreaseLiquidityEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, RaydiumClmmDecreaseLiquidityEvent) and isinstance(ind, RaydiumClmmDecreaseLiquidityEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, RaydiumClmmCreatePoolEvent) and isinstance(ind, RaydiumClmmCreatePoolEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, RaydiumClmmCollectFeeEvent) and isinstance(ind, RaydiumClmmCollectFeeEvent):
-        _merge_generic(bd, ind)
-        return
+        return True
 
-    if isinstance(bd, RaydiumCpmmSwapEvent) and isinstance(ind, RaydiumCpmmSwapEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, RaydiumCpmmDepositEvent) and isinstance(ind, RaydiumCpmmDepositEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, RaydiumCpmmWithdrawEvent) and isinstance(ind, RaydiumCpmmWithdrawEvent):
-        _merge_generic(bd, ind)
-        return
-
-    if isinstance(bd, RaydiumAmmV4SwapEvent) and isinstance(ind, RaydiumAmmV4SwapEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, RaydiumAmmV4DepositEvent) and isinstance(ind, RaydiumAmmV4DepositEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, RaydiumAmmV4WithdrawEvent) and isinstance(ind, RaydiumAmmV4WithdrawEvent):
-        _merge_generic(bd, ind)
-        return
-
-    if isinstance(bd, OrcaWhirlpoolSwapEvent) and isinstance(ind, OrcaWhirlpoolSwapEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, OrcaWhirlpoolLiquidityIncreasedEvent) and isinstance(ind, OrcaWhirlpoolLiquidityIncreasedEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, OrcaWhirlpoolLiquidityDecreasedEvent) and isinstance(ind, OrcaWhirlpoolLiquidityDecreasedEvent):
-        _merge_generic(bd, ind)
-        return
-
-    if isinstance(bd, MeteoraPoolsSwapEvent) and isinstance(ind, MeteoraPoolsSwapEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, MeteoraPoolsAddLiquidityEvent) and isinstance(ind, MeteoraPoolsAddLiquidityEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, MeteoraPoolsRemoveLiquidityEvent) and isinstance(ind, MeteoraPoolsRemoveLiquidityEvent):
-        _merge_generic(bd, ind)
-        return
-
-    if isinstance(bd, MeteoraDammV2SwapEvent) and isinstance(ind, MeteoraDammV2SwapEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, MeteoraDammV2AddLiquidityEvent) and isinstance(ind, MeteoraDammV2AddLiquidityEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, MeteoraDammV2RemoveLiquidityEvent) and isinstance(ind, MeteoraDammV2RemoveLiquidityEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, MeteoraDammV2CreatePositionEvent) and isinstance(ind, MeteoraDammV2CreatePositionEvent):
-        _merge_generic(bd, ind)
-        return
-    if isinstance(bd, MeteoraDammV2ClosePositionEvent) and isinstance(ind, MeteoraDammV2ClosePositionEvent):
-        _merge_generic(bd, ind)
-        return
-
-    if isinstance(bd, RaydiumLaunchlabTradeEvent) and isinstance(ind, RaydiumLaunchlabTradeEvent):
-        _merge_generic(bd, ind)
-        return
+    return False

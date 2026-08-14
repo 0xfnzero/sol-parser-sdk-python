@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import base64
 import struct
 from typing import Any, Dict, List, Optional
 
@@ -1309,6 +1310,27 @@ def parse_amm_swap_out_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     )
 
 
+def parse_amm_ray_log_swap(log: str, meta: dict) -> Optional[DexEvent]:
+    prefix = "ray_log: "
+    start = log.find(prefix)
+    if start < 0:
+        return None
+    try:
+        data = base64.b64decode(log[start + len(prefix):].strip(), validate=True)
+    except Exception:
+        return None
+    if len(data) != 57 or data[0] not in (3, 4):
+        return None
+    first = _u64le(data, 1)
+    second = _u64le(data, 9)
+    actual = _u64le(data, 49)
+    if data[0] == 3:
+        event = _amm_swap_event(meta, Z, Z, first, second, 0, actual)
+    else:
+        event = _amm_swap_event(meta, Z, Z, actual, 0, first, second)
+    return DexEvent(type=EventType.RAYDIUM_AMM_V4_SWAP, data=event)
+
+
 def parse_amm_deposit_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
     if len(data) < 32 + 32 + 8 + 8 + 8:
         return None
@@ -1402,6 +1424,41 @@ def parse_amm_init2_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
 
 
 # --- Raydium CPMM ---
+
+
+def parse_cpmm_swap_event_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 32 + 6 * 8 + 1:
+        return None
+    o = 0
+    pool = _pub(data, o)
+    o += 32
+    input_vault_before = _u64le(data, o)
+    o += 8
+    output_vault_before = _u64le(data, o)
+    o += 8
+    input_amount = _u64le(data, o)
+    o += 8
+    output_amount = _u64le(data, o)
+    o += 8
+    input_transfer_fee = _u64le(data, o)
+    o += 8
+    output_transfer_fee = _u64le(data, o)
+    o += 8
+    base_input = _bool(data, o)
+    return DexEvent(
+        type=EventType.RAYDIUM_CPMM_SWAP,
+        data=RaydiumCpmmSwapEvent(
+            metadata=_make_meta(meta),
+            pool_id=pool,
+            input_vault_before=input_vault_before,
+            output_vault_before=output_vault_before,
+            input_amount=input_amount,
+            output_amount=output_amount,
+            input_transfer_fee=input_transfer_fee,
+            output_transfer_fee=output_transfer_fee,
+            base_input=base_input,
+        ),
+    )
 
 
 def parse_cpmm_swap_in_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
@@ -2759,14 +2816,24 @@ def parse_ps_remove_liq_from_data(data: bytes, meta: dict) -> Optional[DexEvent]
 
 # --- Meteora DLMM ---
 
-DLMM_SWAP = _d(143, 190, 90, 218, 196, 30, 51, 222)
-DLMM_ADD_LIQ = _d(181, 157, 89, 67, 143, 182, 52, 72)
-DLMM_REMOVE_LIQ = _d(80, 85, 209, 72, 24, 206, 35, 178)
-DLMM_INIT_POOL = _d(95, 180, 10, 172, 84, 174, 232, 40)
+DLMM_SWAP = _d(81, 108, 227, 190, 205, 208, 10, 196)
+DLMM_SWAP2 = _d(46, 116, 82, 215, 148, 27, 84, 77)
+DLMM_ADD_LIQ = _d(31, 94, 125, 90, 227, 52, 61, 186)
+DLMM_REMOVE_LIQ = _d(116, 244, 97, 232, 103, 31, 152, 58)
+DLMM_INIT_POOL = _d(185, 74, 252, 125, 27, 215, 188, 111)
 DLMM_INIT_BIN = _d(11, 18, 155, 194, 33, 115, 238, 119)
-DLMM_CREATE_POS = _d(123, 233, 11, 43, 146, 180, 97, 119)
-DLMM_CLOSE_POS = _d(94, 168, 102, 45, 59, 122, 137, 54)
-DLMM_CLAIM_FEE = _d(152, 70, 208, 111, 104, 91, 44, 1)
+DLMM_CREATE_POS = _d(144, 142, 252, 84, 157, 53, 37, 121)
+DLMM_CLOSE_POS = _d(255, 196, 16, 107, 28, 202, 53, 128)
+DLMM_CLAIM_FEE = _d(75, 122, 154, 48, 140, 74, 123, 163)
+DLMM_CLAIM_FEE2 = _d(232, 171, 242, 97, 58, 77, 35, 45)
+
+DLMM_LEGACY_SWAP = _d(143, 190, 90, 218, 196, 30, 51, 222)
+DLMM_LEGACY_ADD_LIQ = _d(181, 157, 89, 67, 143, 182, 52, 72)
+DLMM_LEGACY_REMOVE_LIQ = _d(80, 85, 209, 72, 24, 206, 35, 178)
+DLMM_LEGACY_INIT_POOL = _d(95, 180, 10, 172, 84, 174, 232, 40)
+DLMM_LEGACY_CREATE_POS = _d(123, 233, 11, 43, 146, 180, 97, 119)
+DLMM_LEGACY_CLOSE_POS = _d(94, 168, 102, 45, 59, 122, 137, 54)
+DLMM_LEGACY_CLAIM_FEE = _d(152, 70, 208, 111, 104, 91, 44, 1)
 
 
 def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
@@ -2774,7 +2841,11 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
         return None
     d = _disc8(buf[:8])
     data = buf[8:]
-    if d == DLMM_SWAP:
+    return parse_dlmm_event_from_data(d, data, meta)
+
+
+def parse_dlmm_event_from_data(d: int, data: bytes, meta: dict) -> Optional[DexEvent]:
+    if d in (DLMM_SWAP, DLMM_LEGACY_SWAP):
         if len(data) < 32 + 32 + 4 + 4 + 8 + 8 + 1 + 8 + 8 + 16 + 8:
             return None
         o = 0
@@ -2816,7 +2887,51 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
                 host_fee=hf,
             ),
         )
-    if d == DLMM_ADD_LIQ:
+    if d == DLMM_SWAP2:
+        if len(data) < 32 + 32 + 4 + 4 + 1 + 16 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 1:
+            return None
+        o = 0
+        pool = _pub(data, o)
+        o += 32
+        frm = _pub(data, o)
+        o += 32
+        sb = _i32le(data, o)
+        o += 4
+        eb = _i32le(data, o)
+        o += 4
+        sy = _bool(data, o)
+        o += 1
+        fbps = str(_u128le_int(data, o))
+        o += 16
+        ai = _u64le(data, o)
+        o += 8
+        o += 8
+        ao = _u64le(data, o)
+        o += 8
+        fee = _u64le(data, o)
+        o += 8
+        pf = _u64le(data, o)
+        o += 8
+        o += 8
+        hf = _u64le(data, o)
+        return DexEvent(
+            type=EventType.METEORA_DLMM_SWAP,
+            data=MeteoraDlmmSwapEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                from_addr=frm,
+                start_bin_id=sb,
+                end_bin_id=eb,
+                amount_in=ai,
+                amount_out=ao,
+                swap_for_y=sy,
+                fee=fee,
+                protocol_fee=pf,
+                fee_bps=fbps,
+                host_fee=hf,
+            ),
+        )
+    if d in (DLMM_ADD_LIQ, DLMM_LEGACY_ADD_LIQ):
         if len(data) < 32 + 32 + 32 + 8 + 8 + 4:
             return None
         o = 0
@@ -2842,7 +2957,7 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
                 active_bin_id=ab,
             ),
         )
-    if d == DLMM_REMOVE_LIQ:
+    if d in (DLMM_REMOVE_LIQ, DLMM_LEGACY_REMOVE_LIQ):
         if len(data) < 32 + 32 + 32 + 8 + 8 + 4:
             return None
         o = 0
@@ -2869,6 +2984,23 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
             ),
         )
     if d == DLMM_INIT_POOL:
+        if len(data) < 32 + 2 + 32 + 32:
+            return None
+        o = 0
+        pool = _pub(data, o)
+        o += 32
+        bs = _u16le(data, o)
+        return DexEvent(
+            type=EventType.METEORA_DLMM_INITIALIZE_POOL,
+            data=MeteoraDlmmInitializePoolEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                creator=Z,
+                active_bin_id=0,
+                bin_step=bs,
+            ),
+        )
+    if d == DLMM_LEGACY_INIT_POOL:
         if len(data) < 32 + 32 + 4 + 2:
             return None
         o = 0
@@ -2908,6 +3040,26 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
             ),
         )
     if d == DLMM_CREATE_POS:
+        if len(data) < 32 + 32 + 32:
+            return None
+        o = 0
+        pool = _pub(data, o)
+        o += 32
+        pos = _pub(data, o)
+        o += 32
+        owner = _pub(data, o)
+        return DexEvent(
+            type=EventType.METEORA_DLMM_CREATE_POSITION,
+            data=MeteoraDlmmCreatePositionEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                position=pos,
+                owner=owner,
+                lower_bin_id=0,
+                width=0,
+            ),
+        )
+    if d == DLMM_LEGACY_CREATE_POS:
         if len(data) < 32 + 32 + 32 + 4 + 4:
             return None
         o = 0
@@ -2932,6 +3084,22 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
             ),
         )
     if d == DLMM_CLOSE_POS:
+        if len(data) < 32 + 32:
+            return None
+        o = 0
+        pos = _pub(data, o)
+        o += 32
+        owner = _pub(data, o)
+        return DexEvent(
+            type=EventType.METEORA_DLMM_CLOSE_POSITION,
+            data=MeteoraDlmmClosePositionEvent(
+                metadata=_make_meta(meta),
+                pool=Z,
+                position=pos,
+                owner=owner,
+            ),
+        )
+    if d == DLMM_LEGACY_CLOSE_POS:
         if len(data) < 32 + 32 + 32:
             return None
         o = 0
@@ -2949,8 +3117,32 @@ def parse_dlmm_from_program_data(buf: bytes, meta: dict) -> Optional[DexEvent]:
                 owner=owner,
             ),
         )
-    if d == DLMM_CLAIM_FEE:
+    if d in (DLMM_CLAIM_FEE, DLMM_LEGACY_CLAIM_FEE):
         if len(data) < 32 + 32 + 32 + 8 + 8:
+            return None
+        o = 0
+        pool = _pub(data, o)
+        o += 32
+        pos = _pub(data, o)
+        o += 32
+        owner = _pub(data, o)
+        o += 32
+        fx = _u64le(data, o)
+        o += 8
+        fy = _u64le(data, o)
+        return DexEvent(
+            type=EventType.METEORA_DLMM_CLAIM_FEE,
+            data=MeteoraDlmmClaimFeeEvent(
+                metadata=_make_meta(meta),
+                pool=pool,
+                position=pos,
+                owner=owner,
+                fee_x=fx,
+                fee_y=fy,
+            ),
+        )
+    if d == DLMM_CLAIM_FEE2:
+        if len(data) < 32 + 32 + 32 + 8 + 8 + 4:
             return None
         o = 0
         pool = _pub(data, o)
@@ -3129,6 +3321,7 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
         return mapping.get(disc)
     if program_id == RAYDIUM_CPMM_PROGRAM_ID:
         mapping = {
+            _d(64, 198, 205, 232, 38, 8, 113, 226): EventType.RAYDIUM_CPMM_SWAP,
             _d(143, 190, 90, 218, 196, 30, 51, 222): EventType.RAYDIUM_CPMM_SWAP,
             _d(55, 217, 98, 86, 163, 74, 180, 173): EventType.RAYDIUM_CPMM_SWAP,
             _d(233, 146, 209, 142, 207, 104, 64, 188): EventType.RAYDIUM_CPMM_INITIALIZE,
@@ -3187,21 +3380,21 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
             return EventType.METEORA_DBC_CURVE_COMPLETE
         return None
     if program_id == METEORA_DLMM_PROGRAM_ID:
-        if disc == DLMM_SWAP:
+        if disc in (DLMM_SWAP, DLMM_SWAP2, DLMM_LEGACY_SWAP):
             return EventType.METEORA_DLMM_SWAP
-        if disc == DLMM_ADD_LIQ:
+        if disc in (DLMM_ADD_LIQ, DLMM_LEGACY_ADD_LIQ):
             return EventType.METEORA_DLMM_ADD_LIQUIDITY
-        if disc == DLMM_REMOVE_LIQ:
+        if disc in (DLMM_REMOVE_LIQ, DLMM_LEGACY_REMOVE_LIQ):
             return EventType.METEORA_DLMM_REMOVE_LIQUIDITY
-        if disc == DLMM_INIT_POOL:
+        if disc in (DLMM_INIT_POOL, DLMM_LEGACY_INIT_POOL):
             return EventType.METEORA_DLMM_INITIALIZE_POOL
         if disc == DLMM_INIT_BIN:
             return EventType.METEORA_DLMM_INITIALIZE_BIN_ARRAY
-        if disc == DLMM_CREATE_POS:
+        if disc in (DLMM_CREATE_POS, DLMM_LEGACY_CREATE_POS):
             return EventType.METEORA_DLMM_CREATE_POSITION
-        if disc == DLMM_CLOSE_POS:
+        if disc in (DLMM_CLOSE_POS, DLMM_LEGACY_CLOSE_POS):
             return EventType.METEORA_DLMM_CLOSE_POSITION
-        if disc == DLMM_CLAIM_FEE:
+        if disc in (DLMM_CLAIM_FEE, DLMM_CLAIM_FEE2, DLMM_LEGACY_CLAIM_FEE):
             return EventType.METEORA_DLMM_CLAIM_FEE
         return None
     return event_type_for_discriminator(disc)
@@ -3232,7 +3425,7 @@ def filter_allows_unscoped_discriminator(event_type_filter: Any, disc: int) -> b
         return filter_wants_pumpfun_trade(event_type_filter) or filter_wants_raydium_launchlab_trade(
             event_type_filter
         )
-    if disc == DLMM_SWAP:
+    if disc in (DLMM_SWAP, DLMM_SWAP2, DLMM_LEGACY_SWAP):
         return event_type_filter.should_include(EventType.RAYDIUM_CPMM_SWAP) or event_type_filter.should_include(
             EventType.METEORA_DLMM_SWAP
         )
@@ -3479,6 +3672,8 @@ def dispatch_program_data(
             return parse_clmm_collect_protocol_from_data(data, meta)
         return None
     if program_id == RAYDIUM_CPMM_PROGRAM_ID:
+        if disc == _d(64, 198, 205, 232, 38, 8, 113, 226):
+            return parse_cpmm_swap_event_from_data(data, meta)
         if disc == _d(143, 190, 90, 218, 196, 30, 51, 222):
             return parse_cpmm_swap_in_from_data(data, meta)
         if disc == _d(55, 217, 98, 86, 163, 74, 180, 173):

@@ -97,6 +97,50 @@ _DISC_METEORA_POOLS_ADD_LIQUIDITY = _d(181, 157, 89, 67, 143, 182, 52, 72)
 _DISC_METEORA_POOLS_REMOVE_LIQUIDITY = _d(80, 85, 209, 72, 24, 206, 177, 108)
 _DISC_METEORA_POOLS_CREATE_POOL = _d(95, 180, 10, 172, 84, 174, 232, 40)
 
+_DISC_DLMM_ADD_LIQUIDITY = _d(181, 157, 89, 67, 143, 182, 52, 72)
+_DISC_DLMM_ADD_LIQUIDITY2 = _d(228, 162, 78, 28, 70, 219, 116, 115)
+_DISC_DLMM_CLAIM_FEE = _d(169, 32, 79, 137, 136, 232, 70, 137)
+_DISC_DLMM_CLAIM_FEE2 = _d(112, 191, 101, 171, 28, 144, 127, 187)
+_DISC_DLMM_CLOSE_POSITION = _d(123, 134, 81, 0, 49, 68, 98, 98)
+_DISC_DLMM_CLOSE_POSITION2 = _d(174, 90, 35, 115, 186, 40, 147, 226)
+_DISC_DLMM_INITIALIZE_BIN_ARRAY = _d(35, 86, 19, 185, 78, 212, 75, 211)
+_DISC_DLMM_INITIALIZE_LB_PAIR = _d(45, 154, 237, 210, 221, 15, 166, 92)
+_DISC_DLMM_INITIALIZE_LB_PAIR2 = _d(73, 59, 36, 120, 237, 83, 108, 198)
+_DISC_DLMM_INITIALIZE_POSITION = _d(219, 192, 234, 71, 190, 191, 102, 80)
+_DISC_DLMM_INITIALIZE_POSITION2 = _d(143, 19, 242, 145, 213, 15, 104, 115)
+_DISC_DLMM_INITIALIZE_POSITION_PDA = _d(46, 82, 125, 146, 85, 141, 228, 153)
+_DISC_DLMM_REMOVE_LIQUIDITY = _d(80, 85, 209, 72, 24, 206, 177, 108)
+_DISC_DLMM_REMOVE_LIQUIDITY2 = _d(230, 215, 82, 127, 241, 101, 227, 146)
+_DISC_DLMM_SWAP = _d(248, 198, 158, 145, 225, 117, 135, 200)
+_DISC_DLMM_SWAP2 = _d(65, 75, 63, 76, 235, 91, 91, 136)
+_DISC_DLMM_SWAP_EXACT_OUT = _d(250, 73, 101, 33, 38, 207, 75, 184)
+_DISC_DLMM_SWAP_EXACT_OUT2 = _d(43, 215, 247, 132, 137, 60, 243, 81)
+_DISC_DLMM_SWAP_WITH_PRICE_IMPACT = _d(56, 173, 230, 208, 173, 228, 156, 205)
+_DISC_DLMM_SWAP_WITH_PRICE_IMPACT2 = _d(74, 98, 192, 214, 177, 51, 75, 51)
+
+_DLMM_INSTRUCTION_DISCS = (
+    _DISC_DLMM_INITIALIZE_LB_PAIR,
+    _DISC_DLMM_INITIALIZE_LB_PAIR2,
+    _DISC_DLMM_INITIALIZE_BIN_ARRAY,
+    _DISC_DLMM_ADD_LIQUIDITY,
+    _DISC_DLMM_ADD_LIQUIDITY2,
+    _DISC_DLMM_REMOVE_LIQUIDITY,
+    _DISC_DLMM_REMOVE_LIQUIDITY2,
+    _DISC_DLMM_INITIALIZE_POSITION,
+    _DISC_DLMM_INITIALIZE_POSITION2,
+    _DISC_DLMM_INITIALIZE_POSITION_PDA,
+    _DISC_DLMM_SWAP,
+    _DISC_DLMM_SWAP2,
+    _DISC_DLMM_SWAP_EXACT_OUT,
+    _DISC_DLMM_SWAP_EXACT_OUT2,
+    _DISC_DLMM_SWAP_WITH_PRICE_IMPACT,
+    _DISC_DLMM_SWAP_WITH_PRICE_IMPACT2,
+    _DISC_DLMM_CLAIM_FEE,
+    _DISC_DLMM_CLAIM_FEE2,
+    _DISC_DLMM_CLOSE_POSITION,
+    _DISC_DLMM_CLOSE_POSITION2,
+)
+
 _DISC_CLMM_SWAP    = _d(248, 198, 158, 145, 225, 117, 135, 200)
 _DISC_CLMM_SWAP_V2 = _d(43, 4, 237, 11, 26, 201, 30, 98)
 _DISC_CLMM_INC_LIQ = _d(133, 29, 89, 223, 69, 238, 176, 10)
@@ -324,7 +368,8 @@ def normal_instruction_data_may_parse(program_id: str, instruction_data: bytes) 
     if program_id == RAYDIUM_AMM_V4_PROGRAM_ID:
         return instruction_data[0] in (1, 3, 4, 7, 9, 11)
     if program_id == METEORA_DLMM_PROGRAM_ID:
-        return instruction_data[0] in (0, 1, 2, 7, 8, 11, 13, 14)
+        disc = _disc8(instruction_data)
+        return disc in _DLMM_INSTRUCTION_DISCS if disc is not None else False
     disc = _disc8(instruction_data)
     if disc is None:
         return False
@@ -1024,94 +1069,120 @@ def parse_meteora_dlmm_instruction(
     block_time_us: Optional[int],
     grpc_recv_us: int,
 ) -> Optional[DexEvent]:
-    if not data or not accounts:
+    if len(data) < 8 or not accounts:
         return None
-    instruction_type = data[0]
-    payload = data[1:]
+    discriminator = struct.unpack_from("<Q", data, 0)[0]
+    payload = data[8:]
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
-    pool = accounts[0]
 
-    if instruction_type == 0:
+    if discriminator == _DISC_DLMM_INITIALIZE_LB_PAIR:
         if len(payload) < 6:
             return None
+        pool = _get_account_safe(accounts, 0)
         return DexEvent(
             type=EventType.METEORA_DLMM_INITIALIZE_POOL,
             data=MeteoraDlmmInitializePoolEvent(
                 metadata=meta,
                 pool=pool,
-                creator=_get_account_safe(accounts, 1),
+                creator=_get_account_safe(accounts, 8),
                 active_bin_id=struct.unpack_from("<i", payload, 0)[0],
                 bin_step=struct.unpack_from("<H", payload, 4)[0],
             ),
         )
 
-    if instruction_type == 1:
+    if discriminator == _DISC_DLMM_INITIALIZE_LB_PAIR2:
+        if len(payload) < 4:
+            return None
+        pool = _get_account_safe(accounts, 0)
+        return DexEvent(
+            type=EventType.METEORA_DLMM_INITIALIZE_POOL,
+            data=MeteoraDlmmInitializePoolEvent(
+                metadata=meta,
+                pool=pool,
+                creator=_get_account_safe(accounts, 8),
+                active_bin_id=struct.unpack_from("<i", payload, 0)[0],
+                bin_step=0,
+            ),
+        )
+
+    if discriminator == _DISC_DLMM_INITIALIZE_BIN_ARRAY:
         if len(payload) < 8:
             return None
+        pool = _get_account_safe(accounts, 0)
         return DexEvent(
             type=EventType.METEORA_DLMM_INITIALIZE_BIN_ARRAY,
             data=MeteoraDlmmInitializeBinArrayEvent(
                 metadata=meta,
                 pool=pool,
                 bin_array=_get_account_safe(accounts, 1),
-                index=struct.unpack_from("<Q", payload, 0)[0],
+                index=struct.unpack_from("<q", payload, 0)[0],
             ),
         )
 
-    if instruction_type == 2:
-        if len(payload) < 32:
-            return None
+    if discriminator in (_DISC_DLMM_ADD_LIQUIDITY, _DISC_DLMM_ADD_LIQUIDITY2):
+        pool = _get_account_safe(accounts, 1)
+        sender_index = 9 if discriminator == _DISC_DLMM_ADD_LIQUIDITY2 else 11
         return DexEvent(
             type=EventType.METEORA_DLMM_ADD_LIQUIDITY,
             data=MeteoraDlmmAddLiquidityEvent(
                 metadata=meta,
                 pool=pool,
-                from_addr=_get_account_safe(accounts, 1),
-                position=_get_account_safe(accounts, 2),
+                from_addr=_get_account_safe(accounts, sender_index),
+                position=_get_account_safe(accounts, 0),
                 amounts=[0, 0],
                 active_bin_id=0,
             ),
         )
 
-    if instruction_type == 7:
-        if len(payload) < 32:
-            return None
+    if discriminator in (_DISC_DLMM_REMOVE_LIQUIDITY, _DISC_DLMM_REMOVE_LIQUIDITY2):
+        pool = _get_account_safe(accounts, 1)
+        sender_index = 9 if discriminator == _DISC_DLMM_REMOVE_LIQUIDITY2 else 11
         return DexEvent(
             type=EventType.METEORA_DLMM_REMOVE_LIQUIDITY,
             data=MeteoraDlmmRemoveLiquidityEvent(
                 metadata=meta,
                 pool=pool,
-                from_addr=_get_account_safe(accounts, 1),
-                position=_get_account_safe(accounts, 2),
+                from_addr=_get_account_safe(accounts, sender_index),
+                position=_get_account_safe(accounts, 0),
                 amounts=[0, 0],
                 active_bin_id=0,
             ),
         )
 
-    if instruction_type == 8:
+    if discriminator in (
+        _DISC_DLMM_INITIALIZE_POSITION,
+        _DISC_DLMM_INITIALIZE_POSITION2,
+        _DISC_DLMM_INITIALIZE_POSITION_PDA,
+    ):
         if len(payload) < 8:
             return None
+        lower_bin_id, width = struct.unpack_from("<ii", payload, 0)
+        if width < 0:
+            return None
+        pda = discriminator == _DISC_DLMM_INITIALIZE_POSITION_PDA
+        position_index, pool_index, owner_index = (2, 3, 4) if pda else (1, 2, 3)
         return DexEvent(
             type=EventType.METEORA_DLMM_CREATE_POSITION,
             data=MeteoraDlmmCreatePositionEvent(
                 metadata=meta,
-                pool=pool,
-                position=_get_account_safe(accounts, 1),
-                owner=_get_account_safe(accounts, 2),
-                lower_bin_id=struct.unpack_from("<i", payload, 0)[0],
-                width=struct.unpack_from("<I", payload, 4)[0],
+                pool=_get_account_safe(accounts, pool_index),
+                position=_get_account_safe(accounts, position_index),
+                owner=_get_account_safe(accounts, owner_index),
+                lower_bin_id=lower_bin_id,
+                width=width,
             ),
         )
 
-    if instruction_type == 11:
-        if len(payload) < 16:
+    if discriminator in (_DISC_DLMM_SWAP, _DISC_DLMM_SWAP2):
+        if len(payload) < 8:
             return None
+        pool = _get_account_safe(accounts, 0)
         return DexEvent(
             type=EventType.METEORA_DLMM_SWAP,
             data=MeteoraDlmmSwapEvent(
                 metadata=meta,
                 pool=pool,
-                from_addr=_get_account_safe(accounts, 1),
+                from_addr=_get_account_safe(accounts, 10),
                 start_bin_id=0,
                 end_bin_id=0,
                 amount_in=struct.unpack_from("<Q", payload, 0)[0],
@@ -1124,27 +1195,62 @@ def parse_meteora_dlmm_instruction(
             ),
         )
 
-    if instruction_type == 13:
+    if discriminator in (
+        _DISC_DLMM_SWAP_EXACT_OUT,
+        _DISC_DLMM_SWAP_EXACT_OUT2,
+        _DISC_DLMM_SWAP_WITH_PRICE_IMPACT,
+        _DISC_DLMM_SWAP_WITH_PRICE_IMPACT2,
+    ):
+        exact_out = discriminator in (_DISC_DLMM_SWAP_EXACT_OUT, _DISC_DLMM_SWAP_EXACT_OUT2)
+        if len(payload) < (16 if exact_out else 8):
+            return None
+        amount_out = 0
+        if exact_out:
+            amount_out = struct.unpack_from("<Q", payload, 8)[0]
+        pool = _get_account_safe(accounts, 0)
+        return DexEvent(
+            type=EventType.METEORA_DLMM_SWAP,
+            data=MeteoraDlmmSwapEvent(
+                metadata=meta,
+                pool=pool,
+                from_addr=_get_account_safe(accounts, 10),
+                start_bin_id=0,
+                end_bin_id=0,
+                amount_in=struct.unpack_from("<Q", payload, 0)[0],
+                amount_out=amount_out,
+                swap_for_y=False,
+                fee=0,
+                protocol_fee=0,
+                fee_bps="0",
+                host_fee=0,
+            ),
+        )
+
+    if discriminator in (_DISC_DLMM_CLAIM_FEE, _DISC_DLMM_CLAIM_FEE2):
+        pool = _get_account_safe(accounts, 0)
+        owner_index = 2 if discriminator == _DISC_DLMM_CLAIM_FEE2 else 4
         return DexEvent(
             type=EventType.METEORA_DLMM_CLAIM_FEE,
             data=MeteoraDlmmClaimFeeEvent(
                 metadata=meta,
                 pool=pool,
                 position=_get_account_safe(accounts, 1),
-                owner=_get_account_safe(accounts, 2),
+                owner=_get_account_safe(accounts, owner_index),
                 fee_x=0,
                 fee_y=0,
             ),
         )
 
-    if instruction_type == 14:
+    if discriminator in (_DISC_DLMM_CLOSE_POSITION, _DISC_DLMM_CLOSE_POSITION2):
+        position = _get_account_safe(accounts, 0)
+        v2 = discriminator == _DISC_DLMM_CLOSE_POSITION2
         return DexEvent(
             type=EventType.METEORA_DLMM_CLOSE_POSITION,
             data=MeteoraDlmmClosePositionEvent(
                 metadata=meta,
-                pool=pool,
-                position=_get_account_safe(accounts, 1),
-                owner=_get_account_safe(accounts, 2),
+                pool=Z if v2 else _get_account_safe(accounts, 1),
+                position=position,
+                owner=_get_account_safe(accounts, 1 if v2 else 4),
             ),
         )
 
@@ -1486,7 +1592,7 @@ def parse_raydium_cpmm_instruction(
             return None
         return legacy_dict_to_dex_event({"RaydiumCpmmSwap": {
             "metadata": meta,
-            "pool_id": Z,
+            "pool_id": _get_account_safe(accounts, 3),
             "input_amount": 0, "output_amount": 0,
             "input_vault_before": 0, "output_vault_before": 0,
             "input_transfer_fee": 0, "output_transfer_fee": 0,
@@ -1497,7 +1603,7 @@ def parse_raydium_cpmm_instruction(
             return None
         return legacy_dict_to_dex_event({"RaydiumCpmmSwap": {
             "metadata": meta,
-            "pool_id": Z,
+            "pool_id": _get_account_safe(accounts, 3),
             "input_amount": 0, "output_amount": 0,
             "input_vault_before": 0, "output_vault_before": 0,
             "input_transfer_fee": 0, "output_transfer_fee": 0,
@@ -1556,20 +1662,28 @@ def parse_raydium_amm_v4_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if instr_type in (9, 11):  # SwapBaseIn / SwapBaseOut
+        if len(data) < 17:
+            return None
+        first, second = struct.unpack_from("<QQ", data, 1)
+        shift = 1 if len(accounts) == 17 else 0
+        def g(index: int) -> str:
+            return _get_account_safe(accounts, index - shift if index >= 5 else index)
         return legacy_dict_to_dex_event({"RaydiumAmmV4Swap": {
             "metadata": meta,
             "amm": _get_account_safe(accounts, 1),
-            "user_source_owner": _get_account_safe(accounts, 17),
-            "amount_in": 0, "minimum_amount_out": 0,
-            "max_amount_in": 0, "amount_out": 0,
-            "token_program": Z, "amm_authority": Z, "amm_open_orders": Z,
-            "pool_coin_token_account": Z, "pool_pc_token_account": Z,
-            "serum_program": Z, "serum_market": Z, "serum_bids": Z,
-            "serum_asks": Z, "serum_event_queue": Z,
-            "serum_coin_vault_account": Z, "serum_pc_vault_account": Z,
-            "serum_vault_signer": Z,
-            "user_source_token_account": Z,
-            "user_destination_token_account": Z,
+            "user_source_owner": g(17),
+            "amount_in": first if instr_type == 9 else 0,
+            "minimum_amount_out": second if instr_type == 9 else 0,
+            "max_amount_in": first if instr_type == 11 else 0,
+            "amount_out": second if instr_type == 11 else 0,
+            "token_program": g(0), "amm_authority": g(2), "amm_open_orders": g(3),
+            "pool_coin_token_account": g(5), "pool_pc_token_account": g(6),
+            "serum_program": g(7), "serum_market": g(8), "serum_bids": g(9),
+            "serum_asks": g(10), "serum_event_queue": g(11),
+            "serum_coin_vault_account": g(12), "serum_pc_vault_account": g(13),
+            "serum_vault_signer": g(14),
+            "user_source_token_account": g(15),
+            "user_destination_token_account": g(16),
         }})
 
     return None
@@ -1599,9 +1713,10 @@ def parse_orca_whirlpool_instruction(
         sqrt_price_limit = int.from_bytes(data[24:40], "little")
         amount_specified_is_input = data[40] != 0
         a_to_b = data[41] != 0
+        whirlpool_index = 4 if discriminator == _DISC_ORCA_SWAP_V2 else 2
         return legacy_dict_to_dex_event({"OrcaWhirlpoolSwap": {
             "metadata": meta,
-            "whirlpool": _get_account_safe(accounts, 1),
+            "whirlpool": _get_account_safe(accounts, whirlpool_index),
             "a_to_b": a_to_b,
             "pre_sqrt_price": str(sqrt_price_limit), "post_sqrt_price": "0",
             "input_amount": amount if amount_specified_is_input else 0,

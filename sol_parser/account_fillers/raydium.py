@@ -77,8 +77,9 @@ def fill_clmm_close_position_accounts(e: RaydiumClmmClosePositionEvent, get: Acc
         e.position_nft_mint = get(1)
 
 
-def fill_cpmm_swap_accounts(_e: RaydiumCpmmSwapEvent, _get: AccountGetter) -> None:
-    pass
+def fill_cpmm_swap_accounts(e: RaydiumCpmmSwapEvent, get: AccountGetter) -> None:
+    if _empty(e.pool_id):
+        e.pool_id = get(3)
 
 
 def fill_cpmm_deposit_accounts(e: RaydiumCpmmDepositEvent, get: AccountGetter) -> None:

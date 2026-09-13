@@ -54,8 +54,16 @@ def fill_pools_remove_liquidity_accounts(_e: Any, _get: AccountGetter) -> None:
     pass
 
 
-def fill_dlmm_swap_accounts(_e: Any, _get: AccountGetter) -> None:
-    pass
+def fill_dlmm_swap_accounts(e: Any, get: AccountGetter) -> None:
+    z = "11111111111111111111111111111111"
+    if not getattr(e, "user_token_in", "") or e.user_token_in == z:
+        e.user_token_in = get(4)
+    if not getattr(e, "user_token_out", "") or e.user_token_out == z:
+        e.user_token_out = get(5)
+    if not getattr(e, "token_x_mint", "") or e.token_x_mint == z:
+        e.token_x_mint = get(6)
+    if not getattr(e, "token_y_mint", "") or e.token_y_mint == z:
+        e.token_y_mint = get(7)
 
 
 def fill_dlmm_add_liquidity_accounts(_e: Any, _get: AccountGetter) -> None:

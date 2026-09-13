@@ -42,11 +42,15 @@ TOKEN_ACCOUNT_SIZE = 165
 NONCE_ACCOUNT_SIZE = 80
 PUMPFUN_GLOBAL_BODY = 1037
 PUMPFUN_BONDING_CURVE_BODY = 107
+PUMPFUN_BONDING_CURVE_CREATOR_FEE_BODY = 116
+PUMPFUN_BONDING_CURVE_HOLDER_REWARD_BODY = 117
 PUMPFUN_GLOBAL_VOLUME_ACCUMULATOR_BODY = 536
 PUMPFUN_USER_VOLUME_ACCUMULATOR_BODY = 98
 GLOBAL_CONFIG_BODY = 634
 POOL_LEGACY_BODY = 244
-POOL_BODY = 253
+POOL_BOOST_BODY = 253
+POOL_CREATOR_FEE_BODY = 262
+POOL_BODY = 263
 MAX_PUMPFUN_FEE_TIERS = 64
 MAX_PUMPFUN_SHAREHOLDERS = 64
 
@@ -484,6 +488,12 @@ def _parse_pumpfun_bonding_curve_fast(
     is_cashback_coin = data[o] != 0
     o += 1
     quote_mint = read_pubkey_fast(data, o)
+    o += 32
+    creator_fee_bps = read_u64_fast(data, o) if o + 8 <= len(data) else 0
+    o += 8
+    can_edit_creator_fee = data[o] != 0 if o < len(data) else False
+    o += 1
+    is_holder_reward = data[o] != 0 if o < len(data) else False
     return _account_event(
         EventType.ACCOUNT_PUMP_FUN_BONDING_CURVE,
         {
@@ -500,6 +510,9 @@ def _parse_pumpfun_bonding_curve_fast(
                 "is_mayhem_mode": is_mayhem_mode,
                 "is_cashback_coin": is_cashback_coin,
                 "quote_mint": quote_mint,
+                "creator_fee_bps": creator_fee_bps,
+                "can_edit_creator_fee": can_edit_creator_fee,
+                "is_holder_reward": is_holder_reward,
             },
         },
     )
@@ -755,8 +768,16 @@ def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> 
     is_cashback = data[o + 1] != 0
     o += 2
     virtual_quote_reserves = (
-        int.from_bytes(data[o : o + 16], "little", signed=True) if len(data) >= POOL_BODY else 0
+        int.from_bytes(data[o : o + 16], "little", signed=True)
+        if len(data) >= POOL_BOOST_BODY
+        else 0
     )
+    o += 16
+    creator_fee_bps = read_u64_fast(data, o) if o + 8 <= len(data) else 0
+    o += 8
+    can_edit_creator_fee = data[o] != 0 if o < len(data) else False
+    o += 1
+    is_holder_reward = data[o] != 0 if o < len(data) else False
     return _account_event(
         EventType.ACCOUNT_PUMP_SWAP_POOL,
         {
@@ -776,6 +797,9 @@ def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> 
                 "is_mayhem_mode": is_mayhem,
                 "is_cashback_coin": is_cashback,
                 "virtual_quote_reserves": virtual_quote_reserves,
+                "creator_fee_bps": creator_fee_bps,
+                "can_edit_creator_fee": can_edit_creator_fee,
+                "is_holder_reward": is_holder_reward,
             },
         },
     )
@@ -812,6 +836,13 @@ def parse_pumpfun_bonding_curve(
     account: AccountData, metadata: EventMetadata
 ) -> Optional[DexEvent]:
     if len(account.data) < 8 + PUMPFUN_BONDING_CURVE_BODY:
+        return None
+    body_len = len(account.data) - 8
+    if (
+        body_len != PUMPFUN_BONDING_CURVE_BODY
+        and body_len != PUMPFUN_BONDING_CURVE_CREATOR_FEE_BODY
+        and body_len < PUMPFUN_BONDING_CURVE_HOLDER_REWARD_BODY
+    ):
         return None
     if not has_discriminator(account.data, _DISC_PUMPFUN_BONDING_CURVE):
         return None
@@ -869,7 +900,13 @@ def parse_pumpswap_global_config(account: AccountData, metadata: EventMetadata) 
 def parse_pumpswap_pool(account: AccountData, metadata: EventMetadata) -> Optional[DexEvent]:
     if len(account.data) < 8 + POOL_LEGACY_BODY:
         return None
-    if len(account.data) != 8 + POOL_LEGACY_BODY and len(account.data) < 8 + POOL_BODY:
+    body_len = len(account.data) - 8
+    if (
+        body_len != POOL_LEGACY_BODY
+        and body_len != POOL_BOOST_BODY
+        and body_len != POOL_CREATOR_FEE_BODY
+        and body_len < POOL_BODY
+    ):
         return None
     if not has_discriminator(account.data, _DISC_POOL):
         return None

@@ -47,6 +47,8 @@ def _create_v2_instruction(mayhem: bool, cashback: bool) -> bytes:
             _pk(120),
             b"\x01" if mayhem else b"\x00",
             b"\x01" if cashback else b"\x00",
+            struct.pack("<Q", 250),
+            b"\x01",
         ]
     )
 
@@ -71,6 +73,8 @@ def test_parse_pumpfun_create_v2_reads_official_args_and_accounts() -> None:
     assert create.creator == base58.b58encode(_pk(120)).decode("ascii")
     assert create.is_mayhem_mode is True
     assert create.is_cashback_enabled is True
+    assert create.creator_fee_bps == 250
+    assert create.is_holder_reward is True
 
 
 def test_parse_pumpfun_legacy_buy_exact_and_sell_instruction_parity() -> None:

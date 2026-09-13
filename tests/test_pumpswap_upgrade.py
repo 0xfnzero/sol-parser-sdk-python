@@ -3,7 +3,11 @@ from __future__ import annotations
 import struct
 
 from sol_parser.accounts import AccountData, parse_pumpswap_pool
-from sol_parser.dex_parsers import parse_ps_buy_from_data, parse_ps_sell_from_data
+from sol_parser.dex_parsers import (
+    parse_ps_buy_from_data,
+    parse_ps_create_pool_from_data,
+    parse_ps_sell_from_data,
+)
 from sol_parser.event_types import PumpSwapBuyEvent, to_typed_event
 from sol_parser.grpc_types import EventMetadata, EventType
 
@@ -18,6 +22,7 @@ def _current_tail() -> bytes:
             (-987_654_321).to_bytes(16, "little", signed=True),
             b"\x01",
             struct.pack("<Q", 222),
+            struct.pack("<QQ", 233, 244),
         ]
     )
 
@@ -44,6 +49,8 @@ def test_pumpswap_current_trade_tail_fields() -> None:
     assert buy.data.virtual_quote_reserves == -987_654_321
     assert buy.data.can_boost is True
     assert buy.data.base_supply == 222
+    assert buy.data.holder_rewards_bps == 233
+    assert buy.data.holder_rewards == 244
 
     sell = parse_ps_sell_from_data(bytes(352) + _current_tail(), {})
     assert sell is not None and sell.type == EventType.PUMP_SWAP_SELL
@@ -52,6 +59,8 @@ def test_pumpswap_current_trade_tail_fields() -> None:
     assert sell.data.virtual_quote_reserves == -987_654_321
     assert sell.data.can_boost is True
     assert sell.data.base_supply == 222
+    assert sell.data.holder_rewards_bps == 233
+    assert sell.data.holder_rewards == 244
 
 
 def test_pumpswap_trade_layout_validation() -> None:
@@ -60,8 +69,8 @@ def test_pumpswap_trade_layout_validation() -> None:
     assert parse_ps_buy_from_data(bytes(397), {}) is not None
     assert parse_ps_sell_from_data(bytes(352), {}) is not None
 
-    for tail_len in range(65):
-        expected = tail_len in (0, 16, 32) or tail_len >= 57
+    for tail_len in range(81):
+        expected = tail_len in (0, 16, 32, 57) or tail_len >= 73
         parsed = parse_ps_sell_from_data(bytes(352 + tail_len), {})
         assert (parsed is not None) is expected, tail_len
 
@@ -114,10 +123,47 @@ def test_pumpswap_pool_virtual_quote_reserves() -> None:
     assert legacy is not None
     assert legacy.data["pool"]["virtual_quote_reserves"] == 0
 
-    current_body = bytearray(253)
+    boost_body = bytearray(253)
+    boost_body[237:253] = (-987_654_321).to_bytes(16, "little", signed=True)
+    boost = parse_pumpswap_pool(account(bytes(boost_body)), EventMetadata())
+    assert boost is not None
+    assert boost.data["pool"]["virtual_quote_reserves"] == -987_654_321
+    assert boost.data["pool"]["creator_fee_bps"] == 0
+
+    current_body = bytearray(263)
     current_body[237:253] = (-987_654_321).to_bytes(16, "little", signed=True)
+    current_body[253:261] = (250).to_bytes(8, "little")
+    current_body[261] = 1
+    current_body[262] = 1
     current = parse_pumpswap_pool(account(bytes(current_body)), EventMetadata())
     assert current is not None
     assert current.data["pool"]["virtual_quote_reserves"] == -987_654_321
+    assert current.data["pool"]["creator_fee_bps"] == 250
+    assert current.data["pool"]["can_edit_creator_fee"] is True
+    assert current.data["pool"]["is_holder_reward"] is True
 
-    assert parse_pumpswap_pool(account(bytes(245)), EventMetadata()) is None
+    for body_len in (*range(245, 253), *range(254, 262)):
+        assert parse_pumpswap_pool(account(bytes(body_len)), EventMetadata()) is None
+    assert parse_pumpswap_pool(account(bytes(262)), EventMetadata()) is not None
+
+
+def test_pumpswap_create_pool_event_creator_fee_fields() -> None:
+    data = bytearray(336)
+    struct.pack_into("<H", data, 8, 42)
+    data[325] = 1
+    struct.pack_into("<Q", data, 326, 250)
+    data[334] = 1
+    data[335] = 1
+
+    event = parse_ps_create_pool_from_data(bytes(data), {})
+    assert event is not None and event.type == EventType.PUMP_SWAP_CREATE_POOL
+    assert event.data.index == 42
+    assert event.data.is_mayhem_mode is True
+    assert event.data.creator_fee_bps == 250
+    assert event.data.can_edit_creator_fee is True
+    assert event.data.is_holder_reward is True
+
+    for body_len in range(326, 337):
+        expected = body_len == 326 or body_len >= 335
+        parsed = parse_ps_create_pool_from_data(bytes(body_len), {})
+        assert (parsed is not None) is expected, body_len

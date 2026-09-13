@@ -6,6 +6,7 @@ import base58
 from sol_parser.accounts import (
     AccountData,
     PUMPFUN_BONDING_CURVE_BODY,
+    PUMPFUN_BONDING_CURVE_CREATOR_FEE_BODY,
     PUMPFUN_GLOBAL_BODY,
     PUMPFUN_PROGRAM_ID,
     PUMP_FEES_PROGRAM_ID,
@@ -852,9 +853,12 @@ def test_pumpfun_bonding_curve_account_reads_quote_fields():
             b"\x01",
             b"\x00",
             quote_mint,
+            _u64(250),
+            b"\x01",
+            b"\x01",
         ]
     )
-    assert len(data) == 8 + PUMPFUN_BONDING_CURVE_BODY
+    assert len(data) == 8 + PUMPFUN_BONDING_CURVE_BODY + 10
     account = AccountData(
         pubkey="bonding_curve",
         executable=False,
@@ -880,6 +884,30 @@ def test_pumpfun_bonding_curve_account_reads_quote_fields():
     assert curve["complete"] is True
     assert curve["is_mayhem_mode"] is True
     assert curve["is_cashback_coin"] is False
+    assert curve["creator_fee_bps"] == 250
+    assert curve["can_edit_creator_fee"] is True
+    assert curve["is_holder_reward"] is True
+
+    for body_len in range(108, 116):
+        partial = AccountData(
+            pubkey="bonding_curve",
+            executable=False,
+            lamports=1,
+            owner=PUMPFUN_PROGRAM_ID,
+            rent_epoch=0,
+            data=data[: 8 + body_len],
+        )
+        assert parse_account_unified(partial, EventMetadata()) is None
+
+    creator_fee_layout = AccountData(
+        pubkey="bonding_curve",
+        executable=False,
+        lamports=1,
+        owner=PUMPFUN_PROGRAM_ID,
+        rent_epoch=0,
+        data=data[: 8 + PUMPFUN_BONDING_CURVE_CREATOR_FEE_BODY],
+    )
+    assert parse_account_unified(creator_fee_layout, EventMetadata()) is not None
 
 
 def test_pumpfun_fee_config_rejects_truncated_vector():

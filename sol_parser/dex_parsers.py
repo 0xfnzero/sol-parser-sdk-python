@@ -46,6 +46,11 @@ from .event_types import (
     MeteoraDammV2CreatePositionEvent, MeteoraDammV2ClosePositionEvent,
     MeteoraDammV2AddLiquidityEvent, MeteoraDammV2RemoveLiquidityEvent,
     MeteoraDammV2InitializePoolEvent,
+    MeteoraDammV2DynamicFeeParameters,
+    MeteoraDammV2UpdateDelegatePermissionEvent,
+    MeteoraDammV2WithdrawDeadLiquidityRewardEvent,
+    MeteoraDammV2CreateConfigEvent,
+    MeteoraDammV2CreateDynamicConfigEvent,
     MeteoraDbcCurveCompleteEvent, MeteoraDbcInitializePoolEvent, MeteoraDbcSwapEvent,
     RaydiumLaunchlabTradeEvent, RaydiumLaunchlabPoolCreateEvent,
 )
@@ -253,6 +258,8 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexE
     quote_amount = _optional_u64(data, tail)
     virtual_quote_reserves = _optional_u64(data, tail)
     real_quote_reserves = _optional_u64(data, tail)
+    holder_rewards_bps = _optional_u64(data, tail)
+    holder_rewards = _optional_u64(data, tail)
     
     event_data = PumpFunTradeEvent(
         metadata=_make_meta(meta),
@@ -289,6 +296,8 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexE
         quote_amount=quote_amount,
         virtual_quote_reserves=virtual_quote_reserves,
         real_quote_reserves=real_quote_reserves,
+        holder_rewards_bps=holder_rewards_bps,
+        holder_rewards=holder_rewards,
         is_cashback_coin=cb_bps > 0,
         bonding_curve=Z,
         associated_bonding_curve=Z,
@@ -344,6 +353,10 @@ def parse_create_from_data(data: bytes, meta: dict) -> DexEvent:
     quote_mint = _pub(data, o) if o + 32 <= len(data) else Z
     o += 32
     virtual_quote_reserves = _u64le(data, o) if o + 8 <= len(data) else 0
+    o += 8
+    creator_fee_bps = _u64le(data, o) if o + 8 <= len(data) else 0
+    o += 8
+    is_holder_reward = _bool(data, o) if o < len(data) else False
     
     return DexEvent(
         type=EventType.PUMP_FUN_CREATE,
@@ -366,6 +379,8 @@ def parse_create_from_data(data: bytes, meta: dict) -> DexEvent:
             is_cashback_enabled=ice,
             quote_mint=quote_mint,
             virtual_quote_reserves=virtual_quote_reserves,
+            creator_fee_bps=creator_fee_bps,
+            is_holder_reward=is_holder_reward,
         ),
     )
 
@@ -1868,7 +1883,7 @@ def parse_meteora_pools_set_pool_fees_from_data(data: bytes, meta: dict) -> Opti
     )
 
 
-# --- Meteora DAMM (Swap / Swap2 only，与 Go/TS 一致) ---
+# --- Meteora DAMM (对齐 Rust/Node logs/meteora_damm) ---
 
 DAMM_SWAP = _d(27, 60, 21, 213, 138, 170, 187, 147)
 DAMM_SWAP2 = _d(189, 66, 51, 168, 38, 80, 117, 153)
@@ -1876,10 +1891,29 @@ DAMM_CREATE_POSITION = _d(156, 15, 119, 198, 29, 181, 221, 55)
 DAMM_CLOSE_POSITION = _d(20, 145, 144, 68, 143, 142, 214, 178)
 DAMM_ADD_LIQUIDITY = _d(175, 242, 8, 157, 30, 247, 185, 169)
 DAMM_REMOVE_LIQUIDITY = _d(87, 46, 88, 98, 175, 96, 34, 91)
+DAMM_LIQUIDITY_CHANGE = _d(197, 171, 78, 127, 224, 211, 87, 13)
 DAMM_INIT_POOL = _d(228, 50, 246, 85, 203, 66, 134, 37)
+DAMM_UPDATE_DELEGATE_PERMISSION = _d(66, 188, 75, 151, 150, 232, 87, 93)
+DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD = _d(228, 66, 150, 195, 42, 62, 163, 13)
+DAMM_CREATE_CONFIG = _d(131, 207, 180, 174, 180, 73, 165, 54)
+DAMM_CREATE_DYNAMIC_CONFIG = _d(231, 197, 13, 164, 248, 213, 133, 152)
+# Mainnet upgrade: trading_fee/partner_fee → claiming_fee/compounding_fee in EvtSwap2
+COMPOUNDING_FEE_LAYOUT_ACTIVATION_SLOT = 406_048_752
 DBC_SWAP = DAMM_SWAP
 DBC_INIT_POOL = DAMM_INIT_POOL
 DBC_CURVE_COMPLETE = _d(229, 231, 86, 84, 156, 134, 75, 24)
+
+
+def _uses_compounding_fee_layout(slot: int) -> bool:
+    return slot == 0 or slot >= COMPOUNDING_FEE_LAYOUT_ACTIVATION_SLOT
+
+
+def _meta_slot(meta: dict) -> int:
+    if isinstance(meta, EventMetadata):
+        return int(meta.slot or 0)
+    if isinstance(meta, dict):
+        return int(meta.get("slot", 0) or 0)
+    return 0
 
 
 def parse_meteora_damm_from_buf(buf: bytes, meta: dict) -> Optional[DexEvent]:
@@ -1899,8 +1933,18 @@ def parse_meteora_damm_from_buf(buf: bytes, meta: dict) -> Optional[DexEvent]:
         return _parse_damm_add_liquidity(data, meta)
     if d == DAMM_REMOVE_LIQUIDITY:
         return _parse_damm_remove_liquidity(data, meta)
+    if d == DAMM_LIQUIDITY_CHANGE:
+        return _parse_damm_liquidity_change(data, meta)
     if d == DAMM_INIT_POOL:
         return _parse_damm_initialize_pool(data, meta)
+    if d == DAMM_UPDATE_DELEGATE_PERMISSION:
+        return _parse_damm_update_delegate_permission(data, meta)
+    if d == DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD:
+        return _parse_damm_withdraw_dead_liquidity_reward(data, meta)
+    if d == DAMM_CREATE_CONFIG:
+        return _parse_damm_create_config(data, meta)
+    if d == DAMM_CREATE_DYNAMIC_CONFIG:
+        return _parse_damm_create_dynamic_config(data, meta)
     return None
 
 
@@ -2074,13 +2118,15 @@ def _parse_damm_swap(data: bytes, meta: dict) -> Optional[DexEvent]:
 
 
 def _parse_damm_swap2(data: bytes, meta: dict) -> Optional[DexEvent]:
-    if len(data) < 32 + 1 + 1 + 1 + 8 * 2 + 1 + 8 * 6 + 16 + 8 * 4 + 8 * 3:
+    # Full 180-byte EvtSwap2 layout (Rust/Node parity)
+    if len(data) < 180:
         return None
     o = 0
     pool = _pub(data, o)
     o += 32
     td = _u8(data, o)
     o += 1
+    collect_fee_mode = _u8(data, o)
     o += 1
     hr = _bool(data, o)
     o += 1
@@ -2092,38 +2138,82 @@ def _parse_damm_swap2(data: bytes, meta: dict) -> Optional[DexEvent]:
     o += 1
     ifi = _u64le(data, o)
     o += 8
-    o += 16
+    efi = _u64le(data, o)
+    o += 8
+    amount_left = _u64le(data, o)
+    o += 8
     oa = _u64le(data, o)
     o += 8
     nsp = str(_u128le_int(data, o))
     o += 16
-    lpf = _u64le(data, o)
+    claiming_or_trading = _u64le(data, o)
     o += 8
     pf = _u64le(data, o)
     o += 8
+    compounding_or_partner = _u64le(data, o)
+    o += 8
     rf = _u64le(data, o)
     o += 8
+    itf_in = _u64le(data, o)
     o += 8
+    itf_out = _u64le(data, o)
+    o += 8
+    etf_out = _u64le(data, o)
     o += 8
     ct = _u64le(data, o)
-    ai, mo = (a0, a1) if sm == 0 else (a1, a0)
+    o += 8
+    reserve_a = _u64le(data, o)
+    o += 8
+    reserve_b = _u64le(data, o)
+
+    if sm in (0, 1):
+        ai, mo = a0, a1
+    elif sm == 2:
+        ai, mo = a1, a0
+    else:
+        return None
+
+    if _uses_compounding_fee_layout(_meta_slot(meta)):
+        lpf = claiming_or_trading + compounding_or_partner
+        partner_fee = compounding_or_partner
+        claiming_fee = claiming_or_trading
+        compounding_fee = compounding_or_partner
+    else:
+        lpf = claiming_or_trading
+        partner_fee = compounding_or_partner
+        claiming_fee = 0
+        compounding_fee = 0
+
     return DexEvent(
         type=EventType.METEORA_DAMM_V2_SWAP,
         data=MeteoraDammV2SwapEvent(
             metadata=_make_meta(meta),
             pool=pool,
             trade_direction=td,
+            collect_fee_mode=collect_fee_mode,
             has_referral=hr,
+            amount_0=a0,
+            amount_1=a1,
+            swap_mode=sm,
             amount_in=ai,
             minimum_amount_out=mo,
             output_amount=oa,
             next_sqrt_price=nsp,
             lp_fee=lpf,
             protocol_fee=pf,
-            partner_fee=0,
+            partner_fee=partner_fee,
             referral_fee=rf,
             actual_amount_in=ifi,
+            excluded_fee_input_amount=efi,
+            amount_left=amount_left,
+            claiming_fee=claiming_fee,
+            compounding_fee=compounding_fee,
+            included_transfer_fee_amount_in=itf_in,
+            included_transfer_fee_amount_out=itf_out,
+            excluded_transfer_fee_amount_out=etf_out,
             current_timestamp=ct,
+            reserve_a_amount=reserve_a,
+            reserve_b_amount=reserve_b,
             token_a_vault=Z,
             token_b_vault=Z,
             token_a_mint=Z,
@@ -2397,6 +2487,231 @@ def _parse_damm_remove_liquidity(data: bytes, meta: dict) -> Optional[DexEvent]:
     )
 
 
+def _parse_damm_liquidity_change(data: bytes, meta: dict) -> Optional[DexEvent]:
+    """EvtLiquidityChange; change_type 0=add, 1=remove."""
+    if len(data) < 177:
+        return None
+    pool = _pub(data, 0)
+    position = _pub(data, 32)
+    owner = _pub(data, 64)
+    ta = _u64le(data, 96)
+    tb = _u64le(data, 104)
+    tota = _u64le(data, 112)
+    totb = _u64le(data, 120)
+    ra = _u64le(data, 128)
+    rb = _u64le(data, 136)
+    ld = str(_u128le_int(data, 144))
+    tat = _u64le(data, 160)
+    tbt = _u64le(data, 168)
+    change_type = _u8(data, 176)
+    md = _make_meta(meta)
+    if change_type == 0:
+        return DexEvent(
+            type=EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
+            data=MeteoraDammV2AddLiquidityEvent(
+                metadata=md,
+                pool=pool,
+                position=position,
+                owner=owner,
+                liquidity_delta=ld,
+                token_a_amount_threshold=tat,
+                token_b_amount_threshold=tbt,
+                token_a_amount=ta,
+                token_b_amount=tb,
+                total_amount_a=tota,
+                total_amount_b=totb,
+                reserve_a_amount=ra,
+                reserve_b_amount=rb,
+            ),
+        )
+    if change_type == 1:
+        return DexEvent(
+            type=EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
+            data=MeteoraDammV2RemoveLiquidityEvent(
+                metadata=md,
+                pool=pool,
+                position=position,
+                owner=owner,
+                liquidity_delta=ld,
+                token_a_amount_threshold=tat,
+                token_b_amount_threshold=tbt,
+                token_a_amount=ta,
+                token_b_amount=tb,
+                total_amount_a=tota,
+                total_amount_b=totb,
+                reserve_a_amount=ra,
+                reserve_b_amount=rb,
+            ),
+        )
+    return None
+
+
+def _parse_damm_update_delegate_permission(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 32 + 32 + 4 + 1:
+        return None
+    o = 0
+    position = _pub(data, o)
+    o += 32
+    owner = _pub(data, o)
+    o += 32
+    permission = _u32le(data, o)
+    o += 4
+    has_delegate = _bool(data, o)
+    o += 1
+    delegate = None
+    if has_delegate:
+        if o + 32 > len(data):
+            return None
+        delegate = _pub(data, o)
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_UPDATE_DELEGATE_PERMISSION,
+        data=MeteoraDammV2UpdateDelegatePermissionEvent(
+            metadata=_make_meta(meta),
+            position=position,
+            owner=owner,
+            permission=permission,
+            delegate=delegate,
+        ),
+    )
+
+
+def _parse_damm_withdraw_dead_liquidity_reward(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 32 + 32 + 8:
+        return None
+    o = 0
+    pool = _pub(data, o)
+    o += 32
+    reward_mint = _pub(data, o)
+    o += 32
+    amount = _u64le(data, o)
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD,
+        data=MeteoraDammV2WithdrawDeadLiquidityRewardEvent(
+            metadata=_make_meta(meta),
+            pool=pool,
+            reward_mint=reward_mint,
+            amount=amount,
+        ),
+    )
+
+
+def _parse_damm_create_config_dynamic_fee(
+    data: bytes, o: int
+) -> Optional[tuple[MeteoraDammV2DynamicFeeParameters, int]]:
+    if o + 32 > len(data):
+        return None
+    bs = _u16le(data, o)
+    o += 2
+    bu = str(_u128le_int(data, o))
+    o += 16
+    fp = _u16le(data, o)
+    o += 2
+    dp = _u16le(data, o)
+    o += 2
+    rf = _u16le(data, o)
+    o += 2
+    mva = _u32le(data, o)
+    o += 4
+    vfc = _u32le(data, o)
+    o += 4
+    return (
+        MeteoraDammV2DynamicFeeParameters(
+            bin_step=bs,
+            bin_step_u128=bu,
+            filter_period=fp,
+            decay_period=dp,
+            reduction_factor=rf,
+            max_volatility_accumulator=mva,
+            variable_fee_control=vfc,
+        ),
+        o,
+    )
+
+
+def _parse_damm_create_config(data: bytes, meta: dict) -> Optional[DexEvent]:
+    o = 0
+    if len(data) < 27:
+        return None
+    base_fee_data = bytes(data[o : o + 27])
+    o += 27
+    if o + 2 + 1 + 1 > len(data):
+        return None
+    cfb = _u16le(data, o)
+    o += 2
+    pad = _u8(data, o)
+    o += 1
+    has_dyn = _bool(data, o)
+    o += 1
+    dyn = None
+    if has_dyn:
+        parsed = _parse_damm_create_config_dynamic_fee(data, o)
+        if not parsed:
+            return None
+        dyn, o = parsed
+    need = 32 + 32 + 1 + 16 + 16 + 1 + 8 + 32 + 16
+    if o + need > len(data):
+        return None
+    vault = _pub(data, o)
+    o += 32
+    pca = _pub(data, o)
+    o += 32
+    act = _u8(data, o)
+    o += 1
+    smin = str(_u128le_int(data, o))
+    o += 16
+    smax = str(_u128le_int(data, o))
+    o += 16
+    cfm = _u8(data, o)
+    o += 1
+    index = _u64le(data, o)
+    o += 8
+    config = _pub(data, o)
+    o += 32
+    permission = str(_u128le_int(data, o))
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_CREATE_CONFIG,
+        data=MeteoraDammV2CreateConfigEvent(
+            metadata=_make_meta(meta),
+            base_fee_data=base_fee_data,
+            compounding_fee_bps=cfb,
+            padding=pad,
+            dynamic_fee=dyn,
+            vault_config_key=vault,
+            pool_creator_authority=pca,
+            activation_type=act,
+            sqrt_min_price=smin,
+            sqrt_max_price=smax,
+            collect_fee_mode=cfm,
+            index=index,
+            config=config,
+            permission=permission,
+        ),
+    )
+
+
+def _parse_damm_create_dynamic_config(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 32 + 32 + 8 + 16:
+        return None
+    o = 0
+    config = _pub(data, o)
+    o += 32
+    pca = _pub(data, o)
+    o += 32
+    index = _u64le(data, o)
+    o += 8
+    permission = str(_u128le_int(data, o))
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_CREATE_DYNAMIC_CONFIG,
+        data=MeteoraDammV2CreateDynamicConfigEvent(
+            metadata=_make_meta(meta),
+            config=config,
+            pool_creator_authority=pca,
+            index=index,
+            permission=permission,
+        ),
+    )
+
+
 # --- RaydiumLaunchlab ---
 
 DISC_RAYDIUM_LAUNCHLAB_TRADE = _d(189, 219, 127, 211, 78, 230, 97, 238)
@@ -2472,6 +2787,8 @@ def _parse_pumpswap_trade_tail(data: bytes) -> Optional[Dict[str, Any]]:
         "virtual_quote_reserves": 0,
         "can_boost": False,
         "base_supply": 0,
+        "holder_rewards_bps": 0,
+        "holder_rewards": 0,
     }
     if not data:
         return tail
@@ -2497,6 +2814,11 @@ def _parse_pumpswap_trade_tail(data: bytes) -> Optional[Dict[str, Any]]:
         return None
     tail["can_boost"] = data[48] == 1
     tail["base_supply"] = _u64le(data, 49)
+    if len(data) != 57 and len(data) < 73:
+        return None
+    if len(data) >= 73:
+        tail["holder_rewards_bps"] = _u64le(data, 57)
+        tail["holder_rewards"] = _u64le(data, 65)
     return tail
 
 
@@ -2653,8 +2975,10 @@ def parse_ps_sell_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
 
 
 def parse_ps_create_pool_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
-    req = 8 + 2 + 32 * 6 + 2 + 8 * 7 + 1
+    req = 326
     if len(data) < req:
+        return None
+    if len(data) != req and len(data) < 335:
         return None
     o = 0
     ts = _i64le(data, o)
@@ -2713,6 +3037,9 @@ def parse_ps_create_pool_from_data(data: bytes, meta: dict) -> Optional[DexEvent
     ev["user_quote_token_account"] = uqa
     ev["coin_creator"] = cc
     ev["is_mayhem_mode"] = len(data) > 325 and _bool(data, 325)
+    ev["creator_fee_bps"] = _u64le(data, 326) if len(data) >= 334 else 0
+    ev["can_edit_creator_fee"] = len(data) > 334 and _bool(data, 334)
+    ev["is_holder_reward"] = len(data) > 335 and _bool(data, 335)
     md = ev.pop("metadata", meta)
     return DexEvent(
         type=EventType.PUMP_SWAP_CREATE_POOL,
@@ -3227,11 +3554,16 @@ _LOG_DISCRIMINATOR_EVENT_TYPES = {
     _d(245, 26, 198, 164, 88, 18, 75, 9): EventType.METEORA_POOLS_SET_POOL_FEES,
     DAMM_SWAP: EventType.METEORA_DAMM_V2_SWAP,
     DAMM_SWAP2: EventType.METEORA_DAMM_V2_SWAP,
-    _d(175, 242, 8, 157, 30, 247, 185, 169): EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
-    _d(87, 46, 88, 98, 175, 96, 34, 91): EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
-    _d(228, 50, 246, 85, 203, 66, 134, 37): EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
-    _d(156, 15, 119, 198, 29, 181, 221, 55): EventType.METEORA_DAMM_V2_CREATE_POSITION,
-    _d(20, 145, 144, 68, 143, 142, 214, 178): EventType.METEORA_DAMM_V2_CLOSE_POSITION,
+    DAMM_ADD_LIQUIDITY: EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,
+    DAMM_REMOVE_LIQUIDITY: EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY,
+    DAMM_LIQUIDITY_CHANGE: EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,  # routed by change_type in parser
+    DAMM_INIT_POOL: EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
+    DAMM_CREATE_POSITION: EventType.METEORA_DAMM_V2_CREATE_POSITION,
+    DAMM_CLOSE_POSITION: EventType.METEORA_DAMM_V2_CLOSE_POSITION,
+    DAMM_UPDATE_DELEGATE_PERMISSION: EventType.METEORA_DAMM_V2_UPDATE_DELEGATE_PERMISSION,
+    DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD: EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD,
+    DAMM_CREATE_CONFIG: EventType.METEORA_DAMM_V2_CREATE_CONFIG,
+    DAMM_CREATE_DYNAMIC_CONFIG: EventType.METEORA_DAMM_V2_CREATE_DYNAMIC_CONFIG,
     DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE: EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE,
     DLMM_ADD_LIQ: EventType.METEORA_DLMM_ADD_LIQUIDITY,
     DLMM_REMOVE_LIQ: EventType.METEORA_DLMM_REMOVE_LIQUIDITY,
@@ -3364,12 +3696,22 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
             return EventType.METEORA_DAMM_V2_ADD_LIQUIDITY
         if disc == DAMM_REMOVE_LIQUIDITY:
             return EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY
+        if disc == DAMM_LIQUIDITY_CHANGE:
+            return EventType.METEORA_DAMM_V2_ADD_LIQUIDITY
         if disc == DAMM_INIT_POOL:
             return EventType.METEORA_DAMM_V2_INITIALIZE_POOL
         if disc == DAMM_CREATE_POSITION:
             return EventType.METEORA_DAMM_V2_CREATE_POSITION
         if disc == DAMM_CLOSE_POSITION:
             return EventType.METEORA_DAMM_V2_CLOSE_POSITION
+        if disc == DAMM_UPDATE_DELEGATE_PERMISSION:
+            return EventType.METEORA_DAMM_V2_UPDATE_DELEGATE_PERMISSION
+        if disc == DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD:
+            return EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD
+        if disc == DAMM_CREATE_CONFIG:
+            return EventType.METEORA_DAMM_V2_CREATE_CONFIG
+        if disc == DAMM_CREATE_DYNAMIC_CONFIG:
+            return EventType.METEORA_DAMM_V2_CREATE_DYNAMIC_CONFIG
         return None
     if program_id == METEORA_DBC_PROGRAM_ID:
         if disc == DBC_SWAP:
@@ -3843,11 +4185,16 @@ def dispatch_program_data(
     if disc in (
         DAMM_SWAP,
         DAMM_SWAP2,
-        _d(175, 242, 8, 157, 30, 247, 185, 169),
-        _d(87, 46, 88, 98, 175, 96, 34, 91),
-        _d(228, 50, 246, 85, 203, 66, 134, 37),
-        _d(156, 15, 119, 198, 29, 181, 221, 55),
-        _d(20, 145, 144, 68, 143, 142, 214, 178),
+        DAMM_ADD_LIQUIDITY,
+        DAMM_REMOVE_LIQUIDITY,
+        DAMM_LIQUIDITY_CHANGE,
+        DAMM_INIT_POOL,
+        DAMM_CREATE_POSITION,
+        DAMM_CLOSE_POSITION,
+        DAMM_UPDATE_DELEGATE_PERMISSION,
+        DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD,
+        DAMM_CREATE_CONFIG,
+        DAMM_CREATE_DYNAMIC_CONFIG,
     ):
         return parse_meteora_damm_from_buf(buf, meta)
     raydium_launchlab = parse_raydium_launchlab_from_discriminator(disc, data, meta)

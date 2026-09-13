@@ -102,10 +102,12 @@ def enrich_create_v2_from_create_events(events: List[DexEvent]) -> None:
             "real_token_reserves",
             "token_total_supply",
             "virtual_quote_reserves",
+            "creator_fee_bps",
         ):
             _fill_int_if_zero(c2, attr, getattr(c, attr))
         c2.is_cashback_enabled = c2.is_cashback_enabled or c.is_cashback_enabled
         c2.is_mayhem_mode = c2.is_mayhem_mode or c.is_mayhem_mode
+        c2.is_holder_reward = c2.is_holder_reward or c.is_holder_reward
 
 
 def enrich_pumpfun_trades_from_create_instructions(events: List[DexEvent]) -> None:

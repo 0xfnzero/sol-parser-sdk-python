@@ -209,3 +209,82 @@ def fill_data(
         return
     is_pump = raw[9] != 0
     setattr(data, "is_pump_pool", is_pump)
+
+
+def _account_index(transaction_pb: Any, meta_pb: Any, account: str) -> Optional[int]:
+    if not account or account == "11111111111111111111111111111111":
+        return None
+    msg = getattr(transaction_pb, "message", None)
+    if msg is None:
+        return None
+    keys: List[str] = []
+    for b in getattr(msg, "account_keys", []) or []:
+        raw = bytes(b) if not isinstance(b, (bytes, bytearray)) else bytes(b)
+        if len(raw) == 32:
+            keys.append(base58.b58encode(raw).decode("ascii"))
+    for b in getattr(meta_pb, "loaded_writable_addresses", []) or []:
+        raw = bytes(b) if not isinstance(b, (bytes, bytearray)) else bytes(b)
+        if len(raw) == 32:
+            keys.append(base58.b58encode(raw).decode("ascii"))
+    for b in getattr(meta_pb, "loaded_readonly_addresses", []) or []:
+        raw = bytes(b) if not isinstance(b, (bytes, bytearray)) else bytes(b)
+        if len(raw) == 32:
+            keys.append(base58.b58encode(raw).decode("ascii"))
+    try:
+        return keys.index(account)
+    except ValueError:
+        return None
+
+
+def _token_balance_raw(t: Any) -> int:
+    ui = getattr(t, "ui_token_amount", None)
+    if ui is None:
+        return 0
+    amt = getattr(ui, "amount", None)
+    if amt is None:
+        return 0
+    try:
+        return int(str(amt))
+    except Exception:
+        return 0
+
+
+def fill_token_balances(event: DexEvent, meta_pb: Any, transaction_pb: Any) -> None:
+    """对齐 Rust ``common_filler::fill_token_balances``（PumpFun trade 用户余额）。"""
+    if meta_pb is None or transaction_pb is None:
+        return
+    if event.type not in (
+        EventType.PUMP_FUN_TRADE,
+        EventType.PUMP_FUN_BUY,
+        EventType.PUMP_FUN_SELL,
+        EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
+    ):
+        return
+    trade = event.data
+    user = getattr(trade, "user", "") or ""
+    associated_user = getattr(trade, "associated_user", "") or ""
+    user_idx = _account_index(transaction_pb, meta_pb, user)
+    if user_idx is not None:
+        pre_balances = list(getattr(meta_pb, "pre_balances", []) or [])
+        post_balances = list(getattr(meta_pb, "post_balances", []) or [])
+        if user_idx < len(pre_balances):
+            trade.pre_sol_balance = int(pre_balances[user_idx])
+        if user_idx < len(post_balances):
+            trade.post_sol_balance = int(post_balances[user_idx])
+    token_idx = _account_index(transaction_pb, meta_pb, associated_user)
+    if token_idx is None:
+        return
+    token_idx_u32 = token_idx
+    pre = None
+    post = None
+    for bal in getattr(meta_pb, "pre_token_balances", []) or []:
+        if int(getattr(bal, "account_index", -1)) == token_idx_u32:
+            pre = _token_balance_raw(bal)
+            break
+    for bal in getattr(meta_pb, "post_token_balances", []) or []:
+        if int(getattr(bal, "account_index", -1)) == token_idx_u32:
+            post = _token_balance_raw(bal)
+            break
+    if pre is not None or post is not None:
+        trade.pre_token_balance = pre if pre is not None else 0
+        trade.post_token_balance = post if post is not None else 0

@@ -71,6 +71,8 @@ def test_pumpfun_trade_parser_keeps_quote_tail_fields() -> None:
             _u64(700),
             _u64(800),
             _u64(900),
+            _u64(250),
+            _u64(42),
         ]
     )
 
@@ -82,6 +84,8 @@ def test_pumpfun_trade_parser_keeps_quote_tail_fields() -> None:
     assert t.quote_amount == 700
     assert t.virtual_quote_reserves == 800
     assert t.real_quote_reserves == 900
+    assert t.holder_rewards_bps == 250
+    assert t.holder_rewards == 42
     assert t.buyback_fee_basis_points == 500
     assert t.buyback_fee == 600
     assert t.shareholders[0].address == base58.b58encode(shareholder).decode()
@@ -109,6 +113,8 @@ def test_pumpfun_create_parser_keeps_quote_tail_fields() -> None:
             b"\x01",
             quote_mint,
             _u64(4_292_000_000),
+            _u64(250),
+            b"\x01",
         ]
     )
 
@@ -119,6 +125,8 @@ def test_pumpfun_create_parser_keeps_quote_tail_fields() -> None:
     assert create.quote_mint == base58.b58encode(quote_mint).decode()
     assert create.virtual_quote_reserves == 4_292_000_000
     assert create.is_cashback_enabled is True
+    assert create.creator_fee_bps == 250
+    assert create.is_holder_reward is True
 
 
 def test_post_merge_enriches_create_v2_from_create_event() -> None:
@@ -150,6 +158,8 @@ def test_post_merge_enriches_create_v2_from_create_event() -> None:
                 is_cashback_enabled=True,
                 quote_mint="USDC",
                 virtual_quote_reserves=4_292_000_000,
+                creator_fee_bps=250,
+                is_holder_reward=True,
             ),
         ),
     ]
@@ -163,6 +173,8 @@ def test_post_merge_enriches_create_v2_from_create_event() -> None:
     assert create_v2.virtual_sol_reserves == 30_000_000_000
     assert create_v2.is_cashback_enabled is True
     assert create_v2.is_mayhem_mode is True
+    assert create_v2.creator_fee_bps == 250
+    assert create_v2.is_holder_reward is True
 
 
 def test_merge_does_not_clobber_quote_tail_with_defaults() -> None:

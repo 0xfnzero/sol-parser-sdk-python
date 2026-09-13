@@ -58,6 +58,16 @@
 
 ## 发布说明
 
+### v0.5.8
+
+- 与 Rust **sol-parser-sdk 0.7.3** 对齐，覆盖当前 PumpFun、PumpSwap 与 Pump Fees 协议定义。
+- 新增 Meteora DAMM v2：`UpdateDelegatePermission`、`WithdrawDeadLiquidityReward`、`CreateConfig`、`CreateDynamicConfig`。
+- 修复 DAMM v2 `EvtSwap2` 完整 180 字节布局、三种 SwapMode、transfer fee、reserve，以及 compounding-fee 布局激活槽位 `406048752`。
+- 统一 `EvtLiquidityChange` 按 `change_type` 路由为 AddLiquidity / RemoveLiquidity。
+- 补充 DLMM mint/用户 token/`min_amount_out`、PumpFun 交易前后余额、LaunchLab quote/global/platform 账户字段。
+- 在 PumpFun/PumpSwap instruction、log、account、gRPC 与 JSON 事件链路中补齐 creator fee 和 holder reward 字段。
+- 拒绝 PumpSwap trade 与 CreatePool 已知字段的截断尾部，同时兼容完整历史布局。
+
 ### v0.5.6
 
 - 新增 Meteora DBC 日志解析，并按当前 program context 做路由与过滤。
@@ -83,7 +93,7 @@
 **PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.5.7
+pip install sol-parser-sdk-python==0.5.8
 ```
 
 **源码**

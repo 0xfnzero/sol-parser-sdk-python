@@ -43,6 +43,7 @@ from .event_types import (
     PumpFunCreateV2TokenEvent,
     PumpFunTradeEvent,
     PumpSwapBuyEvent,
+    PumpSwapCreatePoolEvent,
     PumpSwapSellEvent,
     MeteoraDlmmAddLiquidityEvent,
     MeteoraDlmmClaimFeeEvent,
@@ -83,6 +84,7 @@ def _d(*xs: int) -> int:
 _DISC_PUMPSWAP_BUY = _d(102, 6, 61, 18, 1, 218, 235, 234)
 _DISC_PUMPSWAP_SELL = _d(51, 230, 133, 164, 1, 127, 131, 173)
 _DISC_PUMPSWAP_BUY_EXACT_QUOTE_IN = _d(198, 46, 21, 82, 180, 217, 232, 112)
+_DISC_PUMPSWAP_CREATE_POOL = _d(233, 146, 209, 142, 207, 104, 64, 188)
 
 _DISC_DAMM_SWAP    = _d(27, 60, 21, 213, 138, 170, 187, 147)
 _DISC_DAMM_SWAP2   = _d(189, 66, 51, 168, 38, 80, 117, 153)
@@ -390,7 +392,7 @@ def normal_instruction_data_may_parse(program_id: str, instruction_data: bytes) 
         return disc in (
             _DISC_PUMPSWAP_BUY,
             _DISC_PUMPSWAP_SELL,
-            _d(233, 146, 209, 142, 207, 104, 64, 188),
+            _DISC_PUMPSWAP_CREATE_POOL,
             _DISC_PUMPSWAP_BUY_EXACT_QUOTE_IN,
             _d(242, 35, 198, 137, 82, 225, 242, 182),
             _d(183, 18, 70, 156, 148, 109, 161, 34),
@@ -809,6 +811,12 @@ def _parse_pumpfun_create_v2(data: bytes, accounts: List[str], meta: EventMetada
     is_mayhem_mode = data[offset] == 1
     offset += 1
     is_cashback_enabled = data[offset] == 1 if offset < len(data) else False
+    if offset < len(data):
+        offset += 1
+    creator_fee_bps = struct.unpack_from("<Q", data, offset)[0] if offset + 8 <= len(data) else 0
+    if offset + 8 <= len(data):
+        offset += 8
+    is_holder_reward = data[offset] == 1 if offset < len(data) else False
 
     return DexEvent(
         type=EventType.PUMP_FUN_CREATE_V2,
@@ -841,6 +849,8 @@ def _parse_pumpfun_create_v2(data: bytes, accounts: List[str], meta: EventMetada
             token_total_supply=0,
             is_mayhem_mode=is_mayhem_mode,
             is_cashback_enabled=is_cashback_enabled,
+            creator_fee_bps=creator_fee_bps,
+            is_holder_reward=is_holder_reward,
             quote_mint=_get_account_safe(accounts, 16) or Z,
             quote_vault=_get_account_safe(accounts, 17),
             quote_token_program=_get_account_safe(accounts, 18),
@@ -950,6 +960,38 @@ def parse_pumpswap_instruction(
         )
         fill_sell_tail(ev)
         return DexEvent(type=EventType.PUMP_SWAP_SELL, data=ev)
+
+    if discriminator == _DISC_PUMPSWAP_CREATE_POOL:
+        if len(accounts) < 8:
+            return None
+        return DexEvent(
+            type=EventType.PUMP_SWAP_CREATE_POOL,
+            data=PumpSwapCreatePoolEvent(
+                metadata=meta,
+                index=struct.unpack_from("<H", payload, 0)[0] if len(payload) >= 2 else 0,
+                pool=_get_account_safe(accounts, 0),
+                creator=_get_account_safe(accounts, 2),
+                base_mint=_get_account_safe(accounts, 3),
+                quote_mint=_get_account_safe(accounts, 4),
+                base_amount_in=struct.unpack_from("<Q", payload, 2)[0] if len(payload) >= 10 else 0,
+                quote_amount_in=struct.unpack_from("<Q", payload, 10)[0] if len(payload) >= 18 else 0,
+                lp_mint=_get_account_safe(accounts, 5),
+                user_base_token_account=_get_account_safe(accounts, 6),
+                user_quote_token_account=_get_account_safe(accounts, 7),
+                coin_creator=(
+                    base58.b58encode(payload[18:50]).decode("ascii")
+                    if len(payload) >= 50
+                    else Z
+                ),
+                is_mayhem_mode=len(payload) > 50 and payload[50] == 1,
+                is_cashback_coin=len(payload) > 51 and payload[51] == 1,
+                creator_fee_bps=(
+                    struct.unpack_from("<Q", payload, 52)[0] if len(payload) >= 60 else 0
+                ),
+                can_edit_creator_fee=len(payload) > 60 and payload[60] == 1,
+                is_holder_reward=len(payload) > 61 and payload[61] == 1,
+            ),
+        )
 
     return None
 
@@ -1176,6 +1218,7 @@ def parse_meteora_dlmm_instruction(
     if discriminator in (_DISC_DLMM_SWAP, _DISC_DLMM_SWAP2):
         if len(payload) < 8:
             return None
+        min_out = struct.unpack_from("<Q", payload, 8)[0] if len(payload) >= 16 else 0
         pool = _get_account_safe(accounts, 0)
         return DexEvent(
             type=EventType.METEORA_DLMM_SWAP,
@@ -1183,6 +1226,9 @@ def parse_meteora_dlmm_instruction(
                 metadata=meta,
                 pool=pool,
                 from_addr=_get_account_safe(accounts, 10),
+                user_token_in=_get_account_safe(accounts, 4),
+                user_token_out=_get_account_safe(accounts, 5),
+                min_amount_out=min_out,
                 start_bin_id=0,
                 end_bin_id=0,
                 amount_in=struct.unpack_from("<Q", payload, 0)[0],
@@ -1214,6 +1260,9 @@ def parse_meteora_dlmm_instruction(
                 metadata=meta,
                 pool=pool,
                 from_addr=_get_account_safe(accounts, 10),
+                user_token_in=_get_account_safe(accounts, 4),
+                user_token_out=_get_account_safe(accounts, 5),
+                min_amount_out=0,
                 start_bin_id=0,
                 end_bin_id=0,
                 amount_in=struct.unpack_from("<Q", payload, 0)[0],

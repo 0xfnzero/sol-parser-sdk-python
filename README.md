@@ -58,6 +58,16 @@ This is the Python implementation of the FnZero Solana DEX parser SDK for asynci
 
 ## Release notes
 
+### v0.5.8
+
+- Syncs with Rust **sol-parser-sdk 0.7.3**, including the current PumpFun, PumpSwap, and Pump Fees protocol definitions.
+- Adds Meteora DAMM v2 events: `UpdateDelegatePermission`, `WithdrawDeadLiquidityReward`, `CreateConfig`, `CreateDynamicConfig`.
+- Fixes DAMM v2 `EvtSwap2` full 180-byte layout, three swap modes, transfer fees, reserves, and compounding-fee layout activation slot `406048752`.
+- Routes unified `EvtLiquidityChange` by `change_type` to AddLiquidity / RemoveLiquidity.
+- Adds DLMM mint/user-token/`min_amount_out` context, PumpFun pre/post token & SOL balances, and LaunchLab quote/global/platform account fields.
+- Adds current PumpFun/PumpSwap creator-fee and holder-reward fields across instruction, log, account, gRPC, and JSON event paths.
+- Rejects truncated known PumpSwap trade and CreatePool tails while retaining complete historical layouts.
+
 ### v0.5.6
 
 - Adds Meteora DBC log parsing with program-context routing and filter parity.
@@ -83,7 +93,7 @@ This is the Python implementation of the FnZero Solana DEX parser SDK for asynci
 **From PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.5.7
+pip install sol-parser-sdk-python==0.5.8
 ```
 
 **From source**

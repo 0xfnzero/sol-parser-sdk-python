@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import base58
 
-from .account_dispatcher import fill_accounts_with_owned_keys, fill_data
+from .account_dispatcher import fill_accounts_with_owned_keys, fill_data, fill_token_balances
 from .event_types import DexEvent
 from .grpc_types import (
     EventMetadata,
@@ -74,6 +74,7 @@ def apply_account_fill_to_events(
     for ev in events:
         fill_accounts_with_owned_keys(ev, meta_pb, tx_pb, invokes_raw)
         fill_data(ev, meta_pb, tx_pb, invokes_str)
+        fill_token_balances(ev, meta_pb, tx_pb)
     recent_bh = ""
     if msg.recent_blockhash:
         recent_bh = base58.b58encode(bytes(msg.recent_blockhash)).decode("ascii")
@@ -367,6 +368,7 @@ def parse_instructions_enhanced_from_parsed(
     for ev in merged:
         fill_accounts_with_owned_keys(ev, meta, transaction_pb, invokes_raw)
         fill_data(ev, meta, transaction_pb, invokes_str)
+        fill_token_balances(ev, meta, transaction_pb)
 
     for ev in merged:
         if isinstance(ev.data, object) and hasattr(ev.data, "metadata"):

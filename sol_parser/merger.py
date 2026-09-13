@@ -176,6 +176,8 @@ def merge_pumpfun_trade(base: PumpFunTradeEvent, inner: PumpFunTradeEvent) -> No
         "quote_amount",
         "virtual_quote_reserves",
         "real_quote_reserves",
+        "holder_rewards_bps",
+        "holder_rewards",
         "amount",
         "max_sol_cost",
         "min_sol_output",
@@ -285,6 +287,8 @@ def merge_pumpfun_create(base: PumpFunCreateEvent, inner: PumpFunCreateEvent) ->
     base.is_cashback_enabled = inner.is_cashback_enabled
     base.quote_mint = inner.quote_mint
     base.virtual_quote_reserves = inner.virtual_quote_reserves
+    base.creator_fee_bps = inner.creator_fee_bps
+    base.is_holder_reward = bool(base.is_holder_reward) or bool(inner.is_holder_reward)
 
 
 def merge_pumpfun_migrate(base: PumpFunMigrateEvent, inner: PumpFunMigrateEvent) -> None:

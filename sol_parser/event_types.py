@@ -153,6 +153,8 @@ class PumpFunTradeEvent(DexEventBase):
     quote_amount: int = 0
     virtual_quote_reserves: int = 0
     real_quote_reserves: int = 0
+    holder_rewards_bps: int = 0
+    holder_rewards: int = 0
     is_cashback_coin: bool = False
     amount: int = 0
     max_sol_cost: int = 0
@@ -160,6 +162,11 @@ class PumpFunTradeEvent(DexEventBase):
     spendable_sol_in: int = 0
     spendable_quote_in: int = 0
     min_tokens_out: int = 0
+    # Transaction balance fields (raw units; None when meta unavailable)
+    pre_token_balance: Optional[int] = None
+    post_token_balance: Optional[int] = None
+    pre_sol_balance: Optional[int] = None
+    post_sol_balance: Optional[int] = None
     global_account: str = ""
     bonding_curve: str = ""
     bonding_curve_v2: str = ""
@@ -210,6 +217,8 @@ class PumpFunCreateEvent(DexEventBase):
     quote_vault: str = ""
     quote_token_program: str = ""
     virtual_quote_reserves: int = 0
+    creator_fee_bps: int = 0
+    is_holder_reward: bool = False
 
 
 @dataclass
@@ -238,6 +247,8 @@ class PumpFunCreateV2TokenEvent(DexEventBase):
     quote_vault: str = ""
     quote_token_program: str = ""
     virtual_quote_reserves: int = 0
+    creator_fee_bps: int = 0
+    is_holder_reward: bool = False
     mint_authority: str = ""
     associated_bonding_curve: str = ""
     global_account: str = ""  # Rust `global` PumpFun global config
@@ -423,6 +434,8 @@ class PumpSwapBuyEvent(DexEventBase):
     virtual_quote_reserves: int = 0
     can_boost: bool = False
     base_supply: int = 0
+    holder_rewards_bps: int = 0
+    holder_rewards: int = 0
     is_cashback_coin: bool = False
     base_mint: str = ""
     quote_mint: str = ""
@@ -471,6 +484,8 @@ class PumpSwapSellEvent(DexEventBase):
     virtual_quote_reserves: int = 0
     can_boost: bool = False
     base_supply: int = 0
+    holder_rewards_bps: int = 0
+    holder_rewards: int = 0
     base_mint: str = ""
     quote_mint: str = ""
     pool_base_token_account: str = ""
@@ -509,6 +524,10 @@ class PumpSwapCreatePoolEvent(DexEventBase):
     user_quote_token_account: str = ""
     coin_creator: str = ""
     is_mayhem_mode: bool = False
+    is_cashback_coin: bool = False
+    creator_fee_bps: int = 0
+    can_edit_creator_fee: bool = False
+    is_holder_reward: bool = False
 
 
 @dataclass
@@ -1007,6 +1026,12 @@ class OrcaWhirlpoolPoolInitializedEvent(DexEventBase):
 @dataclass
 class MeteoraDlmmSwapEvent(DexEventBase):
     """Meteora DLMM 交换事件"""
+    # Instruction / account context (not in Borsh event payload)
+    token_x_mint: str = ""
+    token_y_mint: str = ""
+    user_token_in: str = ""
+    user_token_out: str = ""
+    min_amount_out: int = 0
     pool: str = ""
     from_addr: str = ""
     start_bin_id: int = 0
@@ -1151,10 +1176,14 @@ class MeteoraPoolsPoolCreatedEvent(DexEventBase):
 
 @dataclass
 class MeteoraDammV2SwapEvent(DexEventBase):
-    """Meteora DAMM v2 交换事件"""
+    """Meteora DAMM v2 交换事件（含 EvtSwap / EvtSwap2 全字段）"""
     pool: str = ""
     trade_direction: int = 0
+    collect_fee_mode: int = 0
     has_referral: bool = False
+    amount_0: int = 0
+    amount_1: int = 0
+    swap_mode: int = 0
     amount_in: int = 0
     minimum_amount_out: int = 0
     output_amount: int = 0
@@ -1164,7 +1193,16 @@ class MeteoraDammV2SwapEvent(DexEventBase):
     partner_fee: int = 0
     referral_fee: int = 0
     actual_amount_in: int = 0
+    excluded_fee_input_amount: int = 0
+    amount_left: int = 0
+    claiming_fee: int = 0
+    compounding_fee: int = 0
+    included_transfer_fee_amount_in: int = 0
+    included_transfer_fee_amount_out: int = 0
+    excluded_transfer_fee_amount_out: int = 0
     current_timestamp: int = 0
+    reserve_a_amount: int = 0
+    reserve_b_amount: int = 0
     token_a_vault: str = ""
     token_b_vault: str = ""
     token_a_mint: str = ""
@@ -1204,6 +1242,8 @@ class MeteoraDammV2AddLiquidityEvent(DexEventBase):
     token_b_amount: int = 0
     total_amount_a: int = 0
     total_amount_b: int = 0
+    reserve_a_amount: int = 0
+    reserve_b_amount: int = 0
 
 
 @dataclass
@@ -1217,6 +1257,10 @@ class MeteoraDammV2RemoveLiquidityEvent(DexEventBase):
     token_b_amount_threshold: int = 0
     token_a_amount: int = 0
     token_b_amount: int = 0
+    total_amount_a: int = 0
+    total_amount_b: int = 0
+    reserve_a_amount: int = 0
+    reserve_b_amount: int = 0
 
 
 @dataclass
@@ -1245,6 +1289,62 @@ class MeteoraDammV2InitializePoolEvent(DexEventBase):
     total_amount_a: int = 0
     total_amount_b: int = 0
     pool_type: int = 0
+
+
+@dataclass
+class MeteoraDammV2DynamicFeeParameters:
+    """DAMM v2 PoolFeeParameters.dynamic_fee"""
+    bin_step: int = 0
+    bin_step_u128: str = "0"
+    filter_period: int = 0
+    decay_period: int = 0
+    reduction_factor: int = 0
+    max_volatility_accumulator: int = 0
+    variable_fee_control: int = 0
+
+
+@dataclass
+class MeteoraDammV2UpdateDelegatePermissionEvent(DexEventBase):
+    """Meteora DAMM v2 EvtUpdateDelegatePermission"""
+    position: str = ""
+    owner: str = ""
+    permission: int = 0
+    delegate: Optional[str] = None
+
+
+@dataclass
+class MeteoraDammV2WithdrawDeadLiquidityRewardEvent(DexEventBase):
+    """Meteora DAMM v2 EvtWithdrawDeadLiquidityReward"""
+    pool: str = ""
+    reward_mint: str = ""
+    amount: int = 0
+
+
+@dataclass
+class MeteoraDammV2CreateConfigEvent(DexEventBase):
+    """Meteora DAMM v2 EvtCreateConfig（含 0.2.4 permission）"""
+    base_fee_data: bytes = field(default_factory=lambda: bytes(27))
+    compounding_fee_bps: int = 0
+    padding: int = 0
+    dynamic_fee: Optional[MeteoraDammV2DynamicFeeParameters] = None
+    vault_config_key: str = ""
+    pool_creator_authority: str = ""
+    activation_type: int = 0
+    sqrt_min_price: str = "0"
+    sqrt_max_price: str = "0"
+    collect_fee_mode: int = 0
+    index: int = 0
+    config: str = ""
+    permission: str = "0"
+
+
+@dataclass
+class MeteoraDammV2CreateDynamicConfigEvent(DexEventBase):
+    """Meteora DAMM v2 EvtCreateDynamicConfig"""
+    config: str = ""
+    pool_creator_authority: str = ""
+    index: int = 0
+    permission: str = "0"
 
 
 @dataclass
@@ -1299,6 +1399,16 @@ class RaydiumLaunchlabTradeEvent(DexEventBase):
     is_buy: bool = False
     trade_direction: str = ""
     exact_in: bool = False
+    global_config: str = ""
+    platform_config: str = ""
+    user_base_token: str = ""
+    user_quote_token: str = ""
+    base_vault: str = ""
+    quote_vault: str = ""
+    base_mint: str = ""
+    quote_mint: str = ""
+    base_token_program: str = ""
+    quote_token_program: str = ""
 
 
 @dataclass
@@ -1307,6 +1417,15 @@ class RaydiumLaunchlabPoolCreateEvent(DexEventBase):
     pool_state: str = ""
     creator: str = ""
     base_mint_param: Optional[Dict[str, Any]] = None
+    payer: str = ""
+    global_config: str = ""
+    platform_config: str = ""
+    base_mint: str = ""
+    quote_mint: str = ""
+    base_vault: str = ""
+    quote_vault: str = ""
+    base_token_program: str = ""
+    quote_token_program: str = ""
 
 
 @dataclass
@@ -1383,6 +1502,10 @@ TypedDexEvent = Union[
     MeteoraDammV2AddLiquidityEvent,
     MeteoraDammV2RemoveLiquidityEvent,
     MeteoraDammV2InitializePoolEvent,
+    MeteoraDammV2UpdateDelegatePermissionEvent,
+    MeteoraDammV2WithdrawDeadLiquidityRewardEvent,
+    MeteoraDammV2CreateConfigEvent,
+    MeteoraDammV2CreateDynamicConfigEvent,
     RaydiumLaunchlabTradeEvent,
     RaydiumLaunchlabPoolCreateEvent,
     RaydiumLaunchlabMigrateAmmEvent,
@@ -1425,6 +1548,12 @@ def _get_int(m: dict, key: str) -> int:
         except ValueError:
             pass
     return 0
+
+
+def _get_optional_int(m: dict, key: str) -> Optional[int]:
+    if key not in m or m.get(key) is None:
+        return None
+    return _get_int(m, key)
 
 
 def _get_bool(m: dict, key: str) -> bool:
@@ -1530,6 +1659,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             quote_amount=_get_int(data, "quote_amount"),
             virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
             real_quote_reserves=_get_int(data, "real_quote_reserves"),
+            holder_rewards_bps=_get_int(data, "holder_rewards_bps"),
+            holder_rewards=_get_int(data, "holder_rewards"),
             is_cashback_coin=_get_bool(data, "is_cashback_coin"),
             amount=_get_int(data, "amount"),
             max_sol_cost=_get_int(data, "max_sol_cost"),
@@ -1537,6 +1668,10 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             spendable_sol_in=_get_int(data, "spendable_sol_in"),
             spendable_quote_in=_get_int(data, "spendable_quote_in"),
             min_tokens_out=_get_int(data, "min_tokens_out"),
+            pre_token_balance=_get_optional_int(data, "pre_token_balance"),
+            post_token_balance=_get_optional_int(data, "post_token_balance"),
+            pre_sol_balance=_get_optional_int(data, "pre_sol_balance"),
+            post_sol_balance=_get_optional_int(data, "post_sol_balance"),
             global_account=_get_str(data, "global") or _get_str(data, "global_account"),
             bonding_curve=_get_str(data, "bonding_curve"),
             bonding_curve_v2=_get_str(data, "bonding_curve_v2"),
@@ -1586,6 +1721,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             quote_vault=_get_str(data, "quote_vault"),
             quote_token_program=_get_str(data, "quote_token_program"),
             virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
+            creator_fee_bps=_get_int(data, "creator_fee_bps"),
+            is_holder_reward=_get_bool(data, "is_holder_reward"),
         )
 
     if event_type == EventType.PUMP_FUN_CREATE_V2:
@@ -1611,6 +1748,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             quote_vault=_get_str(data, "quote_vault"),
             quote_token_program=_get_str(data, "quote_token_program"),
             virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
+            creator_fee_bps=_get_int(data, "creator_fee_bps"),
+            is_holder_reward=_get_bool(data, "is_holder_reward"),
             mint_authority=_get_str(data, "mint_authority"),
             associated_bonding_curve=_get_str(data, "associated_bonding_curve"),
             global_account=g,
@@ -1681,6 +1820,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
             can_boost=_get_bool(data, "can_boost"),
             base_supply=_get_int(data, "base_supply"),
+            holder_rewards_bps=_get_int(data, "holder_rewards_bps"),
+            holder_rewards=_get_int(data, "holder_rewards"),
             is_cashback_coin=_get_bool(data, "is_cashback_coin"),
             is_pump_pool=_get_bool(data, "is_pump_pool"),
             base_mint=_get_str(data, "base_mint"),
@@ -1729,6 +1870,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
             can_boost=_get_bool(data, "can_boost"),
             base_supply=_get_int(data, "base_supply"),
+            holder_rewards_bps=_get_int(data, "holder_rewards_bps"),
+            holder_rewards=_get_int(data, "holder_rewards"),
             is_pump_pool=_get_bool(data, "is_pump_pool"),
             base_mint=_get_str(data, "base_mint"),
             quote_mint=_get_str(data, "quote_mint"),
@@ -1767,6 +1910,10 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             user_quote_token_account=_get_str(data, "user_quote_token_account"),
             coin_creator=_get_str(data, "coin_creator"),
             is_mayhem_mode=_get_bool(data, "is_mayhem_mode"),
+            is_cashback_coin=_get_bool(data, "is_cashback_coin"),
+            creator_fee_bps=_get_int(data, "creator_fee_bps"),
+            can_edit_creator_fee=_get_bool(data, "can_edit_creator_fee"),
+            is_holder_reward=_get_bool(data, "is_holder_reward"),
         )
     
     if event_type == EventType.PUMP_SWAP_LIQUIDITY_ADDED:
@@ -1824,6 +1971,35 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         return MeteoraDammV2ClosePositionEvent(metadata=meta, pool=_get_str(data, "pool"))
     if event_type == EventType.METEORA_DAMM_V2_INITIALIZE_POOL:
         return MeteoraDammV2InitializePoolEvent(metadata=meta, pool=_get_str(data, "pool"))
+    if event_type == EventType.METEORA_DAMM_V2_UPDATE_DELEGATE_PERMISSION:
+        return MeteoraDammV2UpdateDelegatePermissionEvent(
+            metadata=meta,
+            position=_get_str(data, "position"),
+            owner=_get_str(data, "owner"),
+            permission=_get_int(data, "permission"),
+            delegate=data.get("delegate"),
+        )
+    if event_type == EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD:
+        return MeteoraDammV2WithdrawDeadLiquidityRewardEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            reward_mint=_get_str(data, "reward_mint"),
+            amount=_get_int(data, "amount"),
+        )
+    if event_type == EventType.METEORA_DAMM_V2_CREATE_CONFIG:
+        return MeteoraDammV2CreateConfigEvent(
+            metadata=meta,
+            config=_get_str(data, "config"),
+            permission=str(data.get("permission", "0")),
+        )
+    if event_type == EventType.METEORA_DAMM_V2_CREATE_DYNAMIC_CONFIG:
+        return MeteoraDammV2CreateDynamicConfigEvent(
+            metadata=meta,
+            config=_get_str(data, "config"),
+            pool_creator_authority=_get_str(data, "pool_creator_authority"),
+            index=_get_int(data, "index"),
+            permission=str(data.get("permission", "0")),
+        )
 
     if event_type == EventType.RAYDIUM_CLMM_SWAP:
         return RaydiumClmmSwapEvent(
@@ -2147,6 +2323,16 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             is_buy=_get_bool(data, "is_buy"),
             trade_direction=_get_str(data, "trade_direction"),
             exact_in=_get_bool(data, "exact_in"),
+            global_config=_get_str(data, "global_config"),
+            platform_config=_get_str(data, "platform_config"),
+            user_base_token=_get_str(data, "user_base_token"),
+            user_quote_token=_get_str(data, "user_quote_token"),
+            base_vault=_get_str(data, "base_vault"),
+            quote_vault=_get_str(data, "quote_vault"),
+            base_mint=_get_str(data, "base_mint"),
+            quote_mint=_get_str(data, "quote_mint"),
+            base_token_program=_get_str(data, "base_token_program"),
+            quote_token_program=_get_str(data, "quote_token_program"),
         )
     
     if event_type == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
@@ -2155,6 +2341,15 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             pool_state=_get_str(data, "pool_state"),
             creator=_get_str(data, "creator"),
             base_mint_param=_get_dict_any(data, "base_mint_param"),
+            payer=_get_str(data, "payer"),
+            global_config=_get_str(data, "global_config"),
+            platform_config=_get_str(data, "platform_config"),
+            base_mint=_get_str(data, "base_mint"),
+            quote_mint=_get_str(data, "quote_mint"),
+            base_vault=_get_str(data, "base_vault"),
+            quote_vault=_get_str(data, "quote_vault"),
+            base_token_program=_get_str(data, "base_token_program"),
+            quote_token_program=_get_str(data, "quote_token_program"),
         )
     
     if event_type == EventType.RAYDIUM_LAUNCHLAB_MIGRATE_AMM:

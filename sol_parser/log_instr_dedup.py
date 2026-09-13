@@ -185,6 +185,8 @@ def _merge_pumpfun_trade(log: Any, ix: Any) -> None:
         "quote_amount",
         "virtual_quote_reserves",
         "real_quote_reserves",
+        "holder_rewards_bps",
+        "holder_rewards",
     ):
         if getattr(log, attr, 0) == 0 and getattr(ix, attr, 0) != 0:
             setattr(log, attr, getattr(ix, attr))
@@ -217,6 +219,7 @@ def _merge_pumpfun_create(log: Any, ix: Any) -> None:
         "real_token_reserves",
         "token_total_supply",
         "virtual_quote_reserves",
+        "creator_fee_bps",
     ):
         if getattr(log, attr, 0) == 0 and getattr(ix, attr, 0) != 0:
             setattr(log, attr, getattr(ix, attr))
@@ -225,6 +228,9 @@ def _merge_pumpfun_create(log: Any, ix: Any) -> None:
     )
     log.is_cashback_enabled = bool(getattr(log, "is_cashback_enabled", False)) or bool(
         getattr(ix, "is_cashback_enabled", False)
+    )
+    log.is_holder_reward = bool(getattr(log, "is_holder_reward", False)) or bool(
+        getattr(ix, "is_holder_reward", False)
     )
 
 
@@ -305,6 +311,20 @@ def _merge_grpc_instruction_into_log(log_ev: DexEvent, ix_ev: DexEvent) -> None:
             "coin_creator",
         ):
             _fill_attr(log, attr, ix)
+        if getattr(log, "creator_fee_bps", 0) == 0 and getattr(ix, "creator_fee_bps", 0) != 0:
+            log.creator_fee_bps = ix.creator_fee_bps
+        log.is_mayhem_mode = bool(getattr(log, "is_mayhem_mode", False)) or bool(
+            getattr(ix, "is_mayhem_mode", False)
+        )
+        log.is_cashback_coin = bool(getattr(log, "is_cashback_coin", False)) or bool(
+            getattr(ix, "is_cashback_coin", False)
+        )
+        log.can_edit_creator_fee = bool(getattr(log, "can_edit_creator_fee", False)) or bool(
+            getattr(ix, "can_edit_creator_fee", False)
+        )
+        log.is_holder_reward = bool(getattr(log, "is_holder_reward", False)) or bool(
+            getattr(ix, "is_holder_reward", False)
+        )
     elif (
         log_ev.type == EventType.PUMP_SWAP_LIQUIDITY_ADDED
         and ix_ev.type == EventType.PUMP_SWAP_LIQUIDITY_ADDED

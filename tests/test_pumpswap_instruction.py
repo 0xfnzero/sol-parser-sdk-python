@@ -1,6 +1,6 @@
 import struct
 
-from sol_parser.event_types import DexEvent, PumpSwapBuyEvent
+from sol_parser.event_types import DexEvent, PumpSwapBuyEvent, PumpSwapCreatePoolEvent
 from sol_parser.grpc_types import EventType
 from sol_parser.instructions import parse_pumpswap_instruction
 from sol_parser.merger import merge_dex_events
@@ -76,6 +76,43 @@ def test_pumpswap_sell_instruction_maps_cashback_tail_and_args():
     assert sell.pool_v2 == "Account23"
     assert sell.fee_recipient == "Account24"
     assert sell.fee_recipient_quote_token_account == "Account25"
+
+
+def test_pumpswap_create_pool_reads_holder_reward_args_and_accounts():
+    payload = bytearray(62)
+    struct.pack_into("<HQQ", payload, 0, 7, 100, 200)
+    payload[18:50] = bytes(range(32))
+    payload[50] = 1
+    payload[51] = 1
+    struct.pack_into("<Q", payload, 52, 250)
+    payload[60] = 1
+    payload[61] = 1
+
+    ev = parse_pumpswap_instruction(
+        bytes([233, 146, 209, 142, 207, 104, 64, 188]) + payload,
+        accounts(18),
+        "sig",
+        1,
+        0,
+        None,
+        0,
+    )
+
+    assert ev is not None and ev.type == EventType.PUMP_SWAP_CREATE_POOL
+    assert isinstance(ev.data, PumpSwapCreatePoolEvent)
+    create = ev.data
+    assert create.index == 7
+    assert create.pool == "Account00"
+    assert create.creator == "Account02"
+    assert create.base_mint == "Account03"
+    assert create.quote_mint == "Account04"
+    assert create.base_amount_in == 100
+    assert create.quote_amount_in == 200
+    assert create.is_mayhem_mode is True
+    assert create.is_cashback_coin is True
+    assert create.creator_fee_bps == 250
+    assert create.can_edit_creator_fee is True
+    assert create.is_holder_reward is True
 
 
 def test_pumpswap_merge_preserves_instruction_upgrade_tail():

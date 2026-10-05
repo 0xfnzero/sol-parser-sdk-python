@@ -131,3 +131,11 @@ __all__ = [
     "build_subscribe_request_with_commitment",
     "build_subscribe_transaction_filters_named",
 ]
+
+
+def build_subscribe_request_with_event_filter(tx_filters, acc_filters, event_type_filter=None):
+    from ..grpc_types import EventType
+    request=build_subscribe_request(tx_filters,acc_filters)
+    if event_type_filter is not None and event_type_filter.should_include(EventType.BLOCK_META):
+        request.blocks_meta["block_meta"].CopyFrom(geyser_pb2.SubscribeRequestFilterBlocksMeta())
+    return request

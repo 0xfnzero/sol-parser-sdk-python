@@ -466,3 +466,27 @@ __all__ = [
     "ShredStreamClient",
     "ShredStreamConfig",
 ]
+
+# Native route and subscription state APIs aligned with Rust 0.7.7.
+from .transaction_route import (analyze_rpc_transaction_routes, TransactionRoute, RouteSwapLeg,
+    RouteTokenTransfer, RouteUnknownInvocation, RouteNativeTokenAction, InstructionPosition,
+    stonkfun_mode_from_platform_config)
+from .stonkfun_registry import StonkFunPoolRegistry, StonkFunGraduatedPool
+from .liquidity_snapshot import RawAccountSnapshotEvent, LiquidityAccountSnapshotEvent, parse_liquidity_account
+from .wire_transaction import decode_wire_transaction
+
+from .simulation_route import analyze_simulation_routes
+
+__all__.append("analyze_simulation_routes")
+
+from .block_meta import BlockMetaEvent, parse_block_meta_update
+from .grpc.subscribe_builder import build_subscribe_request_with_event_filter
+
+from .event_types import (
+    LaunchLabPoolCreateEvent, StonkFunPoolCreateEvent,
+    LaunchLabTradeEvent, StonkFunTradeEvent,
+)
+__all__ += ["LaunchLabPoolCreateEvent", "StonkFunPoolCreateEvent", "LaunchLabTradeEvent", "StonkFunTradeEvent"]
+
+from .grpc_client import DexEventQueue, GrpcStreamStatus
+__all__ += ["DexEventQueue", "GrpcStreamStatus"]

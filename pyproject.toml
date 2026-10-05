@@ -1,6 +1,6 @@
 [project]
 name = "sol-parser-sdk-python"
-version = "0.5.8"
+version = "0.5.9"
 description = "Solana DEX program log parsing (pure Python, API aligned with sol-parser-sdk)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,6 +17,8 @@ shredstream = [
 ]
 dev = [
     "pytest>=8.0",
+    "pytest-asyncio>=0.21",
+    "requests>=2.31",
     "pytest-benchmark>=4.0",
 ]
 

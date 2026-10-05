@@ -11,7 +11,7 @@ from .grpc_types import EventType
 
 
 def dex_event_json_dumps(obj: Any, **kwargs: Any) -> str:
-    return json.dumps(obj, default=str, **kwargs)
+    return json.dumps(_precise_metadata(dex_event_to_jsonable(obj)), default=str, **kwargs)
 
 
 def dex_event_to_jsonable(ev: Any) -> Any:
@@ -39,3 +39,17 @@ def format_dex_event_json(ev: Any, *, indent: int = 2, ensure_ascii: bool = Fals
         indent=indent,
         ensure_ascii=ensure_ascii,
     )
+
+
+def _precise_metadata(obj):
+    """Match Node exact metadata JSON without changing floating latency metrics."""
+    if isinstance(obj,dict):
+        result={k:_precise_metadata(v) for k,v in obj.items()}
+        if "signature" in obj and all(k in obj for k in ("slot","tx_index","block_time_us","grpc_recv_us")):
+            from .grpc_types import EventMetadata
+            validated=EventMetadata(**{k:obj[k] for k in ("signature","slot","tx_index","block_time_us","grpc_recv_us")})
+            for k in ("slot","tx_index","block_time_us","grpc_recv_us"):result[k]=str(getattr(validated,k))
+        return result
+    if isinstance(obj,(tuple,list)):return [_precise_metadata(v) for v in obj]
+    if is_dataclass(obj):return _precise_metadata(asdict(obj))
+    return obj

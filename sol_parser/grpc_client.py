@@ -11,7 +11,7 @@ import asyncio
 import time
 import uuid
 from typing import Dict, List, Optional, Callable, Any, AsyncGenerator, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from urllib.parse import urlparse
 
 import base58
@@ -97,6 +97,42 @@ class Subscription:
     callbacks: SubscribeCallbacks
 
 
+@dataclass(frozen=True)
+class GrpcStreamStatus:
+    state: str = "connecting"
+    continuity_broken: bool = False
+    reconnects: int = 0
+    dropped: int = 0
+
+class DexEventQueue(asyncio.Queue):
+    """Queue-compatible DEX subscription with observable transport failures."""
+    def __init__(self, maxsize):
+        super().__init__(maxsize=maxsize)
+        self.errors = asyncio.Queue(maxsize=maxsize)
+        self.states = asyncio.Queue(maxsize=maxsize)
+        self._status = GrpcStreamStatus()
+        self.states.put_nowait(self._status)
+
+    def status(self):
+        return self._status
+
+    def transition(self, state, *, continuity_broken=None, reconnect=False, dropped=False):
+        previous = self._status
+        self._status = replace(
+            self._status, state=state,
+            continuity_broken=self._status.continuity_broken if continuity_broken is None else continuity_broken,
+            reconnects=self._status.reconnects + int(reconnect),
+            dropped=self._status.dropped + int(dropped),
+        )
+        if self._status == previous: return
+        if self.states.full(): self.states.get_nowait()
+        self.states.put_nowait(self._status)
+
+    def report_error(self, error):
+        if self.errors.full(): self.errors.get_nowait()
+        self.errors.put_nowait(error)
+
+
 class YellowstoneGrpc:
     """Yellowstone gRPC 客户端"""
 
@@ -109,6 +145,7 @@ class YellowstoneGrpc:
         self._channel: Optional[aio.Channel] = None
         self._client: Optional[Any] = None
         self._lock = asyncio.Lock()
+        self._dex_lifecycle = asyncio.Lock()
         self._dex_event_queue: Optional[asyncio.Queue] = None
         self._dex_event_filter: Optional[Any] = None
         self._dex_cancel_event: Optional[asyncio.Event] = None
@@ -140,7 +177,27 @@ class YellowstoneGrpc:
             inst.set_x_token(token)
         return inst
 
-    async def subscribe_dex_events(
+    async def stop(self):
+        async with self._dex_lifecycle:
+            await self._stop_dex_unlocked()
+
+    async def _stop_dex_unlocked(self):
+        if self._dex_cancel_event is not None: self._dex_cancel_event.set()
+        task = self._dex_task
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        self._dex_task = None
+        self._dex_cancel_event = None
+        self._dex_request_queue = None
+        self._dex_current_req = None
+
+    async def subscribe_dex_events(self, transaction_filters, account_filters, event_type_filter=None):
+        async with self._dex_lifecycle:
+            await self._stop_dex_unlocked()
+            return await self._subscribe_dex_events(transaction_filters, account_filters, event_type_filter)
+
+    async def _subscribe_dex_events(
         self,
         transaction_filters: List[TransactionFilter],
         account_filters: List[Any],
@@ -156,10 +213,10 @@ class YellowstoneGrpc:
         if not self._client:
             raise RuntimeError("Client not connected")
 
-        from .grpc.subscribe_builder import build_subscribe_request
+        from .grpc.subscribe_builder import build_subscribe_request_with_event_filter
 
-        req = build_subscribe_request(transaction_filters, account_filters)
-        queue: asyncio.Queue = asyncio.Queue(maxsize=max(1, int(self.config.buffer_size or 100_000)))
+        req = build_subscribe_request_with_event_filter(transaction_filters, account_filters, event_type_filter)
+        queue: asyncio.Queue = DexEventQueue(maxsize=max(1, int(self.config.buffer_size or 100_000)))
 
         if self._dex_cancel_event is not None:
             self._dex_cancel_event.set()
@@ -178,15 +235,19 @@ class YellowstoneGrpc:
         )
         return queue
 
-    async def update_subscription(
+    async def update_subscription(self, transaction_filters, account_filters):
+        async with self._dex_lifecycle:
+            return await self._update_subscription(transaction_filters, account_filters)
+
+    async def _update_subscription(
         self,
         transaction_filters: List[TransactionFilter],
         account_filters: List[Any],
     ) -> None:
         """动态更新 DEX 订阅。
 
-        Python gRPC runtime 不暴露当前双向流的发送端给外部 API；这里保留原队列，
-        取消旧后台流并用新过滤器立即重建，调用方无需替换消费队列。
+        通过原双向流发送最新过滤器，保留事件消费队列。
+        重连后使用最新请求，调用方无需替换消费队列。
         """
         if self._dex_event_queue is None:
             raise RuntimeError("No active DEX subscription")
@@ -195,9 +256,9 @@ class YellowstoneGrpc:
         if not self._client:
             raise RuntimeError("Client not connected")
 
-        from .grpc.subscribe_builder import build_subscribe_request
+        from .grpc.subscribe_builder import build_subscribe_request_with_event_filter
 
-        req = build_subscribe_request(transaction_filters, account_filters)
+        req = build_subscribe_request_with_event_filter(transaction_filters, account_filters, self._dex_event_filter)
         self._dex_current_req = req
         if self._dex_request_queue is None:
             raise RuntimeError("No active DEX subscription")
@@ -294,6 +355,11 @@ class YellowstoneGrpc:
             self._connected = True
 
     async def disconnect(self) -> None:
+        async with self._dex_lifecycle:
+            await self._stop_dex_unlocked()
+            await self._disconnect()
+
+    async def _disconnect(self) -> None:
         """断开连接"""
         if not self._connected:
             return
@@ -413,7 +479,8 @@ class YellowstoneGrpc:
                 blockhash=meta.blockhash,
                 parent_slot=meta.parent_slot,
                 parent_blockhash=meta.parent_blockhash,
-                executed_transaction_count=meta.executed_transaction_count
+                executed_transaction_count=meta.executed_transaction_count,
+                block_time=meta.block_time.timestamp if meta.HasField("block_time") else None
             )
 
         # 转换 Ping
@@ -432,7 +499,8 @@ class YellowstoneGrpc:
             queue.put_nowait(event)
         except asyncio.QueueFull:
             # 与 Rust 有界 ArrayQueue 的低延迟取舍一致：消费端落后时丢弃新事件，避免阻塞 gRPC 流。
-            pass
+            if isinstance(queue, DexEventQueue):
+                queue.transition(queue.status().state, continuity_broken=True, dropped=True)
 
     async def _enqueue_transaction_dex_events(
         self,
@@ -554,6 +622,15 @@ class YellowstoneGrpc:
             block_time_us=0 if block_time_us is None else block_time_us,
             grpc_recv_us=grpc_recv_us,
         )
+        # Raw snapshots are opt-in, including closure updates with empty bytes.
+        from .event_types import DexEvent
+        from .grpc_types import EventType
+        from .liquidity_snapshot import RawAccountSnapshotEvent
+        if EventType.ACCOUNT_RAW_SNAPSHOT in (getattr(event_type_filter, "include_only", None) or []):
+            self._queue_event_nowait(queue, DexEvent(
+                type=EventType.ACCOUNT_RAW_SNAPSHOT,
+                data=RawAccountSnapshotEvent(metadata, account, int(acc.write_version), bool(update.account.is_startup)),
+            ))
         ev = parse_account_unified(account, metadata, event_type_filter)
         if ev is not None:
             self._queue_event_nowait(queue, ev)
@@ -582,6 +659,7 @@ class YellowstoneGrpc:
 
         try:
             while not cancel_event.is_set():
+                if isinstance(queue, DexEventQueue): queue.transition("connecting")
                 outgoing: asyncio.Queue = asyncio.Queue()
 
                 async def request_iterator():
@@ -606,6 +684,7 @@ class YellowstoneGrpc:
                     async for pb_update in self._client.Subscribe(request_iterator(), metadata=metadata):
                         if cancel_event.is_set():
                             break
+                        if isinstance(queue, DexEventQueue): queue.transition("connected")
                         if pb_update.HasField("ping"):
                             await outgoing.put(
                                 geyser_pb2.SubscribeRequest(
@@ -627,6 +706,13 @@ class YellowstoneGrpc:
                                 block_time_us,
                                 order_dispatcher,
                             )
+                        if update.block_meta:
+                            from .block_meta import parse_block_meta_update
+                            from .grpc_types import EventType
+                            if event_type_filter is None or event_type_filter.should_include(EventType.BLOCK_META):
+                                # Match transaction/account overflow semantics. A full
+                                # consumer queue must not stall gRPC reads and pings.
+                                self._queue_event_nowait(queue, parse_block_meta_update(update.block_meta,grpc_recv_us,block_time_us))
                         if update.account:
                             await self._enqueue_account_dex_event(
                                 queue,
@@ -635,10 +721,15 @@ class YellowstoneGrpc:
                                 grpc_recv_us,
                                 block_time_us,
                             )
+                    if not cancel_event.is_set():
+                        raise ConnectionError("Yellowstone DEX stream ended")
                     delay = 1.0
                 except asyncio.CancelledError:
                     break
-                except Exception:
+                except Exception as error:
+                    if isinstance(queue, DexEventQueue):
+                        queue.report_error(error)
+                        queue.transition("reconnecting", continuity_broken=True, reconnect=True)
                     order_dispatcher.flush_all(lambda ev: self._queue_event_nowait(queue, ev))
                     if cancel_event.is_set():
                         break
@@ -646,10 +737,13 @@ class YellowstoneGrpc:
                     delay = min(delay * 2.0, 60.0)
                 finally:
                     pump_task.cancel()
+                    await asyncio.gather(pump_task, return_exceptions=True)
                     await outgoing.put(None)
         finally:
             if flush_task is not None:
                 flush_task.cancel()
+                await asyncio.gather(flush_task, return_exceptions=True)
+            if isinstance(queue, DexEventQueue): queue.transition("stopped", continuity_broken=True)
             order_dispatcher.flush_all(lambda ev: self._queue_event_nowait(queue, ev))
 
     async def subscribe_transactions(
@@ -766,7 +860,7 @@ class YellowstoneGrpc:
             req.commitment = commitment.value
 
         metadata = self._get_metadata()
-        resp = await self._client.get_latest_blockhash(req, metadata=metadata)
+        resp = await self._client.GetLatestBlockhash(req, metadata=metadata)
 
         return GetLatestBlockhashResponse(
             slot=resp.slot,
@@ -789,7 +883,7 @@ class YellowstoneGrpc:
             req.commitment = commitment.value
 
         metadata = self._get_metadata()
-        resp = await self._client.get_block_height(req, metadata=metadata)
+        resp = await self._client.GetBlockHeight(req, metadata=metadata)
 
         return GetBlockHeightResponse(block_height=resp.block_height)
 
@@ -808,7 +902,7 @@ class YellowstoneGrpc:
             req.commitment = commitment.value
 
         metadata = self._get_metadata()
-        resp = await self._client.get_slot(req, metadata=metadata)
+        resp = await self._client.GetSlot(req, metadata=metadata)
 
         return GetSlotResponse(slot=resp.slot)
 
@@ -822,7 +916,7 @@ class YellowstoneGrpc:
 
         req = geyser_pb2.GetVersionRequest()
         metadata = self._get_metadata()
-        resp = await self._client.get_version(req, metadata=metadata)
+        resp = await self._client.GetVersion(req, metadata=metadata)
 
         return GetVersionResponse(version=resp.version)
 
@@ -841,7 +935,7 @@ class YellowstoneGrpc:
             req.commitment = commitment.value
 
         metadata = self._get_metadata()
-        resp = await self._client.is_blockhash_valid(req, metadata=metadata)
+        resp = await self._client.IsBlockhashValid(req, metadata=metadata)
 
         return IsBlockhashValidResponse(slot=resp.slot, valid=resp.valid)
 
@@ -855,7 +949,7 @@ class YellowstoneGrpc:
 
         req = geyser_pb2.PingRequest(count=count)
         metadata = self._get_metadata()
-        resp = await self._client.ping(req, metadata=metadata)
+        resp = await self._client.Ping(req, metadata=metadata)
 
         return PongResponse(count=resp.count)
 
@@ -869,7 +963,7 @@ class YellowstoneGrpc:
 
         req = geyser_pb2.SubscribeReplayInfoRequest()
         metadata = self._get_metadata()
-        resp = await self._client.subscribe_replay_info(req, metadata=metadata)
+        resp = await self._client.SubscribeReplayInfo(req, metadata=metadata)
 
         result = SubscribeReplayInfoResponse()
         if resp.HasField('first_available'):

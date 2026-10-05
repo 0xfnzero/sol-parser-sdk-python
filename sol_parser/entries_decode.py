@@ -46,87 +46,13 @@ class _ParsedTx:
 
 
 def parse_transaction_wire(buf: bytes, pos: int) -> Optional[_ParsedTx]:
-    start = pos
-    if pos >= len(buf):
+    from .wire_transaction import decode_wire_transaction
+    import base58
+    try:
+        transaction, length = decode_wire_transaction(buf, pos, require_complete=False)
+        return _ParsedTx(length, [base58.b58decode(s) for s in transaction['signatures']])
+    except (ValueError, IndexError):
         return None
-    sig_count_enc = decode_compact_u16(buf, pos)
-    if not sig_count_enc:
-        return None
-    p = pos + sig_count_enc[1]
-    sig_count = sig_count_enc[0]
-    sigs_end = p + sig_count * 64
-    if sigs_end > len(buf):
-        return None
-    sigs: List[bytes] = []
-    for _ in range(sig_count):
-        sigs.append(buf[p : p + 64])
-        p += 64
-    if p >= len(buf):
-        return None
-    msg_first = buf[p]
-    is_v0 = msg_first >= 0x80
-    if is_v0:
-        p += 1
-    p += 3
-    if p > len(buf):
-        return None
-    acct_enc = decode_compact_u16(buf, p)
-    if not acct_enc:
-        return None
-    p += acct_enc[1]
-    p += acct_enc[0] * 32
-    if p > len(buf):
-        return None
-    ix_count_enc = decode_compact_u16(buf, p)
-    if not ix_count_enc:
-        return None
-    p += ix_count_enc[1]
-    ix_count = ix_count_enc[0]
-    for _ in range(ix_count):
-        p += 1
-        if p > len(buf):
-            return None
-        acct_len_enc = decode_compact_u16(buf, p)
-        if not acct_len_enc:
-            return None
-        p += acct_len_enc[1]
-        p += acct_len_enc[0]
-        if p > len(buf):
-            return None
-        data_len_enc = decode_compact_u16(buf, p)
-        if not data_len_enc:
-            return None
-        p += data_len_enc[1]
-        p += data_len_enc[0]
-        if p > len(buf):
-            return None
-    if is_v0:
-        if p >= len(buf):
-            return None
-        atl_count_enc = decode_compact_u16(buf, p)
-        if not atl_count_enc:
-            return None
-        p += atl_count_enc[1]
-        atl_count = atl_count_enc[0]
-        for _ in range(atl_count):
-            p += 32
-            if p > len(buf):
-                return None
-            w_len_enc = decode_compact_u16(buf, p)
-            if not w_len_enc:
-                return None
-            p += w_len_enc[1]
-            p += w_len_enc[0]
-            if p > len(buf):
-                return None
-            r_len_enc = decode_compact_u16(buf, p)
-            if not r_len_enc:
-                return None
-            p += r_len_enc[1]
-            p += r_len_enc[0]
-            if p > len(buf):
-                return None
-    return _ParsedTx(tx_len=p - start, signatures=sigs)
 
 
 class _BatchDecoder:

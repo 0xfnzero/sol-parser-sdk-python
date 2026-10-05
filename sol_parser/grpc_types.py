@@ -37,6 +37,8 @@ class EventType(str, Enum):
     """事件类型"""
     # Block
     BLOCK_META = "BlockMeta"
+    ACCOUNT_RAW_SNAPSHOT = "AccountRawSnapshot"
+    ACCOUNT_LIQUIDITY_SNAPSHOT = "AccountLiquiditySnapshot"
     # RaydiumLaunchlab
     RAYDIUM_LAUNCHLAB_TRADE = "RaydiumLaunchlabTrade"
     RAYDIUM_LAUNCHLAB_POOL_CREATE = "RaydiumLaunchlabPoolCreate"
@@ -435,6 +437,18 @@ class EventMetadata:
     recent_blockhash: str = ""
     is_created_buy: bool = False
 
+    def __post_init__(self):
+        for name,signed in (("slot",False),("tx_index",False),("block_time_us",True),("grpc_recv_us",True)):
+            value=getattr(self,name)
+            if isinstance(value,str):
+                import re
+                if not re.fullmatch(r"-?\d+",value):raise ValueError(f"Invalid {name} integer")
+                value=int(value)
+            minimum=-(1<<63) if signed else 0
+            maximum=(1<<63)-1 if signed else (1<<64)-1
+            if type(value) is not int or not minimum<=value<=maximum:raise ValueError(f"{name} outside {'i64' if signed else 'u64'}")
+            setattr(self,name,value)
+
 
 @dataclass
 class ClientConfig:
@@ -747,6 +761,8 @@ class Protocol(str, Enum):
     PUMP_SWAP = "PumpSwap"
     PUMP_FEES = "PumpFees"
     RAYDIUM_LAUNCHLAB = "RaydiumLaunchlab"
+    LAUNCH_LAB = "LaunchLab"
+    STONK_FUN = "StonkFun"
     RAYDIUM_CPMM = "RaydiumCpmm"
     RAYDIUM_CLMM = "RaydiumClmm"
     RAYDIUM_AMM_V4 = "RaydiumAmmV4"
@@ -762,6 +778,8 @@ _PROTOCOL_PROGRAM_IDS: Dict[Protocol, List[str]] = {
     Protocol.PUMP_FUN: ["6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"],
     Protocol.PUMP_SWAP: ["pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"],
     Protocol.PUMP_FEES: ["pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ"],
+    Protocol.LAUNCH_LAB: ["LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj"],
+    Protocol.STONK_FUN: ["LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj"],
     Protocol.RAYDIUM_LAUNCHLAB: ["LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj"],
     Protocol.RAYDIUM_CPMM: ["CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"],
     Protocol.RAYDIUM_CLMM: ["CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"],
@@ -981,6 +999,7 @@ class SubscribeUpdateBlockMeta:
     parent_slot: int = 0
     parent_blockhash: str = ""
     executed_transaction_count: int = 0
+    block_time: Optional[int] = None
 
 
 @dataclass

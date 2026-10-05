@@ -206,6 +206,11 @@ def parse_account_unified(
     event_type_filter: Optional[EventTypeFilter] = None,
 ) -> Optional[DexEvent]:
     """对齐 Rust ``parse_account_unified``（含 ``Option<EventTypeFilter>`` 语义）。"""
+    from ..liquidity_snapshot import parse_liquidity_account
+    if event_type_filter is None or event_type_filter.should_include(EventType.ACCOUNT_LIQUIDITY_SNAPSHOT):
+        snapshot = parse_liquidity_account(account, metadata)
+        if snapshot is not None:
+            return DexEvent(type=EventType.ACCOUNT_LIQUIDITY_SNAPSHOT, data=snapshot)
     data = account.data
     if not data:
         return None

@@ -1410,6 +1410,28 @@ class RaydiumLaunchlabTradeEvent(DexEventBase):
     base_token_program: str = ""
     quote_token_program: str = ""
 
+    total_base_sell: int = 0
+    virtual_base: int = 0
+    virtual_quote: int = 0
+    real_base_before: int = 0
+    real_quote_before: int = 0
+    real_base_after: int = 0
+    real_quote_after: int = 0
+    protocol_fee: int = 0
+    platform_fee: int = 0
+    creator_fee: int = 0
+    share_fee: int = 0
+    pool_status: str = "Fund"
+    system_program: str = ""
+    platform_associated_account: str = ""
+    creator_associated_account: str = ""
+
+    def stonkfun_mode(self):
+        from .transaction_route import stonkfun_mode_from_platform_config
+        return stonkfun_mode_from_platform_config(self.platform_config)
+
+    def is_stonkfun(self):
+        return self.stonkfun_mode() is not None
 
 @dataclass
 class RaydiumLaunchlabPoolCreateEvent(DexEventBase):
@@ -1428,6 +1450,14 @@ class RaydiumLaunchlabPoolCreateEvent(DexEventBase):
     quote_token_program: str = ""
 
 
+
+    def stonkfun_mode(self):
+        from .transaction_route import stonkfun_mode_from_platform_config
+        return stonkfun_mode_from_platform_config(self.platform_config)
+
+    def is_stonkfun(self):
+        return self.stonkfun_mode() is not None
+
 @dataclass
 class RaydiumLaunchlabMigrateAmmEvent(DexEventBase):
     """RaydiumLaunchlab 迁移 AMM 事件"""
@@ -1436,6 +1466,18 @@ class RaydiumLaunchlabMigrateAmmEvent(DexEventBase):
     user: str = ""
     liquidity_amount: int = 0
 
+    liquidity_amount_known: bool = False
+    base_mint: str = ""
+    quote_mint: str = ""
+    platform_config: str = ""
+    destination_program: str = ""
+
+    def stonkfun_mode(self):
+        from .transaction_route import stonkfun_mode_from_platform_config
+        return stonkfun_mode_from_platform_config(self.platform_config)
+
+    def is_stonkfun(self):
+        return self.stonkfun_mode() is not None
 
 # ============================================================
 # 类型联合
@@ -2379,3 +2421,9 @@ def legacy_dict_to_dex_event(d: dict) -> Optional[DexEvent]:
     except ValueError:
         return None
     return DexEvent(type=et, data=typed)
+
+# Same classes: preserve isinstance, serialization and platform attribution.
+LaunchLabPoolCreateEvent = RaydiumLaunchlabPoolCreateEvent
+StonkFunPoolCreateEvent = RaydiumLaunchlabPoolCreateEvent
+LaunchLabTradeEvent = RaydiumLaunchlabTradeEvent
+StonkFunTradeEvent = RaydiumLaunchlabTradeEvent

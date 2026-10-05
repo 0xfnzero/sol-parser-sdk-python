@@ -100,8 +100,12 @@ def fill_cpmm_initialize_accounts(e: RaydiumCpmmInitializeEvent, get: AccountGet
 
 
 def fill_amm_v4_swap_accounts(e: RaydiumAmmV4SwapEvent, get: AccountGetter) -> None:
-    if _empty(e.amm):
-        e.amm = get(1)
+    if _empty(e.amm):e.amm=get(1)
+    modern=_empty(get(8)) and not _empty(get(7))
+    if modern:
+        for field,index in [('token_program',0),('amm_authority',2),('pool_coin_token_account',3),('pool_pc_token_account',4),('user_source_token_account',5),('user_destination_token_account',6),('user_source_owner',7)]:
+            if _empty(getattr(e,field)):setattr(e,field,get(index))
+    elif _empty(e.user_source_owner):e.user_source_owner=get(16) if _empty(get(17)) else get(17)
 
 
 def fill_amm_v4_deposit_accounts(e: RaydiumAmmV4DepositEvent, get: AccountGetter) -> None:

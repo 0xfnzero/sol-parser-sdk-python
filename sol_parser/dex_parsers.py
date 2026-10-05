@@ -2727,7 +2727,7 @@ def parse_raydium_launchlab_from_discriminator(disc: int, data: bytes, meta: dic
 
 
 def _parse_raydium_launchlab_trade(data: bytes, meta: dict) -> Optional[DexEvent]:
-    if len(data) < 139:
+    if len(data) != 139 or data[136] > 1 or data[137] > 2 or data[138] > 1:
         return None
     pool = _pub(data, 0)
     ai = _u64le(data, 88)
@@ -2746,6 +2746,19 @@ def _parse_raydium_launchlab_trade(data: bytes, meta: dict) -> Optional[DexEvent
             is_buy=is_buy,
             trade_direction=d,
             exact_in=ex_in,
+            pool_status=("Fund","Migrate","Trade")[data[137]],
+            total_base_sell=_u64le(data,32),
+            virtual_base=_u64le(data,40),
+            virtual_quote=_u64le(data,48),
+            real_base_before=_u64le(data,56),
+            real_quote_before=_u64le(data,64),
+            real_base_after=_u64le(data,72),
+            real_quote_after=_u64le(data,80),
+            protocol_fee=_u64le(data,104),
+            platform_fee=_u64le(data,112),
+            creator_fee=_u64le(data,120),
+            share_fee=_u64le(data,128),
+
         ),
     )
 

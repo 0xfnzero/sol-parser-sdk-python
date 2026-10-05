@@ -82,10 +82,25 @@ def fill_accounts_with_owned_keys(
     w = [bytes(x) for x in meta_pb.loaded_writable_addresses]
     r = [bytes(x) for x in meta_pb.loaded_readonly_addresses]
 
-    def run(program_b58: str, filler) -> None:
+    def run(program_b58: str, filler, anchor=None, unambiguous=False) -> None:
         pid = base58.b58decode(program_b58)
         inv = invokes.get(pid)
         if not inv:
+            return
+        if anchor is not None or unambiguous:
+            pool, index = anchor or (None,1)
+            has_anchor=pool and pool != "11111111111111111111111111111111"
+            if not has_anchor and not unambiguous:return
+            selected = None
+            for invocation in inv:
+                candidate = get_instruction_account_getter(meta_pb, transaction_pb, static_keys, w, r, invocation)
+                if candidate is None or (has_anchor and candidate(index) != pool):
+                    continue
+                if selected is not None and any(selected(i) != candidate(i) for i in range(18)):
+                    return  # Same pool, conflicting wallet/account context: do not guess.
+                selected = candidate
+            if selected is not None:
+                filler(selected)
             return
         ix = find_instruction_invoke(inv, meta_pb, transaction_pb)
         if ix is None:
@@ -146,7 +161,7 @@ def fill_accounts_with_owned_keys(
     elif et == EventType.RAYDIUM_CPMM_INITIALIZE:
         run(RAYDIUM_CPMM_PROGRAM_ID, lambda g: raydium.fill_cpmm_initialize_accounts(data, g))
     elif et == EventType.RAYDIUM_AMM_V4_SWAP:
-        run(RAYDIUM_AMM_V4_PROGRAM_ID, lambda g: raydium.fill_amm_v4_swap_accounts(data, g))
+        run(RAYDIUM_AMM_V4_PROGRAM_ID, lambda g: raydium.fill_amm_v4_swap_accounts(data, g), (data.amm,1), True)
     elif et == EventType.RAYDIUM_AMM_V4_DEPOSIT:
         run(RAYDIUM_AMM_V4_PROGRAM_ID, lambda g: raydium.fill_amm_v4_deposit_accounts(data, g))
     elif et == EventType.RAYDIUM_AMM_V4_WITHDRAW:
@@ -182,9 +197,9 @@ def fill_accounts_with_owned_keys(
     elif et == EventType.METEORA_DLMM_REMOVE_LIQUIDITY:
         run(METEORA_DLMM_PROGRAM_ID, lambda g: meteora.fill_dlmm_remove_liquidity_accounts(data, g))
     elif et == EventType.RAYDIUM_LAUNCHLAB_TRADE:
-        run(RAYDIUM_LAUNCHLAB_PROGRAM_ID, lambda g: raydium_launchlab.fill_trade_accounts(data, g))
+        run(RAYDIUM_LAUNCHLAB_PROGRAM_ID, lambda g: raydium_launchlab.fill_trade_accounts(data, g), (data.pool_state,4))
     elif et == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
-        run(RAYDIUM_LAUNCHLAB_PROGRAM_ID, lambda g: raydium_launchlab.fill_pool_create_accounts(data, g))
+        run(RAYDIUM_LAUNCHLAB_PROGRAM_ID, lambda g: raydium_launchlab.fill_pool_create_accounts(data, g), (data.pool_state,5))
 
 
 def fill_data(

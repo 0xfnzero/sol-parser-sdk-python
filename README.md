@@ -58,6 +58,12 @@ This is the Python implementation of the FnZero Solana DEX parser SDK for asynci
 
 ## Release notes
 
+### v0.5.9
+
+- Adds native gRPC lifecycle and block metadata support, instruction-level route analysis and StonkFun registry/snapshot examples.
+- Improves exact metadata serialization, account matching and wire transaction bounds validation.
+- Includes native alignment evidence and simulation route fixtures. These language releases do not yet implement the new CPMM creator-fee collection event API.
+
 ### v0.5.8
 
 - Syncs with Rust **sol-parser-sdk 0.7.3**, including the current PumpFun, PumpSwap, and Pump Fees protocol definitions.
@@ -93,7 +99,7 @@ This is the Python implementation of the FnZero Solana DEX parser SDK for asynci
 **From PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.5.8
+pip install sol-parser-sdk-python==0.5.9
 ```
 
 **From source**
@@ -314,3 +320,13 @@ MIT — https://github.com/0xfnzero/sol-parser-sdk-python
 - **Website**: https://fnzero.dev/  
 - **Telegram**: https://t.me/fnzero_group  
 - **Discord**: https://discord.gg/vuazbGkqQE  
+
+## Native alignment status
+
+See [NATIVE_ALIGNMENT.md](NATIVE_ALIGNMENT.md) for implemented native APIs, Rust golden tests, mainnet simulation evidence, examples, and remaining parity gaps. Full cross-language parity is still in progress.
+
+
+实时 parser → trade 接入使用 Yellowstone **gRPC**；见 [gRPC 缓存接入与三语言示例](examples/GRPC_CACHE.md)。此路径不使用 WebSocket，报价和构建热路径不调用 RPC。
+
+
+[本轮原生对齐 API 迁移](NATIVE_MIGRATION.md)（实施中，尚未发布）。

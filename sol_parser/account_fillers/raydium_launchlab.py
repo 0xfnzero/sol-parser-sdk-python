@@ -43,6 +43,10 @@ def fill_trade_accounts(e: RaydiumLaunchlabTradeEvent, get: AccountGetter) -> No
     if _empty(e.quote_token_program):
         e.quote_token_program = get(12)
 
+    for name, index in [("system_program", 15), ("platform_associated_account", 16), ("creator_associated_account", 17)]:
+        if _empty(getattr(e,name,"")):
+            setattr(e,name,get(index))
+
 
 def fill_pool_create_accounts(e: RaydiumLaunchlabPoolCreateEvent, get: AccountGetter) -> None:
     if _empty(e.pool_state):

@@ -368,7 +368,7 @@ def normal_instruction_data_may_parse(program_id: str, instruction_data: bytes) 
     if not instruction_data:
         return False
     if program_id == RAYDIUM_AMM_V4_PROGRAM_ID:
-        return instruction_data[0] in (1, 3, 4, 7, 9, 11)
+        return instruction_data[0] in (1, 3, 4, 7, 9, 11, 16, 17)
     if program_id == METEORA_DLMM_PROGRAM_ID:
         disc = _disc8(instruction_data)
         return disc in _DLMM_INSTRUCTION_DISCS if disc is not None else False
@@ -1710,21 +1710,27 @@ def parse_raydium_amm_v4_instruction(
     instr_type = data[0]
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
-    if instr_type in (9, 11):  # SwapBaseIn / SwapBaseOut
+    if instr_type in (9, 11, 16, 17):  # SwapBaseIn / SwapBaseOut
         if len(data) < 17:
             return None
+        modern = instr_type in (16,17)
+        if modern and len(accounts)<8:return None
         first, second = struct.unpack_from("<QQ", data, 1)
         shift = 1 if len(accounts) == 17 else 0
         def g(index: int) -> str:
-            return _get_account_safe(accounts, index - shift if index >= 5 else index)
+            if modern:
+                index = {0:0,1:1,2:2,5:3,6:4,15:5,16:6,17:7}.get(index,-1)
+            else:
+                index = index-shift if index>=5 else index
+            return _get_account_safe(accounts,index)
         return legacy_dict_to_dex_event({"RaydiumAmmV4Swap": {
             "metadata": meta,
             "amm": _get_account_safe(accounts, 1),
             "user_source_owner": g(17),
-            "amount_in": first if instr_type == 9 else 0,
-            "minimum_amount_out": second if instr_type == 9 else 0,
-            "max_amount_in": first if instr_type == 11 else 0,
-            "amount_out": second if instr_type == 11 else 0,
+            "amount_in": first if instr_type in (9,16) else 0,
+            "minimum_amount_out": second if instr_type in (9,16) else 0,
+            "max_amount_in": first if instr_type in (11,17) else 0,
+            "amount_out": second if instr_type in (11,17) else 0,
             "token_program": g(0), "amm_authority": g(2), "amm_open_orders": g(3),
             "pool_coin_token_account": g(5), "pool_pc_token_account": g(6),
             "serum_program": g(7), "serum_market": g(8), "serum_bids": g(9),
@@ -1843,7 +1849,7 @@ def parse_raydium_launchlab_instruction(
     payload = data[8:]
 
     if discriminator == _DISC_RAYDIUM_LAUNCHLAB_TRADE:
-        if len(payload) < 139:
+        if len(payload) != 139 or payload[136] > 1 or payload[137] > 2 or payload[138] > 1:
             return None
         return legacy_dict_to_dex_event({"RaydiumLaunchlabTrade": {
             "metadata": meta,
@@ -1854,6 +1860,19 @@ def parse_raydium_launchlab_instruction(
             "is_buy": payload[136] == 0,
             "trade_direction": "Buy" if payload[136] == 0 else "Sell",
             "exact_in": payload[138] == 1,
+            "pool_status": ("Fund","Migrate","Trade")[payload[137]],
+            "total_base_sell": _u64_payload(payload,32),
+            "virtual_base": _u64_payload(payload,40),
+            "virtual_quote": _u64_payload(payload,48),
+            "real_base_before": _u64_payload(payload,56),
+            "real_quote_before": _u64_payload(payload,64),
+            "real_base_after": _u64_payload(payload,72),
+            "real_quote_after": _u64_payload(payload,80),
+            "protocol_fee": _u64_payload(payload,104),
+            "platform_fee": _u64_payload(payload,112),
+            "creator_fee": _u64_payload(payload,120),
+            "share_fee": _u64_payload(payload,128),
+
         }})
     if discriminator == _DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE:
         if len(payload) < 97:
@@ -1897,6 +1916,20 @@ def parse_raydium_launchlab_instruction(
             "is_buy": is_buy,
             "trade_direction": "Buy" if is_buy else "Sell",
             "exact_in": exact_in,
+            "global_config": _get_account_safe(accounts,2),
+            "platform_config": _get_account_safe(accounts,3),
+            "user_base_token": _get_account_safe(accounts,5),
+            "user_quote_token": _get_account_safe(accounts,6),
+            "base_vault": _get_account_safe(accounts,7),
+            "quote_vault": _get_account_safe(accounts,8),
+            "base_mint": _get_account_safe(accounts,9),
+            "quote_mint": _get_account_safe(accounts,10),
+            "base_token_program": _get_account_safe(accounts,11),
+            "quote_token_program": _get_account_safe(accounts,12),
+            "system_program": _get_account_safe(accounts,15),
+            "platform_associated_account": _get_account_safe(accounts,16),
+            "creator_associated_account": _get_account_safe(accounts,17),
+
         }})
     if discriminator in (
         _IX_RAYDIUM_LAUNCHLAB_INITIALIZE,
@@ -1922,7 +1955,16 @@ def parse_raydium_launchlab_instruction(
         _IX_RAYDIUM_LAUNCHLAB_MIGRATE_TO_AMM,
         _IX_RAYDIUM_LAUNCHLAB_MIGRATE_TO_CPSWAP,
     ):
-        return None
+        cp = discriminator == _IX_RAYDIUM_LAUNCHLAB_MIGRATE_TO_CPSWAP
+        if len(accounts) < (28 if cp else 32) or (not cp and len(payload) < 9): return None
+        return legacy_dict_to_dex_event({"RaydiumLaunchlabMigrateAmm": {
+            "metadata": meta, "old_pool": _get_account_safe(accounts,17 if cp else 23),
+            "new_pool": _get_account_safe(accounts,5 if cp else 13), "user": _get_account_safe(accounts,0),
+            "liquidity_amount": 0, "liquidity_amount_known": False,
+            "base_mint": _get_account_safe(accounts,1), "quote_mint": _get_account_safe(accounts,2),
+            "platform_config": _get_account_safe(accounts,3) if cp else Z,
+            "destination_program": _get_account_safe(accounts,4 if cp else 12),
+        }})
 
     return None
 

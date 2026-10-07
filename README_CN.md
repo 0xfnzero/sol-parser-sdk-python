@@ -58,6 +58,13 @@
 
 ## 发布说明
 
+### v0.5.10
+
+- 按实际指令 discriminator 和事件 mint 匹配 PumpFun create/create_v2 账户，支持 CPI，并拒绝猜测有歧义的匹配。
+- 停止从 create_v2 的任意尾部账户推断 quote mint、vault、token program，保留权威解码字段。
+- 恢复历史 CreateEvent 布局，并通过保存的真实主网成功、失败交易验证。
+- 过滤失败交易中已经回滚的 Create/Buy 等 DEX 事件，并在 RPC/gRPC 转换中保留失败状态。
+
 ### v0.5.9
 
 - Adds native gRPC lifecycle and block metadata support, instruction-level route analysis and StonkFun registry/snapshot examples.
@@ -99,7 +106,7 @@
 **PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.5.9
+pip install sol-parser-sdk-python==0.5.10
 ```
 
 **源码**

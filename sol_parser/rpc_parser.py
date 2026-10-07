@@ -71,6 +71,7 @@ class RpcTransactionMeta:
     post_token_balances: List[RpcTokenBalance]
     loaded_addresses: Optional[RpcLoadedAddresses]
     compute_units_consumed: Optional[int]
+    err: Optional[Any] = None
 
 
 @dataclass
@@ -199,6 +200,9 @@ def parse_rpc_transaction(
     """
     if tx.transaction is None or tx.transaction.message is None:
         return [], ParseError("ConversionError", "Transaction message is nil")
+
+    if tx.meta is not None and tx.meta.err is not None:
+        return [], None  # All events from a failed transaction describe rolled-back work.
 
     msg = tx.transaction.message
     meta = tx.meta
@@ -428,6 +432,10 @@ def convert_rpc_to_grpc(
         post_balances=meta.post_balances,
         log_messages=meta.log_messages,
     )
+
+    if meta.err is not None:
+        # Preserve failure presence without fabricating a Yellowstone binary error enum.
+        grpc_meta.err.SetInParent()
 
     # 转换内部指令
     for group in meta.inner_instructions:
@@ -676,6 +684,7 @@ def rpc_get_transaction_result_dict_to_response(
             post_token_balances=[],
             loaded_addresses=loaded,
             compute_units_consumed=meta_dict.get("computeUnitsConsumed"),
+            err=meta_dict.get("err"),
         )
 
     return RpcTransactionResponse(
@@ -743,6 +752,8 @@ def rpc_response_to_solana_storage(
             ii.data = ix.data
             if ix.stack_height is not None:
                 ii.stack_height = ix.stack_height
+    if m.err is not None:
+        meta.err.SetInParent()
     if m.loaded_addresses:
         for w in m.loaded_addresses.writable:
             meta.loaded_writable_addresses.append(base58.b58decode(w))

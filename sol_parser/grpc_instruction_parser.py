@@ -229,6 +229,16 @@ def _meta_dict(
     return m
 
 
+def subscribe_transaction_failed(info: SubscribeUpdateTransactionInfo) -> bool:
+    """Read protobuf error presence, including errors with an empty encoded payload."""
+    if not info.meta_raw:
+        return False
+    from . import solana_storage_pb2 as sol_pb
+    meta = sol_pb.TransactionStatusMeta()
+    meta.ParseFromString(info.meta_raw)
+    return meta.HasField("err")
+
+
 def parse_instructions_enhanced_from_subscribe_tx_info(
     info: SubscribeUpdateTransactionInfo,
     slot: int,
@@ -268,7 +278,7 @@ def parse_instructions_enhanced_from_parsed(
     transaction_pb: Any = None,
 ) -> List[DexEvent]:
     """接受已 Parse 的 ``Message`` 与 ``TransactionStatusMeta``（来自 ``solana_storage_pb2``）。"""
-    if not should_parse_instructions(filter):
+    if meta.HasField("err") or not should_parse_instructions(filter):
         return []
 
     grpc_us = int(time.time() * 1_000_000) if grpc_recv_us is None else grpc_recv_us

@@ -324,6 +324,10 @@ def parse_create_from_data(data: bytes, meta: dict) -> DexEvent:
         uri, o = _borsh_str(data, o)
     except Exception:
         return DexEvent()
+    if len(data) - o == 96:
+        return DexEvent(type=EventType.PUMP_FUN_CREATE, data=PumpFunCreateEvent(
+            metadata=_make_meta(meta), name=name, symbol=sym, uri=uri,
+            mint=_pub(data, o), bonding_curve=_pub(data, o + 32), user=_pub(data, o + 64)))
     if len(data) < o + 32 * 4 + 8 * 5 + 32 + 1:
         return DexEvent()
     mint = _pub(data, o)

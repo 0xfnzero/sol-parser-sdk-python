@@ -517,6 +517,7 @@ class YellowstoneGrpc:
         signature = base58.b58encode(bytes(info.signature)).decode("ascii") if info.signature else ""
 
         from .grpc_instruction_parser import (
+            subscribe_transaction_failed,
             detect_pumpfun_create_from_logs,
             enrich_dex_events_with_subscribe_tx_info,
             parse_instructions_enhanced_from_subscribe_tx_info,
@@ -525,6 +526,9 @@ class YellowstoneGrpc:
         from .log_instr_dedup import dedupe_log_instruction_events
         from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
         from .grpc_types import EventType
+
+        if subscribe_transaction_failed(info):
+            return  # Suppress both instruction events and rolled-back log events.
 
         instruction_events = parse_instructions_enhanced_from_subscribe_tx_info(
             info,

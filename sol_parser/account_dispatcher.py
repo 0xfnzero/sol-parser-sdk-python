@@ -110,6 +110,31 @@ def fill_accounts_with_owned_keys(
             return
         filler(get)
 
+    def fill_create(v2_only=False):
+        selected = None
+        for ix in invokes.get(base58.b58decode(PUMPFUN_PROGRAM_ID), []):
+            raw = get_instruction_data(meta_pb, transaction_pb, ix)
+            if raw is None:
+                continue
+            v2 = raw[:8] == bytes([214,144,76,236,95,139,49,180])
+            legacy = raw[:8] == bytes([24,30,200,40,5,28,7,119])
+            if not v2 and (v2_only or not legacy):
+                continue
+            get = get_instruction_account_getter(meta_pb, transaction_pb, static_keys, w, r, ix)
+            oi, ii = ix
+            instruction = (transaction_pb.message.instructions[oi] if ii < 0 else
+                           next(g for g in meta_pb.inner_instructions if g.index == oi).instructions[ii])
+            if len(instruction.accounts) < (16 if v2 else 14) or get is None:
+                continue
+            if data.mint and data.mint != "11111111111111111111111111111111" and get(0) != data.mint:
+                continue
+            if selected is not None:
+                return  # Multiple matching creates: do not guess.
+            selected = (get, v2)
+        if selected:
+            get, v2 = selected
+            (pumpfun.fill_create_v2_accounts if v2 else pumpfun.fill_create_accounts)(data, get)
+
     et = event.type
     data = event.data
 
@@ -121,9 +146,9 @@ def fill_accounts_with_owned_keys(
     ):
         run(PUMPFUN_PROGRAM_ID, lambda g: pumpfun.fill_trade_accounts(data, g))
     elif et == EventType.PUMP_FUN_CREATE:
-        run(PUMPFUN_PROGRAM_ID, lambda g: pumpfun.fill_create_accounts(data, g))
+        fill_create()
     elif et == EventType.PUMP_FUN_CREATE_V2:
-        run(PUMPFUN_PROGRAM_ID, lambda g: pumpfun.fill_create_v2_accounts(data, g))
+        fill_create(True)
     elif et == EventType.PUMP_FUN_MIGRATE:
         run(PUMPFUN_PROGRAM_ID, lambda g: pumpfun.fill_migrate_accounts(data, g))
     elif et == EventType.PUMP_SWAP_BUY:

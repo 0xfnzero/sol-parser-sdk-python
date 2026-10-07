@@ -58,6 +58,13 @@ This is the Python implementation of the FnZero Solana DEX parser SDK for asynci
 
 ## Release notes
 
+### v0.5.10
+
+- Matches PumpFun create/create_v2 accounts by the actual instruction discriminator and event mint, including CPI calls; ambiguous matches are left unspecified.
+- Stops inferring quote mint/vault/token-program fields from arbitrary remaining create_v2 accounts and preserves authoritative decoded fields.
+- Restores historical CreateEvent decoding and verifies successful and failed transactions using saved mainnet fixtures.
+- Suppresses rolled-back DEX events from failed transactions and preserves failure status through RPC/gRPC adapters.
+
 ### v0.5.9
 
 - Adds native gRPC lifecycle and block metadata support, instruction-level route analysis and StonkFun registry/snapshot examples.
@@ -99,7 +106,7 @@ This is the Python implementation of the FnZero Solana DEX parser SDK for asynci
 **From PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.5.9
+pip install sol-parser-sdk-python==0.5.10
 ```
 
 **From source**

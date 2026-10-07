@@ -113,15 +113,12 @@ def fill_trade_accounts(e: PumpFunTradeEvent, get: AccountGetter) -> None:
 
 
 def fill_create_accounts(e: PumpFunCreateEvent, get: AccountGetter) -> None:
-    if get(15) == "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P":
-        fill_create_v2_accounts(e, get)  # type: ignore[arg-type]
-        return
-    if _empty(e.mint):
-        e.mint = get(0)
-    if _empty(e.bonding_curve):
-        e.bonding_curve = get(2)
-    if _empty(e.user):
-        e.user = get(7)
+    for field, index in (("mint",0),("mint_authority",1),("bonding_curve",2),
+                         ("associated_bonding_curve",3),("global_account",4),("user",7),
+                         ("system_program",8),("token_program",9),("associated_token_program",10),
+                         ("event_authority",12),("program",13)):
+        if _empty(getattr(e, field, "")):
+            setattr(e, field, get(index))
 
 
 def fill_create_v2_accounts(e: PumpFunCreateV2TokenEvent, get: AccountGetter) -> None:
@@ -157,12 +154,6 @@ def fill_create_v2_accounts(e: PumpFunCreateV2TokenEvent, get: AccountGetter) ->
         e.event_authority = get(14)
     if _empty(e.program):
         e.program = get(15)
-    if _empty(e.quote_mint) or e.quote_mint == "So11111111111111111111111111111111111111111":
-        e.quote_mint = get(16)
-    if _empty(e.quote_vault):
-        e.quote_vault = get(17)
-    if _empty(e.quote_token_program):
-        e.quote_token_program = get(18)
     if getattr(e, "ix_name", "") in ("", "create"):
         e.ix_name = "create_v2"
 

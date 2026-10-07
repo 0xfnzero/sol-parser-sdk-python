@@ -219,6 +219,20 @@ class PumpFunCreateEvent(DexEventBase):
     virtual_quote_reserves: int = 0
     creator_fee_bps: int = 0
     is_holder_reward: bool = False
+    mint_authority: str = ""
+    associated_bonding_curve: str = ""
+    global_account: str = ""  # Rust `global` PumpFun global config
+    system_program: str = ""
+    associated_token_program: str = ""
+    mayhem_program_id: str = ""
+    global_params: str = ""
+    sol_vault: str = ""
+    mayhem_state: str = ""
+    mayhem_token_vault: str = ""
+    event_authority: str = ""
+    program: str = ""
+    observed_fee_recipient: str = ""
+    ix_name: str = "create"
 
 
 @dataclass

@@ -151,10 +151,12 @@ LAB = {
     _disc([95, 200, 71, 34, 8, 9, 11, 166]): (False, False),
 }
 PUMP = {
+    "b817ee6167c5d33d":(True,False),"c2ab1c46684d5b2f":(True,True),"5df6823ce7e940b2":(False,True),
     _disc([198, 46, 21, 82, 180, 217, 232, 112]): (True, True),
     _disc([102, 6, 61, 18, 1, 218, 235, 234]): (True, False),
     _disc([51, 230, 133, 164, 1, 127, 131, 173]): (False, True),
 }
+CURVE_V3={"07051dc4f5176550":(True,False),"e1f7501ed5b38488":(True,True),"1c92de7726c469d5":(False,True)}
 CURVE_V2={
     _disc([194,171,28,70,104,77,91,47]):(True,True),
     _disc([184,23,238,97,103,197,211,61]):(True,False),
@@ -217,7 +219,7 @@ def _swap(
         LAB if protocol == "LaunchLab" else PUMP
     ):
         buy, exact = (LAB if protocol == "LaunchLab" else PUMP)[disc]
-        if n < (18 if protocol == "LaunchLab" else 21):
+        if n < (18 if protocol == "LaunchLab" else (17 if disc in ("b817ee6167c5d33d","c2ab1c46684d5b2f","5df6823ce7e940b2") else 21)):
             return None
         source, dest = a(6 if buy else 5), a(5 if buy else 6)
         if protocol == "LaunchLab":
@@ -228,6 +230,13 @@ def _swap(
         else:
             pool, user = a(0), a(1)
             pair = (a(4), a(3)) if buy else (a(3), a(4))
+    elif protocol=='PumpFun' and disc in CURVE_V3 and n==17 and len(d)>=24:
+        buy,exact=CURVE_V3[disc]
+        pool,user,source,dest=a(5),a(8),a(10 if buy else 9),a(9 if buy else 10)
+        pair=(a(2),a(1)) if buy else (a(1),a(2))
+        if a(2)==WSOL:
+            if buy:source=user
+            else:dest=user
     elif protocol=='PumpFun' and disc in CURVE_V2 and n>=16:
         buy,exact=CURVE_V2[disc]
         pool,user,source,dest=a(10),a(13),a(15 if buy else 14),a(14 if buy else 15)

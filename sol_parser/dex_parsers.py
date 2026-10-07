@@ -260,8 +260,10 @@ def parse_trade_from_data(data: bytes, meta: dict, is_created_buy: bool) -> DexE
     real_quote_reserves = _optional_u64(data, tail)
     holder_rewards_bps = _optional_u64(data, tail)
     holder_rewards = _optional_u64(data, tail)
+    creator_fee_unclaimed=_optional_u64(data,tail)
     
     event_data = PumpFunTradeEvent(
+        creator_fee_unclaimed=creator_fee_unclaimed,
         metadata=_make_meta(meta),
         mint=mint,
         sol_amount=sol_amount,
@@ -385,6 +387,7 @@ def parse_create_from_data(data: bytes, meta: dict) -> DexEvent:
             virtual_quote_reserves=virtual_quote_reserves,
             creator_fee_bps=creator_fee_bps,
             is_holder_reward=is_holder_reward,
+            depth=data[o+1] if o+1<len(data) else 0,
         ),
     )
 
@@ -2806,6 +2809,7 @@ def _parse_pumpswap_trade_tail(data: bytes) -> Optional[Dict[str, Any]]:
         "base_supply": 0,
         "holder_rewards_bps": 0,
         "holder_rewards": 0,
+        "creator_fee_unclaimed":0,
     }
     if not data:
         return tail
@@ -2836,6 +2840,9 @@ def _parse_pumpswap_trade_tail(data: bytes) -> Optional[Dict[str, Any]]:
     if len(data) >= 73:
         tail["holder_rewards_bps"] = _u64le(data, 57)
         tail["holder_rewards"] = _u64le(data, 65)
+    if 73<len(data)<81:
+        return None
+    tail["creator_fee_unclaimed"]=_u64le(data,73) if len(data)>=81 else 0
     return tail
 
 
@@ -3611,6 +3618,10 @@ METEORA_DLMM_PROGRAM_ID = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo"
 
 
 def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -> Optional[EventType]:
+    from .pump_upgrade import pump_upgrade_event_type
+    upgrade=pump_upgrade_event_type(disc,program_id)
+    if upgrade is not None:
+        return upgrade
     if program_id == PUMPFUN_PROGRAM_ID:
         if disc == PUMP_CREATE:
             return EventType.PUMP_FUN_CREATE
@@ -3990,6 +4001,9 @@ def dispatch_program_data(
     program_id: Optional[str] = None,
     event_type_filter: Any = None,
 ) -> Optional[DexEvent]:
+    from .pump_upgrade import pump_upgrade_event_type,parse_pump_upgrade_event
+    if pump_upgrade_event_type(disc,program_id) is not None:
+        return apply_event_type_filter(parse_pump_upgrade_event(disc,data,_make_meta(meta),program_id),event_type_filter)
     if program_id == PUMPFUN_PROGRAM_ID:
         return dispatch_scoped_pumpfun_data(disc, data, meta, is_created_buy, event_type_filter)
     if program_id == PUMP_FEES_PROGRAM_ID:

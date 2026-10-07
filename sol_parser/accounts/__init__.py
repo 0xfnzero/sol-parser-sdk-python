@@ -464,6 +464,12 @@ def _parse_pumpfun_global_fast(account: AccountData, metadata: EventMetadata) ->
                 "buyback_basis_points": buyback_basis_points,
                 "initial_virtual_quote_reserves": initial_virtual_quote_reserves,
                 "whitelisted_quote_mints": whitelisted_quote_mints,
+                "creator_fee_configurable": len(data)>1037 and data[1037]==1,
+                "max_configurable_creator_fee_bps": int.from_bytes(data[1038:1046],"little") if len(data)>=1046 else 0,
+                "holder_reward_claim_authority": read_pubkey_fast(data,1046) if len(data)>=1078 else "11111111111111111111111111111111",
+                "is_holder_reward_enabled": len(data)>1078 and data[1078]==1,
+                "max_curve_depth": data[1079] if len(data)>1079 else 0,
+
             },
         },
     )
@@ -505,6 +511,12 @@ def _parse_pumpfun_bonding_curve_fast(
             "metadata": metadata,
             "pubkey": account.pubkey,
             "bonding_curve": {
+                                "creator_fee": read_u64_fast(data,117) if len(data)>=125 else 0,
+                "protocol_fees": read_u64_fast(data,125) if len(data)>=133 else 0,
+                "depth": data[133] if len(data)>133 else 0,
+                "initial_virtual_quote_reserves": read_u64_fast(data,134) if len(data)>=142 else 0,
+                "post_complete_base_out": read_u64_fast(data,142) if len(data)>=150 else 0,
+                "post_complete_quote_in": read_u64_fast(data,150) if len(data)>=158 else 0,
                 "virtual_token_reserves": virtual_token_reserves,
                 "virtual_quote_reserves": virtual_quote_reserves,
                 "real_token_reserves": real_token_reserves,
@@ -543,7 +555,10 @@ def _parse_pumpfun_fee_config_fast(
     stable_fee_tiers_result = _read_pumpfun_fee_tiers(data, o)
     if stable_fee_tiers_result is None:
         return None
-    stable_fee_tiers, _ = stable_fee_tiers_result
+    stable_fee_tiers, o = stable_fee_tiers_result
+    exotic_result=_read_pumpfun_fees(data,o) if len(data)>o else ({"lp_fee_bps":0,"protocol_fee_bps":0,"creator_fee_bps":0},o)
+    if exotic_result is None:return None
+    exotic_flat_fees,_=exotic_result
     return _account_event(
         EventType.ACCOUNT_PUMP_FUN_FEE_CONFIG,
         {
@@ -555,6 +570,7 @@ def _parse_pumpfun_fee_config_fast(
                 "flat_fees": flat_fees,
                 "fee_tiers": fee_tiers,
                 "stable_fee_tiers": stable_fee_tiers,
+                "exotic_flat_fees":exotic_flat_fees,
             },
         },
     )
@@ -789,6 +805,8 @@ def _parse_pumpswap_pool_fast(account: AccountData, metadata: EventMetadata) -> 
             "metadata": metadata,
             "pubkey": account.pubkey,
             "pool": {
+                                "protocol_fees": read_u64_fast(data,263) if len(data)>=271 else 0,
+                "creator_fees": read_u64_fast(data,271) if len(data)>=279 else 0,
                 "pool_bump": pool_bump,
                 "index": index,
                 "creator": creator,

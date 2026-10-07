@@ -490,3 +490,8 @@ __all__ += ["LaunchLabPoolCreateEvent", "StonkFunPoolCreateEvent", "LaunchLabTra
 
 from .grpc_client import DexEventQueue, GrpcStreamStatus
 __all__ += ["DexEventQueue", "GrpcStreamStatus"]
+
+from .pump_upgrade import decode_pump_multi_hop_intent
+
+from .pump_upgrade import PumpFunPostCompleteBuyEvent, PumpFunSweepBondingCurveFeeEvent, PumpFunCompleteEvent, PumpSwapSweepPoolFeeEvent
+__all__ += ['decode_pump_multi_hop_intent','PumpFunPostCompleteBuyEvent','PumpFunSweepBondingCurveFeeEvent','PumpFunCompleteEvent','PumpSwapSweepPoolFeeEvent']

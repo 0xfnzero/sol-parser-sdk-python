@@ -70,7 +70,7 @@ def test_pumpswap_trade_layout_validation() -> None:
     assert parse_ps_sell_from_data(bytes(352), {}) is not None
 
     for tail_len in range(81):
-        expected = tail_len in (0, 16, 32, 57) or tail_len >= 73
+        expected = tail_len in (0, 16, 32, 57) or tail_len == 73 or tail_len >= 81
         parsed = parse_ps_sell_from_data(bytes(352 + tail_len), {})
         assert (parsed is not None) is expected, tail_len
 

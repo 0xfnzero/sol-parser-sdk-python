@@ -311,6 +311,8 @@ def try_merge_dex_events(base: DexEvent, inner: DexEvent) -> bool:
     """Merge compatible events and report success so unmatched events are retained."""
     bd = base.data
     ind = inner.data
+    if isinstance(bd,PumpFunTradeEvent) and isinstance(ind,PumpFunTradeEvent) and (bd.ix_name=="multi_hop_swap" or ind.ix_name=="multi_hop_swap") and bd.mint and ind.mint and bd.mint!=ind.mint:return False
+    if isinstance(bd,(PumpSwapBuyEvent,PumpSwapSellEvent)) and isinstance(ind,(PumpSwapBuyEvent,PumpSwapSellEvent)) and bd.pool and ind.pool and bd.pool!=ind.pool:return False
 
     if isinstance(bd, PumpFunTradeEvent) and isinstance(ind, PumpFunTradeEvent):
         if base.type in (

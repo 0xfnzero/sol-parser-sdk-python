@@ -50,7 +50,6 @@ class EventType(str, Enum):
     PUMP_FUN_BUY_EXACT_SOL_IN = "PumpFunBuyExactSolIn"
     PUMP_FUN_CREATE = "PumpFunCreate"
     PUMP_FUN_CREATE_V2 = "PumpFunCreateV2"
-    PUMP_FUN_COMPLETE = "PumpFunComplete"
     PUMP_FUN_MIGRATE = "PumpFunMigrate"
     PUMP_FEES_CREATE_FEE_SHARING_CONFIG = "PumpFeesCreateFeeSharingConfig"
     PUMP_FEES_INITIALIZE_FEE_CONFIG = "PumpFeesInitializeFeeConfig"
@@ -61,6 +60,10 @@ class EventType(str, Enum):
     PUMP_FEES_UPDATE_FEE_CONFIG = "PumpFeesUpdateFeeConfig"
     PUMP_FEES_UPDATE_FEE_SHARES = "PumpFeesUpdateFeeShares"
     PUMP_FEES_UPSERT_FEE_TIERS = "PumpFeesUpsertFeeTiers"
+    PUMP_FUN_POST_COMPLETE_BUY = "PumpFunPostCompleteBuy"
+    PUMP_FUN_SWEEP_BONDING_CURVE_FEE = "PumpFunSweepBondingCurveFee"
+    PUMP_FUN_COMPLETE = "PumpFunComplete"
+    PUMP_SWAP_SWEEP_POOL_FEE = "PumpSwapSweepPoolFee"
     PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR = "PumpFunMigrateBondingCurveCreator"
     # PumpSwap
     PUMP_SWAP_TRADE = "PumpSwapTrade"
@@ -187,6 +190,10 @@ PUMP_FEES_EVENT_TYPES = (
     EventType.PUMP_FEES_UPSERT_FEE_TIERS,
 )
 PUMPFUN_FILTER_TYPES = (
+    EventType.PUMP_FUN_POST_COMPLETE_BUY,
+    EventType.PUMP_FUN_SWEEP_BONDING_CURVE_FEE,
+    EventType.PUMP_FUN_COMPLETE,
+
     EventType.PUMP_FUN_TRADE,
     EventType.PUMP_FUN_BUY,
     EventType.PUMP_FUN_SELL,
@@ -198,6 +205,7 @@ PUMPFUN_FILTER_TYPES = (
     EventType.PUMP_FUN_MIGRATE_BONDING_CURVE_CREATOR,
 )
 PUMPSWAP_FILTER_TYPES = (
+    EventType.PUMP_SWAP_SWEEP_POOL_FEE,
     EventType.PUMP_SWAP_TRADE,
     EventType.PUMP_SWAP_BUY,
     EventType.PUMP_SWAP_SELL,

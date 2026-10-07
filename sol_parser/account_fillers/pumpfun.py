@@ -29,6 +29,25 @@ def fill_trade_accounts(e: PumpFunTradeEvent, get: AccountGetter) -> None:
         if _empty(getattr(e, name)):
             setattr(e, name, get(idx))
 
+    if get(16)=="6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" and account_at_matches_mint(1):
+        set_attr("global_account",0)
+        set_attr("mint",1)
+        set_attr("quote_mint",2)
+        set_attr("token_program",3)
+        set_attr("quote_token_program",4)
+        set_attr("bonding_curve",5)
+        set_attr("associated_bonding_curve",6)
+        set_attr("associated_quote_bonding_curve",7)
+        set_attr("user",8)
+        set_attr("associated_user",9)
+        set_attr("associated_quote_user",10)
+        set_attr("user_volume_accumulator",11)
+        set_attr("fee_config",12)
+        set_attr("buyback_fee_recipient",13)
+        set_attr("system_program",14)
+        set_attr("event_authority",15)
+        set_attr("program",16)
+        return
     is_v2 = e.ix_name in ("buy_v2", "sell_v2", "buy_exact_quote_in_v2") or account_at_matches_mint(1)
     if is_v2:
         set_attr("global_account", 0)

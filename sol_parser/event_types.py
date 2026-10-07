@@ -155,6 +155,7 @@ class PumpFunTradeEvent(DexEventBase):
     real_quote_reserves: int = 0
     holder_rewards_bps: int = 0
     holder_rewards: int = 0
+    creator_fee_unclaimed: int = 0
     is_cashback_coin: bool = False
     amount: int = 0
     max_sol_cost: int = 0
@@ -198,6 +199,7 @@ class PumpFunTradeEvent(DexEventBase):
 @dataclass
 class PumpFunCreateEvent(DexEventBase):
     """PumpFun 创建代币事件"""
+    depth: int = 0
     name: str = ""
     symbol: str = ""
     uri: str = ""
@@ -450,6 +452,7 @@ class PumpSwapBuyEvent(DexEventBase):
     base_supply: int = 0
     holder_rewards_bps: int = 0
     holder_rewards: int = 0
+    creator_fee_unclaimed: int = 0
     is_cashback_coin: bool = False
     base_mint: str = ""
     quote_mint: str = ""
@@ -500,6 +503,7 @@ class PumpSwapSellEvent(DexEventBase):
     base_supply: int = 0
     holder_rewards_bps: int = 0
     holder_rewards: int = 0
+    creator_fee_unclaimed: int = 0
     base_mint: str = ""
     quote_mint: str = ""
     pool_base_token_account: str = ""
@@ -1676,7 +1680,12 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         return None
     
     meta = _get_metadata(data)
-    
+    from .pump_upgrade import _EVENTS
+    for _,kind,cls,fields in _EVENTS.values():
+        if event_type==kind:
+            values={name:(_get_str(data,name) if typ=='pubkey' else _get_int(data,name)) for name,typ in fields}
+            return cls(metadata=meta,**values)
+
     # PumpFun events
     if event_type in (EventType.PUMP_FUN_TRADE, EventType.PUMP_FUN_BUY,
                       EventType.PUMP_FUN_SELL, EventType.PUMP_FUN_BUY_EXACT_SOL_IN):
@@ -1717,6 +1726,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             real_quote_reserves=_get_int(data, "real_quote_reserves"),
             holder_rewards_bps=_get_int(data, "holder_rewards_bps"),
             holder_rewards=_get_int(data, "holder_rewards"),
+            creator_fee_unclaimed=_get_int(data,"creator_fee_unclaimed"),
             is_cashback_coin=_get_bool(data, "is_cashback_coin"),
             amount=_get_int(data, "amount"),
             max_sol_cost=_get_int(data, "max_sol_cost"),
@@ -1779,6 +1789,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             virtual_quote_reserves=_get_int(data, "virtual_quote_reserves"),
             creator_fee_bps=_get_int(data, "creator_fee_bps"),
             is_holder_reward=_get_bool(data, "is_holder_reward"),
+            depth=_get_int(data,"depth"),
         )
 
     if event_type == EventType.PUMP_FUN_CREATE_V2:
@@ -1878,6 +1889,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             base_supply=_get_int(data, "base_supply"),
             holder_rewards_bps=_get_int(data, "holder_rewards_bps"),
             holder_rewards=_get_int(data, "holder_rewards"),
+            creator_fee_unclaimed=_get_int(data,"creator_fee_unclaimed"),
             is_cashback_coin=_get_bool(data, "is_cashback_coin"),
             is_pump_pool=_get_bool(data, "is_pump_pool"),
             base_mint=_get_str(data, "base_mint"),
@@ -1928,6 +1940,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             base_supply=_get_int(data, "base_supply"),
             holder_rewards_bps=_get_int(data, "holder_rewards_bps"),
             holder_rewards=_get_int(data, "holder_rewards"),
+            creator_fee_unclaimed=_get_int(data,"creator_fee_unclaimed"),
             is_pump_pool=_get_bool(data, "is_pump_pool"),
             base_mint=_get_str(data, "base_mint"),
             quote_mint=_get_str(data, "quote_mint"),

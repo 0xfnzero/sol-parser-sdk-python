@@ -268,6 +268,11 @@ def parse_inner_instruction(
     def emit(ev: Optional[DexEvent]) -> Optional[DexEvent]:
         return _filter_inner_event(ev, filter)
 
+    from .pump_upgrade import pump_upgrade_event_type, parse_pump_upgrade_event
+    upgrade_disc=_event_cpi_disc8(disc16)
+    if upgrade_disc is not None and pump_upgrade_event_type(upgrade_disc,program_id_b58) is not None:
+        return emit(parse_pump_upgrade_event(upgrade_disc,inner,meta_d,program_id_b58))
+
     if program_id_b58 == PUMPFUN_PROGRAM_ID:
         if filter is not None and not event_type_filter_includes_pumpfun(filter):
             return None

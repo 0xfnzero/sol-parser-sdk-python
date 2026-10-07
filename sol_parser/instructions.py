@@ -379,6 +379,9 @@ def normal_instruction_data_may_parse(program_id: str, instruction_data: bytes) 
         return disc == _DISC_DAMM_INIT
     if program_id == PUMPFUN_PROGRAM_ID:
         return disc in (
+            _d(7,5,29,196,245,23,101,80),
+            _d(225,247,80,30,213,179,132,136),
+            _d(28,146,222,119,38,196,105,213),
             _DISC_PUMPFUN_CREATE,
             _DISC_PUMPFUN_CREATE_V2,
             _DISC_PUMPFUN_BUY,
@@ -392,6 +395,9 @@ def normal_instruction_data_may_parse(program_id: str, instruction_data: bytes) 
         return disc in (
             _DISC_PUMPSWAP_BUY,
             _DISC_PUMPSWAP_SELL,
+            _d(184,23,238,97,103,197,211,61),
+            _d(194,171,28,70,104,77,91,47),
+            _d(93,246,130,60,231,233,64,178),
             _DISC_PUMPSWAP_CREATE_POOL,
             _DISC_PUMPSWAP_BUY_EXACT_QUOTE_IN,
             _d(242, 35, 198, 137, 82, 225, 242, 182),
@@ -510,6 +516,85 @@ def parse_pumpfun_instruction(
     discriminator = struct.unpack_from("<Q", data, 0)[0]
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
+    if data[:8] == bytes([7, 5, 29, 196, 245, 23, 101, 80]):
+        if len(accounts) != 17 or len(data) not in (24,25):
+            return None
+        if len(data)==25 and data[24]>1:
+            return None
+        mapped=[Z]*27
+        mapped[0]=accounts[0]
+        mapped[1]=accounts[1]
+        mapped[2]=accounts[2]
+        mapped[3]=accounts[3]
+        mapped[4]=accounts[4]
+        mapped[8]=accounts[13]
+        mapped[10]=accounts[5]
+        mapped[11]=accounts[6]
+        mapped[12]=accounts[7]
+        mapped[13]=accounts[8]
+        mapped[14]=accounts[9]
+        mapped[15]=accounts[10]
+        mapped[20]=accounts[11]
+        mapped[22]=accounts[12]
+        mapped[24]=accounts[14]
+        mapped[25]=accounts[15]
+        mapped[26]=accounts[16]
+        event=_parse_pumpfun_trade_v2("buy_v2",data[8:],mapped,meta)
+        if event is not None:
+            event.data.ix_name="buy_v3"
+        return event
+    if data[:8] == bytes([225, 247, 80, 30, 213, 179, 132, 136]):
+        if len(accounts) != 17 or len(data) not in (24,25):
+            return None
+        if len(data)==25 and data[24]>1:
+            return None
+        mapped=[Z]*27
+        mapped[0]=accounts[0]
+        mapped[1]=accounts[1]
+        mapped[2]=accounts[2]
+        mapped[3]=accounts[3]
+        mapped[4]=accounts[4]
+        mapped[8]=accounts[13]
+        mapped[10]=accounts[5]
+        mapped[11]=accounts[6]
+        mapped[12]=accounts[7]
+        mapped[13]=accounts[8]
+        mapped[14]=accounts[9]
+        mapped[15]=accounts[10]
+        mapped[20]=accounts[11]
+        mapped[22]=accounts[12]
+        mapped[24]=accounts[14]
+        mapped[25]=accounts[15]
+        mapped[26]=accounts[16]
+        event=_parse_pumpfun_trade_v2("buy_exact_quote_in_v2",data[8:],mapped,meta)
+        if event is not None:
+            event.data.ix_name="buy_exact_quote_in_v3"
+        return event
+    if data[:8] == bytes([28, 146, 222, 119, 38, 196, 105, 213]):
+        if len(accounts) != 17 or len(data) not in (24,):
+            return None
+        mapped=[Z]*27
+        mapped[0]=accounts[0]
+        mapped[1]=accounts[1]
+        mapped[2]=accounts[2]
+        mapped[3]=accounts[3]
+        mapped[4]=accounts[4]
+        mapped[8]=accounts[13]
+        mapped[10]=accounts[5]
+        mapped[11]=accounts[6]
+        mapped[12]=accounts[7]
+        mapped[13]=accounts[8]
+        mapped[14]=accounts[9]
+        mapped[15]=accounts[10]
+        mapped[19]=accounts[11]
+        mapped[21]=accounts[12]
+        mapped[23]=accounts[14]
+        mapped[24]=accounts[15]
+        mapped[25]=accounts[16]
+        event=_parse_pumpfun_trade_v2("sell_v2",data[8:],mapped,meta)
+        if event is not None:
+            event.data.ix_name="sell_v3"
+        return event
     # PumpFun Create: [24, 30, 200, 40, 5, 28, 7, 119]
     if discriminator == _DISC_PUMPFUN_CREATE:
         return _parse_pumpfun_create(data, accounts, meta)
@@ -876,6 +961,73 @@ def parse_pumpswap_instruction(
     discriminator = struct.unpack_from("<Q", data, 0)[0]
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
     payload = data[8:]
+
+    if data[:8]==bytes([184, 23, 238, 97, 103, 197, 211, 61]):
+        if len(accounts)!=17 or len(data)!=24:
+            return None
+        mapped=[Z]*26
+        mapped[0]=accounts[0]
+        mapped[1]=accounts[1]
+        mapped[2]=accounts[2]
+        mapped[3]=accounts[3]
+        mapped[4]=accounts[4]
+        mapped[5]=accounts[5]
+        mapped[6]=accounts[6]
+        mapped[7]=accounts[7]
+        mapped[8]=accounts[8]
+        mapped[11]=accounts[9]
+        mapped[12]=accounts[10]
+        mapped[13]=accounts[11]
+        mapped[15]=accounts[15]
+        mapped[16]=accounts[16]
+        mapped[20]=accounts[12]
+        mapped[21]=accounts[13]
+        mapped[25]=accounts[14]
+        return parse_pumpswap_instruction(struct.pack("<Q",_DISC_PUMPSWAP_BUY)+data[8:],mapped,signature,slot,tx_index,block_time_us,grpc_recv_us)
+    if data[:8]==bytes([194, 171, 28, 70, 104, 77, 91, 47]):
+        if len(accounts)!=17 or len(data)!=24:
+            return None
+        mapped=[Z]*26
+        mapped[0]=accounts[0]
+        mapped[1]=accounts[1]
+        mapped[2]=accounts[2]
+        mapped[3]=accounts[3]
+        mapped[4]=accounts[4]
+        mapped[5]=accounts[5]
+        mapped[6]=accounts[6]
+        mapped[7]=accounts[7]
+        mapped[8]=accounts[8]
+        mapped[11]=accounts[9]
+        mapped[12]=accounts[10]
+        mapped[13]=accounts[11]
+        mapped[15]=accounts[15]
+        mapped[16]=accounts[16]
+        mapped[20]=accounts[12]
+        mapped[21]=accounts[13]
+        mapped[25]=accounts[14]
+        return parse_pumpswap_instruction(struct.pack("<Q",_DISC_PUMPSWAP_BUY_EXACT_QUOTE_IN)+data[8:],mapped,signature,slot,tx_index,block_time_us,grpc_recv_us)
+    if data[:8]==bytes([93, 246, 130, 60, 231, 233, 64, 178]):
+        if len(accounts)!=17 or len(data)!=24:
+            return None
+        mapped=[Z]*26
+        mapped[0]=accounts[0]
+        mapped[1]=accounts[1]
+        mapped[2]=accounts[2]
+        mapped[3]=accounts[3]
+        mapped[4]=accounts[4]
+        mapped[5]=accounts[5]
+        mapped[6]=accounts[6]
+        mapped[7]=accounts[7]
+        mapped[8]=accounts[8]
+        mapped[11]=accounts[9]
+        mapped[12]=accounts[10]
+        mapped[13]=accounts[11]
+        mapped[15]=accounts[15]
+        mapped[16]=accounts[16]
+        mapped[20]=accounts[12]
+        mapped[21]=accounts[13]
+        mapped[25]=accounts[14]
+        return parse_pumpswap_instruction(struct.pack("<Q",_DISC_PUMPSWAP_SELL)+data[8:],mapped,signature,slot,tx_index,block_time_us,grpc_recv_us)
 
     def read_args() -> tuple[int, int]:
         if len(payload) < 16:

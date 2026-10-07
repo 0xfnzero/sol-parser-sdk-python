@@ -42,6 +42,11 @@ def _fill_trade_common(
         e.pool_base_token_account = get(7)
     if _empty(e.pool_quote_token_account):
         e.pool_quote_token_account = get(8)
+    if get(16)=="pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA":
+        for field,index in (("base_token_program",9),("quote_token_program",10),("fee_recipient_quote_token_account",14)):
+            if _empty(getattr(e,field)):
+                setattr(e,field,get(index))
+        return
     if _empty(e.protocol_fee_recipient):
         e.protocol_fee_recipient = get(9)
     if _empty(e.protocol_fee_recipient_token_account):
@@ -58,6 +63,8 @@ def _fill_trade_common(
 
 def fill_buy_accounts(e: PumpSwapBuyEvent, get: AccountGetter) -> None:
     _fill_trade_common(e, get)
+    if get(16)=="pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA":
+        return
     a26 = get(26)
     if not _empty(a26):
         if _empty(e.pool_v2):
@@ -82,6 +89,8 @@ def fill_buy_accounts(e: PumpSwapBuyEvent, get: AccountGetter) -> None:
 
 def fill_sell_accounts(e: PumpSwapSellEvent, get: AccountGetter) -> None:
     _fill_trade_common(e, get)
+    if get(16)=="pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA":
+        return
     a25 = get(25)
     if not _empty(a25):
         if _empty(e.pool_v2):

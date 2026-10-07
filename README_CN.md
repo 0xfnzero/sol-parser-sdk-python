@@ -300,9 +300,8 @@ MIT — https://github.com/0xfnzero/sol-parser-sdk-python
 - **Telegram**: https://t.me/fnzero_group  
 - **Discord**: https://discord.gg/vuazbGkqQE  
 
-## Native alignment status
+## API 兼容性
 
-See [NATIVE_ALIGNMENT.md](NATIVE_ALIGNMENT.md) for implemented native APIs, Rust golden tests, mainnet simulation evidence, examples, and remaining parity gaps. Full cross-language parity is still in progress.
+完整跨语言 API 对齐仍在进行；公开行为和支持边界见 [API 迁移说明](NATIVE_MIGRATION.md)，使用方法见 examples 目录。
 
-
-[本轮原生对齐 API 迁移](NATIVE_MIGRATION.md)（实施中，尚未发布）。
+PumpFun create/create_v2 的共享主网样本、重放方法和验证边界见 [验证说明](https://github.com/0xfnzero/sol-parser-sdk-golang/tree/main/validation/pumpfun_create_20261007)。

@@ -306,6 +306,6 @@ MIT — https://github.com/0xfnzero/sol-parser-sdk-python
 
 ## API 兼容性
 
-完整跨语言 API 对齐仍在进行；公开行为和支持边界见 [API 迁移说明](NATIVE_MIGRATION.md)，使用方法见 examples 目录。
+完整跨语言 API 对齐仍在进行；公开行为和支持边界见 [API 迁移说明](docs/USAGE.md#api-compatibility)，使用方法见 examples 目录。
 
 PumpFun create/create_v2 的共享主网样本、重放方法和验证边界见 [验证说明](https://github.com/0xfnzero/sol-parser-sdk-golang/tree/main/validation/pumpfun_create_20261007)。

@@ -8,3 +8,12 @@ build/
 venv/
 .DS_Store
 .env
+
+# Generated reports and local tooling outputs
+/NATIVE_*EVIDENCE*.json
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.benchmarks/
+.coverage
+htmlcov/

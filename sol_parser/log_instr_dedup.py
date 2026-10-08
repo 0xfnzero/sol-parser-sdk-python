@@ -97,6 +97,8 @@ def _dedupe_key(
             f"RaydiumLaunchlabTrade|{getattr(data, 'pool_state', '')}|"
             f"{getattr(data, 'user', '')}|{bool(getattr(data, 'is_buy', False))}"
         )
+    if t == EventType.METEORA_POOLS_POOL_CREATED and not _empty(getattr(data, 'pool', None)):
+        return f"MeteoraPoolsPoolCreated|{data.pool}"
     if t == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
         return f"RaydiumLaunchlabPoolCreate|{getattr(data, 'pool_state', '')}"
     if t == EventType.RAYDIUM_LAUNCHLAB_MIGRATE_AMM:
@@ -380,6 +382,9 @@ def _merge_grpc_instruction_into_log(log_ev: DexEvent, ix_ev: DexEvent) -> None:
             "user_source_owner",
             "amm",
         ):
+            _fill_attr(log, attr, ix)
+    elif log_ev.type == EventType.METEORA_POOLS_POOL_CREATED and ix_ev.type == EventType.METEORA_POOLS_POOL_CREATED:
+        for attr in ('pool', 'lp_mint', 'token_a_mint', 'token_b_mint'):
             _fill_attr(log, attr, ix)
     elif log_ev.type == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE and ix_ev.type == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
         _fill_attr(log, "creator", ix)

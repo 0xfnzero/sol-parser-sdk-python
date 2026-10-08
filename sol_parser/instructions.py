@@ -97,7 +97,8 @@ _DISC_DAMM_INIT    = _d(228, 50, 246, 85, 203, 66, 134, 37)
 _DISC_METEORA_POOLS_SWAP = _d(248, 198, 158, 145, 225, 117, 135, 200)
 _DISC_METEORA_POOLS_ADD_LIQUIDITY = _d(181, 157, 89, 67, 143, 182, 52, 72)
 _DISC_METEORA_POOLS_REMOVE_LIQUIDITY = _d(80, 85, 209, 72, 24, 206, 177, 108)
-_DISC_METEORA_POOLS_CREATE_POOL = _d(95, 180, 10, 172, 84, 174, 232, 40)
+_DISC_METEORA_POOLS_CREATE_POOL = _d(7, 166, 138, 171, 206, 171, 236, 244)
+_DISC_METEORA_POOLS_CREATE_POOL_CONFIG2 = _d(48, 149, 220, 130, 61, 11, 9, 178)
 
 _DISC_DLMM_ADD_LIQUIDITY = _d(181, 157, 89, 67, 143, 182, 52, 72)
 _DISC_DLMM_ADD_LIQUIDITY2 = _d(228, 162, 78, 28, 70, 219, 116, 115)
@@ -466,6 +467,7 @@ def normal_instruction_data_may_parse(program_id: str, instruction_data: bytes) 
             _DISC_METEORA_POOLS_ADD_LIQUIDITY,
             _DISC_METEORA_POOLS_REMOVE_LIQUIDITY,
             _DISC_METEORA_POOLS_CREATE_POOL,
+            _DISC_METEORA_POOLS_CREATE_POOL_CONFIG2,
         )
     return False
 
@@ -1240,17 +1242,20 @@ def parse_meteora_pools_instruction(
             ),
         )
 
-    if discriminator == _DISC_METEORA_POOLS_CREATE_POOL:
-        if len(payload) < 1 + 6 * 8 or len(accounts) <= 9:
+    if discriminator in (_DISC_METEORA_POOLS_CREATE_POOL, _DISC_METEORA_POOLS_CREATE_POOL_CONFIG2):
+        if len(payload) < 16 or len(accounts) < 5:
             return None
+        if discriminator == _DISC_METEORA_POOLS_CREATE_POOL_CONFIG2:
+            if len(payload) < 17 or payload[16] not in (0, 1) or (payload[16] == 1 and len(payload) < 25):
+                return None
         return DexEvent(
             type=EventType.METEORA_POOLS_POOL_CREATED,
             data=MeteoraPoolsPoolCreatedEvent(
                 metadata=meta,
-                lp_mint=accounts[4],
-                token_a_mint=accounts[8],
-                token_b_mint=accounts[9],
-                pool_type=payload[0],
+                lp_mint=accounts[2],
+                token_a_mint=accounts[3],
+                token_b_mint=accounts[4],
+                pool_type=1,  # PoolType::Permissionless, not the CurveType tag
                 pool=accounts[0],
             ),
         )

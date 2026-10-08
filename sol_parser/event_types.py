@@ -1386,6 +1386,8 @@ class MeteoraDbcSwapEvent(DexEventBase):
     amount_1: int = 0
     maximum_amount_in: int = 0
     included_fee_input_amount: int = 0
+    # Curve remainder uses fee-excluded units when fees are on input; it is
+    # different from the wallet's gross unconsumed funding after fee recalculation.
     amount_left: int = 0
     quote_reserve_amount: int = 0
     migration_threshold: int = 0

@@ -164,6 +164,8 @@ _DISC_ORCA_SWAP    = _d(248, 198, 158, 145, 225, 117, 135, 200)
 _DISC_ORCA_SWAP_V2 = _d(43, 4, 237, 11, 26, 201, 30, 98)
 _DISC_ORCA_INC_LIQ = _d(46, 156, 243, 118, 13, 205, 251, 178)
 _DISC_ORCA_DEC_LIQ = _d(160, 38, 208, 111, 104, 91, 44, 1)
+_DISC_ORCA_INC_LIQ_V2 = _d(133, 29, 89, 223, 69, 238, 176, 10)
+_DISC_ORCA_DEC_LIQ_V2 = _d(58, 127, 188, 62, 79, 82, 196, 96)
 _DISC_ORCA_INIT_POOL = _d(17, 43, 80, 74, 168, 202, 6, 113)
 
 _DISC_RAYDIUM_LAUNCHLAB_TRADE       = _d(189, 219, 127, 211, 78, 230, 97, 238)
@@ -453,7 +455,9 @@ def normal_instruction_data_may_parse(program_id: str, instruction_data: bytes) 
             _DISC_ORCA_SWAP,
             _DISC_ORCA_SWAP_V2,
             _DISC_ORCA_INC_LIQ,
+            _DISC_ORCA_INC_LIQ_V2,
             _DISC_ORCA_DEC_LIQ,
+            _DISC_ORCA_DEC_LIQ_V2,
             _DISC_ORCA_INIT_POOL,
         )
     if program_id == METEORA_POOLS_PROGRAM_ID:
@@ -1932,31 +1936,33 @@ def parse_orca_whirlpool_instruction(
             "input_transfer_fee": 0, "output_transfer_fee": 0,
             "lp_fee": 0, "protocol_fee": 0,
         }})
-    if discriminator == _DISC_ORCA_INC_LIQ:
-        if len(data) < 8 + 16 + 8 + 8:
+    if discriminator in (_DISC_ORCA_INC_LIQ, _DISC_ORCA_INC_LIQ_V2):
+        v2 = discriminator == _DISC_ORCA_INC_LIQ_V2
+        if len(data) < 8 + 16 + 8 + 8 + int(v2):
             return None
         liquidity = int.from_bytes(data[8:24], "little")
         token_max_a = struct.unpack_from("<Q", data, 24)[0]
         token_max_b = struct.unpack_from("<Q", data, 32)[0]
         return legacy_dict_to_dex_event({"OrcaWhirlpoolLiquidityIncreased": {
             "metadata": meta,
-            "whirlpool": _get_account_safe(accounts, 1),
-            "position": _get_account_safe(accounts, 3),
+            "whirlpool": _get_account_safe(accounts, 0),
+            "position": _get_account_safe(accounts, 5 if v2 else 3),
             "tick_lower_index": 0, "tick_upper_index": 0,
             "liquidity": str(liquidity),
             "token_a_amount": token_max_a, "token_b_amount": token_max_b,
             "token_a_transfer_fee": 0, "token_b_transfer_fee": 0,
         }})
-    if discriminator == _DISC_ORCA_DEC_LIQ:
-        if len(data) < 8 + 16 + 8 + 8:
+    if discriminator in (_DISC_ORCA_DEC_LIQ, _DISC_ORCA_DEC_LIQ_V2):
+        v2 = discriminator == _DISC_ORCA_DEC_LIQ_V2
+        if len(data) < 8 + 16 + 8 + 8 + int(v2):
             return None
         liquidity = int.from_bytes(data[8:24], "little")
         token_min_a = struct.unpack_from("<Q", data, 24)[0]
         token_min_b = struct.unpack_from("<Q", data, 32)[0]
         return legacy_dict_to_dex_event({"OrcaWhirlpoolLiquidityDecreased": {
             "metadata": meta,
-            "whirlpool": _get_account_safe(accounts, 1),
-            "position": _get_account_safe(accounts, 3),
+            "whirlpool": _get_account_safe(accounts, 0),
+            "position": _get_account_safe(accounts, 5 if v2 else 3),
             "tick_lower_index": 0, "tick_upper_index": 0,
             "liquidity": str(liquidity),
             "token_a_amount": token_min_a, "token_b_amount": token_min_b,

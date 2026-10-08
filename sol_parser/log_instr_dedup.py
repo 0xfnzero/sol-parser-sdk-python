@@ -133,6 +133,9 @@ def _dedupe_key(
         base = (base_out, amount)
         occurrence = _next_occurrence(("RaydiumAmmV4", *base), occurrence_counts)
         return f"RaydiumAmmV4Swap|{base_out}|{amount}|{occurrence}"
+    if t in (EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED, EventType.ORCA_WHIRLPOOL_LIQUIDITY_DECREASED):
+        base = (t.value, getattr(data, "whirlpool", ""), getattr(data, "position", ""), str(getattr(data, "liquidity", "")))
+        return "|".join(base) + f"|{_next_occurrence(base, occurrence_counts)}"
     if t == EventType.ORCA_WHIRLPOOL_SWAP:
         whirlpool = getattr(data, "whirlpool", "")
         occurrence = _next_occurrence(("OrcaWhirlpool", whirlpool), occurrence_counts)
@@ -392,7 +395,7 @@ def dedupe_log_instruction_events(
     # A missing invocation makes ordinal pairing ambiguous. Keep both sources.
     instruction_keys = [_dedupe_key(ev, ix_occurrences) for ev in instruction_events]
     for base, count in log_occurrences.items():
-        if base[0] not in ("PumpFun", "PumpSwapBuy", "PumpSwapSell") or count == ix_occurrences.get(base):
+        if base[0] not in ("PumpFun", "PumpSwapBuy", "PumpSwapSell", "OrcaWhirlpoolLiquidityIncreased", "OrcaWhirlpoolLiquidityDecreased") or count == ix_occurrences.get(base):
             continue
         name = "PumpFunTrade" if base[0] == "PumpFun" else base[0]
         prefix = "|".join(str(part) for part in (name, *base[1:]))

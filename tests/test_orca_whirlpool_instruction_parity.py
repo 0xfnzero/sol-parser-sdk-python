@@ -107,7 +107,7 @@ def test_parse_orca_liquidity_instruction_payload_values() -> None:
     assert inc is not None
     assert inc.type == EventType.ORCA_WHIRLPOOL_LIQUIDITY_INCREASED
     assert isinstance(inc.data, OrcaWhirlpoolLiquidityIncreasedEvent)
-    assert inc.data.whirlpool == "account_1"
+    assert inc.data.whirlpool == "account_0"
     assert inc.data.position == "account_3"
     assert inc.data.liquidity == str((1 << 80) + 1)
     assert inc.data.token_a_amount == 222
@@ -125,7 +125,7 @@ def test_parse_orca_liquidity_instruction_payload_values() -> None:
     assert dec is not None
     assert dec.type == EventType.ORCA_WHIRLPOOL_LIQUIDITY_DECREASED
     assert isinstance(dec.data, OrcaWhirlpoolLiquidityDecreasedEvent)
-    assert dec.data.whirlpool == "account_1"
+    assert dec.data.whirlpool == "account_0"
     assert dec.data.position == "account_3"
     assert dec.data.liquidity == str((1 << 80) + 2)
     assert dec.data.token_a_amount == 444

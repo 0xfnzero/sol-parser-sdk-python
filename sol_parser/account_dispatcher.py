@@ -110,6 +110,36 @@ def fill_accounts_with_owned_keys(
             return
         filler(get)
 
+    def fill_swap(buy):
+        # Match the event's own pool, user and direction, not the largest invoke.
+        if not data.pool or data.pool == "11111111111111111111111111111111":
+            return
+        selected = None
+        legacy = (bytes([102, 6, 61, 18, 1, 218, 235, 234]),
+                  bytes([198, 46, 21, 82, 180, 217, 232, 112])) if buy else (bytes([51, 230, 133, 164, 1, 127, 131, 173]),)
+        compact = (bytes([184, 23, 238, 97, 103, 197, 211, 61]),
+                   bytes([194, 171, 28, 70, 104, 77, 91, 47])) if buy else (bytes([93, 246, 130, 60, 231, 233, 64, 178]),)
+        for invocation in invokes.get(base58.b58decode(PUMPSWAP_PROGRAM_ID), []):
+            raw = get_instruction_data(meta_pb, transaction_pb, invocation)
+            if raw is None or raw[:8] not in legacy + compact:
+                continue
+            oi, ii = invocation
+            instruction = (transaction_pb.message.instructions[oi] if ii < 0 else
+                           next(g for g in meta_pb.inner_instructions if g.index == oi).instructions[ii])
+            minimum = 17 if raw[:8] in compact else (23 if buy else 21)
+            if len(instruction.accounts) < minimum:
+                continue
+            get = get_instruction_account_getter(meta_pb, transaction_pb, static_keys, w, r, invocation)
+            if get is None or get(0) != data.pool:
+                continue
+            if data.user and data.user != "11111111111111111111111111111111" and get(1) != data.user:
+                continue
+            if selected is not None:
+                return  # Invocation positions are unavailable; ambiguous context stays blank.
+            selected = get
+        if selected is not None:
+            (pumpswap.fill_buy_accounts if buy else pumpswap.fill_sell_accounts)(data, selected)
+
     def fill_create(v2_only=False):
         selected = None
         for ix in invokes.get(base58.b58decode(PUMPFUN_PROGRAM_ID), []):
@@ -152,9 +182,9 @@ def fill_accounts_with_owned_keys(
     elif et == EventType.PUMP_FUN_MIGRATE:
         run(PUMPFUN_PROGRAM_ID, lambda g: pumpfun.fill_migrate_accounts(data, g))
     elif et == EventType.PUMP_SWAP_BUY:
-        run(PUMPSWAP_PROGRAM_ID, lambda g: pumpswap.fill_buy_accounts(data, g))
+        fill_swap(True)
     elif et == EventType.PUMP_SWAP_SELL:
-        run(PUMPSWAP_PROGRAM_ID, lambda g: pumpswap.fill_sell_accounts(data, g))
+        fill_swap(False)
     elif et == EventType.PUMP_SWAP_TRADE:
         run(PUMPSWAP_PROGRAM_ID, lambda g: pumpswap.fill_trade_accounts(data, g))
     elif et == EventType.PUMP_SWAP_CREATE_POOL:

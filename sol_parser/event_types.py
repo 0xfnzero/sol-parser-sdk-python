@@ -1156,7 +1156,9 @@ class MeteoraPoolsSetPoolFeesEvent(DexEventBase):
 
 @dataclass
 class MeteoraPoolsSwapEvent(DexEventBase):
-    """Meteora Pools 交换事件"""
+    """Meteora Pools 交换事件; instruction limits are separate from executed amounts."""
+    amount_in: int = 0
+    minimum_out_amount: int = 0
     in_amount: int = 0
     out_amount: int = 0
     trade_fee: int = 0

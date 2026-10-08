@@ -26,3 +26,19 @@ def test_current_dbc_cpi(case):
     assert len(dedupe_log_instruction_events([], [old,event]))==1
     assert len(dedupe_log_instruction_events([], [old,old,event,event]))==2
     assert len(dedupe_log_instruction_events([], [old,old,event]))==3
+
+LIVE = json.loads((Path(__file__).parent / 'fixtures/dbc_live_simulations_20261008.json').read_text())
+@pytest.mark.parametrize('case', LIVE['cases'], ids=lambda c:c['name'])
+def test_real_bank_dbc_events(case):
+    events=[]
+    for row in case['events']:
+        e=parse_inner_instruction(base64.b64decode(row['data']),case['program'],{'signature':'simulation','slot':case['slot']},event_type_filter_include_only([EventType.METEORA_DBC_SWAP]),False)
+        for key in ('output_amount','actual_input_amount','swap_mode','event_version','trade_direction','amount_0','amount_1'):
+            assert getattr(e.data,key)==row['expected'][key]
+        events.append(e)
+    events=dedupe_log_instruction_events([],events)
+    assert len(events)==case['dedup_count']
+    if case['error'] is None:
+        assert events
+        if len(events)==1:assert events[-1].data.output_amount==case['bank_output_balances'][0]
+    else:assert not events

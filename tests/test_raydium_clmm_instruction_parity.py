@@ -335,8 +335,9 @@ def test_parse_meteora_pools_and_dlmm_outer_instructions_are_routed() -> None:
     assert pools is not None
     assert pools.type == EventType.METEORA_POOLS_SWAP
     assert isinstance(pools.data, MeteoraPoolsSwapEvent)
-    assert pools.data.in_amount == 111
-    assert pools.data.out_amount == 222
+    assert pools.data.amount_in == 111
+    assert pools.data.minimum_out_amount == 222
+    assert pools.data.in_amount == pools.data.out_amount == 0
 
     assert event_type_filter_allows_instruction_parsing([EventType.METEORA_DLMM_SWAP])
     dlmm = parse_instruction_unified(

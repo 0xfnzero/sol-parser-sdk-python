@@ -1202,8 +1202,8 @@ def parse_meteora_pools_instruction(
             type=EventType.METEORA_POOLS_SWAP,
             data=MeteoraPoolsSwapEvent(
                 metadata=meta,
-                in_amount=struct.unpack_from("<Q", payload, 0)[0],
-                out_amount=struct.unpack_from("<Q", payload, 8)[0],
+                amount_in=struct.unpack_from("<Q", payload, 0)[0],
+                minimum_out_amount=struct.unpack_from("<Q", payload, 8)[0],
                 trade_fee=0,
                 admin_fee=0,
                 host_fee=0,

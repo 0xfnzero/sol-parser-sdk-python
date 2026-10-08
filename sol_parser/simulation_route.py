@@ -21,13 +21,9 @@ def analyze_simulation_routes(wire, response, graduated_pools=()):
     """Original wire plus simulateTransaction response. SPL transfers and ATA setup.
 
     Unsupported parsed CPI fail explicitly. Raw/compiled CPI are preserved.
-    V0 with ALT requires the existing compiled route API and loadedAddresses.
+    V0 requires caller-resolved addresses in result.value.loadedAddresses.
     """
     tx, _ = decode_wire_transaction(wire)
-    if tx["message"]["addressTableLookups"]:
-        raise ValueError(
-            "V0 ALT addresses unavailable; use compiled route input with loadedAddresses"
-        )
     if not isinstance(response, dict) or not isinstance(response.get("result"), dict):
         raise ValueError("Simulation response missing execution metadata")
     value = response["result"].get("value")
@@ -43,7 +39,23 @@ def analyze_simulation_routes(wire, response, graduated_pools=()):
         groups = []
     if not isinstance(groups, list):
         raise ValueError("Invalid simulation inner instructions")
-    keys = tx["message"]["accountKeys"]
+    lookups = tx["message"]["addressTableLookups"]
+    loaded = value.get("loadedAddresses")
+    if loaded is None:
+        if lookups:
+            raise ValueError("V0 ALT addresses unavailable; provide loadedAddresses")
+        loaded = {"writable": [], "readonly": []}
+    if not isinstance(loaded, dict):
+        raise ValueError("Invalid simulation loaded addresses")
+    for side in ("writable", "readonly"):
+        addresses = loaded.get(side)
+        expected = sum(len(lookup[side + "Indexes"]) for lookup in lookups)
+        if not isinstance(addresses, list) or len(addresses) != expected:
+            raise ValueError("Simulation loaded address count does not match wire lookups")
+        for address in addresses:
+            if not isinstance(address, str) or len(base58.b58decode(address)) != 32:
+                raise ValueError("Invalid simulation loaded public key")
+    keys = tx["message"]["accountKeys"] + loaded["writable"] + loaded["readonly"]
 
     def index(key):
         if not isinstance(key, str) or key not in keys:

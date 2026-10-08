@@ -128,18 +128,42 @@ def test_compiled_cpi_evidence_preserved():
     )
 
 
-def test_v0_alt_needs_explicit_loaded_addresses():
-    original = json.loads(
-        (Path(__file__).parent / "fixtures/stonkfun_routes_0_7_7.json").read_text()
-    )
-    for c in original["cases"]:
-        tx = c["transaction"].get("result", c["transaction"])
-        wire = base64.b64decode(tx["transaction"][0])
-        if decode_wire_transaction(wire)[0]["message"]["addressTableLookups"]:
-            with pytest.raises(ValueError, match="ALT"):
-                analyze_simulation_routes(wire, CORPUS["cases"][0]["response"])
-            return
-    pytest.fail("ALT evidence missing")
+ALT_CASE = json.loads((Path(__file__).parent / "fixtures/simulation_alt_20261008.json").read_text())["cases"][0]
+
+
+def test_resolved_alt_simulation():
+    before = copy.deepcopy(ALT_CASE["response"])
+    route = analyze_simulation_routes(base64.b64decode(ALT_CASE["wire"]), before)
+    assert canonical(route.to_dict()) == ALT_CASE["expected"]
+    assert route.succeeded and len(route.legs) == 2
+    assert before == ALT_CASE["response"]
+
+
+@pytest.mark.parametrize("kind", ["missing", "short_writable", "extra_writable", "short_readonly", "extra_readonly", "invalid_key"])
+def test_invalid_alt_resolution(kind):
+    response = copy.deepcopy(ALT_CASE["response"])
+    value = response["result"]["value"]
+    if kind == "missing":
+        del value["loadedAddresses"]
+    elif kind == "invalid_key":
+        value["loadedAddresses"]["writable"][0] = "1"
+    else:
+        action, side = kind.split("_")
+        addresses = value["loadedAddresses"][side]
+        if action == "short": addresses.pop()
+        else: addresses.append(addresses[0])
+    with pytest.raises(ValueError):
+        analyze_simulation_routes(base64.b64decode(ALT_CASE["wire"]), response)
+
+
+def test_no_alt_rejects_extra_loaded_addresses():
+    c = CORPUS["cases"][0]
+    response = copy.deepcopy(c["response"])
+    response["result"]["value"]["loadedAddresses"] = {"writable": [], "readonly": []}
+    assert canonical(analyze_simulation_routes(base64.b64decode(c["wire"]), response).to_dict()) == c["expected"]
+    response["result"]["value"]["loadedAddresses"]["readonly"] = [ALT_CASE["response"]["result"]["value"]["loadedAddresses"]["readonly"][0]]
+    with pytest.raises(ValueError):
+        analyze_simulation_routes(base64.b64decode(c["wire"]), response)
 
 
 @pytest.mark.parametrize("case", CORPUS["cases"], ids=lambda c: c["name"])

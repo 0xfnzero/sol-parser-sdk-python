@@ -433,3 +433,19 @@ def test_current_bank_account_lifecycle_and_rollback(case):
         assert error['InstructionError'][0]==validation['expected_failure_index']
         assert error['InstructionError'][1]==({'Custom':11}if validation['scenario']=='close_funded_token_account'else'IllegalOwner')
         assert case['response']['result']['value']['accounts']==[None]
+
+SETTLEMENT=json.loads((Path(__file__).parent/'fixtures/native_settlement_20261008.json').read_text())
+@pytest.mark.parametrize('case',SETTLEMENT['cases'],ids=lambda c:c['name'])
+def test_current_bank_combined_native_settlement(case):
+    route=analyze_simulation_routes(base64.b64decode(case['wire']),case['response'])
+    parsed=canonical(route.to_dict())
+    assert parsed==case['expected']
+    assert route.succeeded and len(route.legs)>=2
+    validation=case['validation']
+    assert validation['new_account_lamports']>=validation['minimum_lamports']
+    assert validation['base_net_credit']>=validation['minimum_base_net_credit']>0
+    closed={a['account'] for a in parsed['native_token_actions'] if isinstance(a['action'],dict) and 'Close' in a['action']}
+    assert closed==set(validation['closed_accounts'])
+    if validation['existing_wsol_preserved']:
+        funding=[a for a in parsed['native_token_actions'] if isinstance(a['action'],dict) and a['action'].get('Fund',{}).get('lamports')=='777']
+        assert len(funding)==1 and funding[0]['account'] not in closed

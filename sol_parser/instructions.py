@@ -157,6 +157,7 @@ _DISC_CLMM_CLOSE_POSITION = _d(123, 134, 81, 0, 49, 68, 98, 98)
 
 _DISC_CPMM_SWAP    = _d(143, 190, 90, 218, 196, 30, 51, 222)
 _DISC_CPMM_SWAP_OUT = _d(55, 217, 98, 86, 163, 74, 180, 173)
+_DISC_CPMM_INITIALIZE_PERMISSION = _d(63, 55, 254, 65, 49, 178, 89, 121)
 _DISC_CPMM_INITIALIZE = _d(175, 175, 109, 31, 13, 152, 155, 237)
 _DISC_CPMM_DEP     = _d(242, 35, 198, 137, 82, 225, 242, 182)
 _DISC_CPMM_WIT     = _d(183, 18, 70, 156, 148, 109, 161, 34)
@@ -435,6 +436,7 @@ def normal_instruction_data_may_parse(program_id: str, instruction_data: bytes) 
             _DISC_CPMM_SWAP,
             _DISC_CPMM_SWAP_OUT,
             _DISC_CPMM_INITIALIZE,
+            _DISC_CPMM_INITIALIZE_PERMISSION,
             _DISC_CPMM_DEP,
             _DISC_CPMM_WIT,
         )
@@ -1821,13 +1823,14 @@ def parse_raydium_cpmm_instruction(
             "input_transfer_fee": 0, "output_transfer_fee": 0,
             "base_input": False,
         }})
-    if discriminator == _DISC_CPMM_INITIALIZE:
-        if len(data) < 8 + 8 + 8:
+    if discriminator in (_DISC_CPMM_INITIALIZE, _DISC_CPMM_INITIALIZE_PERMISSION):
+        permission = discriminator == _DISC_CPMM_INITIALIZE_PERMISSION
+        if len(data) < (33 if permission else 32) or len(accounts) < (21 if permission else 20):
             return None
         return legacy_dict_to_dex_event({"RaydiumCpmmInitialize": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 0),
-            "creator": _get_account_safe(accounts, 1),
+            "pool": _get_account_safe(accounts, 4 if permission else 3),
+            "creator": _get_account_safe(accounts, 1 if permission else 0),
             "init_amount0": struct.unpack_from("<Q", data, 8)[0],
             "init_amount1": struct.unpack_from("<Q", data, 16)[0],
         }})

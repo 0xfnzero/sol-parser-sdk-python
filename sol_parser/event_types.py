@@ -2515,6 +2515,15 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             quote_token_program=_get_str(data, "quote_token_program"),
         )
     
+    if event_type == EventType.RAYDIUM_CPMM_INITIALIZE:
+        return RaydiumCpmmInitializeEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            creator=_get_str(data, "creator"),
+            init_amount0=_get_int(data, "init_amount0"),
+            init_amount1=_get_int(data, "init_amount1"),
+        )
+
     if event_type == EventType.RAYDIUM_LAUNCHLAB_MIGRATE_AMM:
         return RaydiumLaunchlabMigrateAmmEvent(
             metadata=meta,
@@ -2522,6 +2531,11 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             new_pool=_get_str(data, "new_pool"),
             user=_get_str(data, "user"),
             liquidity_amount=_get_int(data, "liquidity_amount"),
+            liquidity_amount_known=bool(data.get("liquidity_amount_known", False)),
+            base_mint=_get_str(data, "base_mint"),
+            quote_mint=_get_str(data, "quote_mint"),
+            platform_config=_get_str(data, "platform_config"),
+            destination_program=_get_str(data, "destination_program"),
         )
     
     # Add more event type conversions as needed...

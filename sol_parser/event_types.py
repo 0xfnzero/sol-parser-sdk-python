@@ -1256,7 +1256,11 @@ class MeteoraDammV2ClaimPositionFeeEvent(DexEventBase):
 
 @dataclass
 class MeteoraDammV2ClaimRewardEvent(DexEventBase):
-    """Official EvtClaimReward gross token quantities (before transfer fees)."""
+    """Official EvtClaimReward accrued gross amount cleared from the position.
+
+    A frozen vault with skip_reward=1 clears it without transferring tokens.
+    For wallet credits, inspect actual token transfers and net balance changes.
+    """
     pool: str = ""
     position: str = ""
     owner: str = ""

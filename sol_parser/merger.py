@@ -311,8 +311,18 @@ def try_merge_dex_events(base: DexEvent, inner: DexEvent) -> bool:
     """Merge compatible events and report success so unmatched events are retained."""
     bd = base.data
     ind = inner.data
-    if isinstance(bd,PumpFunTradeEvent) and isinstance(ind,PumpFunTradeEvent) and (bd.ix_name=="multi_hop_swap" or ind.ix_name=="multi_hop_swap") and bd.mint and ind.mint and bd.mint!=ind.mint:return False
-    if isinstance(bd,(PumpSwapBuyEvent,PumpSwapSellEvent)) and isinstance(ind,(PumpSwapBuyEvent,PumpSwapSellEvent)) and bd.pool and ind.pool and bd.pool!=ind.pool:return False
+    if isinstance(bd, PumpFunTradeEvent) and isinstance(ind, PumpFunTradeEvent):
+        base_direction_known = not _empty(bd.mint) or bool(bd.ix_name or bd.sol_amount or bd.token_amount)
+        inner_direction_known = not _empty(ind.mint) or bool(ind.ix_name or ind.sol_amount or ind.token_amount)
+        if (base_direction_known and inner_direction_known and bd.is_buy != ind.is_buy) or any(
+            not _empty(getattr(bd, field)) and not _empty(getattr(ind, field))
+            and getattr(bd, field) != getattr(ind, field) for field in ("mint", "user")
+        ):
+            return False
+    if isinstance(bd, (PumpSwapBuyEvent, PumpSwapSellEvent)) and isinstance(ind, (PumpSwapBuyEvent, PumpSwapSellEvent)):
+        if any(not _empty(getattr(bd, field)) and not _empty(getattr(ind, field))
+               and getattr(bd, field) != getattr(ind, field) for field in ("pool", "user")):
+            return False
 
     if isinstance(bd, PumpFunTradeEvent) and isinstance(ind, PumpFunTradeEvent):
         if base.type in (

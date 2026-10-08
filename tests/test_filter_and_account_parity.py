@@ -1051,6 +1051,8 @@ def test_orca_whirlpool_account_parser_reads_fee_tier():
 
 
 def test_rpc_parser_merges_outer_and_inner_pumpfun_instructions():
+    keys = [PUMPFUN_PROGRAM_ID] + [_pk_str(i) for i in range(1, 19)]
+    keys[2], keys[6] = _pk_str(70), _pk_str(71)
     tx = rpc_parser.RpcTransactionResponse(
         slot=7,
         block_time=None,
@@ -1083,7 +1085,7 @@ def test_rpc_parser_merges_outer_and_inner_pumpfun_instructions():
         transaction=rpc_parser.RpcTransaction(
             signatures=["sig"],
             message=rpc_parser.RpcMessage(
-                account_keys=[PUMPFUN_PROGRAM_ID] + [_pk_str(i) for i in range(1, 19)],
+                account_keys=keys,
                 header=None,
                 recent_blockhash="11111111111111111111111111111111",
                 instructions=[

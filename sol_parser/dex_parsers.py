@@ -3081,7 +3081,7 @@ def parse_ps_create_pool_from_data(data: bytes, meta: dict) -> Optional[DexEvent
 
 
 def parse_ps_add_liq_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
-    if len(data) < 10 * 8 + 5 * 32:
+    if len(data) < 11 * 8 + 5 * 32:
         return None
     o = 0
 
@@ -3128,7 +3128,7 @@ def parse_ps_add_liq_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
 
 
 def parse_ps_remove_liq_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
-    if len(data) < 10 * 8 + 5 * 32:
+    if len(data) < 11 * 8 + 5 * 32:
         return None
     o = 0
 

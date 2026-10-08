@@ -83,6 +83,10 @@ def _dedupe_key(
         return f"PumpFunTrade|{base[0]}|{base[1]}|{base[2]}|{base[3]}|{occ}"
 
     t = ev.type
+    if t == EventType.PUMP_FUN_COMPLETE:
+        return f"PumpFunComplete|{data.mint}|{data.bonding_curve}|{data.user}"
+    if t == EventType.PUMP_FUN_POST_COMPLETE_BUY:
+        return f"PumpFunPostCompleteBuy|{data.mint}|{data.bonding_curve}|{data.user}|{data.base_out}|{data.quote_in}"
     if t == EventType.PUMP_FUN_CREATE:
         return f"PumpFunCreate|{getattr(data, 'mint', '')}"
     if t == EventType.PUMP_FUN_CREATE_V2:

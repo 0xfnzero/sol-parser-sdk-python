@@ -43,6 +43,7 @@ from .event_types import (
     MeteoraDlmmClaimFeeEvent, MeteoraPoolsSetPoolFeesEvent, MeteoraPoolsSwapEvent,
     MeteoraPoolsAddLiquidityEvent, MeteoraPoolsRemoveLiquidityEvent,
     MeteoraPoolsBootstrapLiquidityEvent, MeteoraPoolsPoolCreatedEvent, MeteoraDammV2SwapEvent,
+    MeteoraDammV2ClaimPositionFeeEvent,
     MeteoraDammV2CreatePositionEvent, MeteoraDammV2ClosePositionEvent,
     MeteoraDammV2AddLiquidityEvent, MeteoraDammV2RemoveLiquidityEvent,
     MeteoraDammV2InitializePoolEvent,
@@ -1900,6 +1901,7 @@ def parse_meteora_pools_set_pool_fees_from_data(data: bytes, meta: dict) -> Opti
 DAMM_SWAP = _d(27, 60, 21, 213, 138, 170, 187, 147)
 DAMM_SWAP2 = _d(189, 66, 51, 168, 38, 80, 117, 153)
 DAMM_CREATE_POSITION = _d(156, 15, 119, 198, 29, 181, 221, 55)
+DAMM_CLAIM_POSITION_FEE = _d(198, 182, 183, 52, 97, 12, 49, 56)
 DAMM_CLOSE_POSITION = _d(20, 145, 144, 68, 143, 142, 214, 178)
 DAMM_ADD_LIQUIDITY = _d(175, 242, 8, 157, 30, 247, 185, 169)
 DAMM_REMOVE_LIQUIDITY = _d(87, 46, 88, 98, 175, 96, 34, 91)
@@ -1939,6 +1941,8 @@ def parse_meteora_damm_from_buf(buf: bytes, meta: dict) -> Optional[DexEvent]:
         return _parse_damm_swap(data, meta)
     if d == DAMM_SWAP2:
         return _parse_damm_swap2(data, meta)
+    if d == DAMM_CLAIM_POSITION_FEE:
+        return _parse_damm_claim_position_fee(data, meta)
     if d == DAMM_CREATE_POSITION:
         return _parse_damm_create_position(data, meta)
     if d == DAMM_CLOSE_POSITION:
@@ -3601,6 +3605,7 @@ _LOG_DISCRIMINATOR_EVENT_TYPES = {
     DAMM_LIQUIDITY_CHANGE: EventType.METEORA_DAMM_V2_ADD_LIQUIDITY,  # routed by change_type in parser
     DAMM_INIT_POOL: EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
     DAMM_CREATE_POSITION: EventType.METEORA_DAMM_V2_CREATE_POSITION,
+    DAMM_CLAIM_POSITION_FEE: EventType.METEORA_DAMM_V2_CLAIM_POSITION_FEE,
     DAMM_CLOSE_POSITION: EventType.METEORA_DAMM_V2_CLOSE_POSITION,
     DAMM_UPDATE_DELEGATE_PERMISSION: EventType.METEORA_DAMM_V2_UPDATE_DELEGATE_PERMISSION,
     DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD: EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD,
@@ -3746,6 +3751,8 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
             return EventType.METEORA_DAMM_V2_ADD_LIQUIDITY
         if disc == DAMM_INIT_POOL:
             return EventType.METEORA_DAMM_V2_INITIALIZE_POOL
+        if disc == DAMM_CLAIM_POSITION_FEE:
+            return EventType.METEORA_DAMM_V2_CLAIM_POSITION_FEE
         if disc == DAMM_CREATE_POSITION:
             return EventType.METEORA_DAMM_V2_CREATE_POSITION
         if disc == DAMM_CLOSE_POSITION:
@@ -4239,6 +4246,7 @@ def dispatch_program_data(
         DAMM_LIQUIDITY_CHANGE,
         DAMM_INIT_POOL,
         DAMM_CREATE_POSITION,
+        DAMM_CLAIM_POSITION_FEE,
         DAMM_CLOSE_POSITION,
         DAMM_UPDATE_DELEGATE_PERMISSION,
         DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD,
@@ -4268,3 +4276,19 @@ def _parse_dbc_swap2(data: bytes, meta: dict, has_transfer_hook: bool) -> Option
         amount_left=_u64le(data,99), output_amount=_u64le(data,107), next_sqrt_price=_u128le_int(data,115),
         trading_fee=_u64le(data,131), protocol_fee=_u64le(data,139), referral_fee=_u64le(data,147),
         quote_reserve_amount=_u64le(data,155), migration_threshold=_u64le(data,163), current_timestamp=_u64le(data,171)))
+
+
+def _parse_damm_claim_position_fee(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 112:
+        return None
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_CLAIM_POSITION_FEE,
+        data=MeteoraDammV2ClaimPositionFeeEvent(
+            metadata=_make_meta(meta),
+            pool=_pub(data, 0),
+            position=_pub(data, 32),
+            owner=_pub(data, 64),
+            fee_a_claimed=int.from_bytes(data[96:104], "little"),
+            fee_b_claimed=int.from_bytes(data[104:112], "little"),
+        ),
+    )

@@ -1243,6 +1243,16 @@ class MeteoraDammV2SwapEvent(DexEventBase):
 
 
 @dataclass
+class MeteoraDammV2ClaimPositionFeeEvent(DexEventBase):
+    """Official EvtClaimPositionFee gross token quantities (before transfer fees)."""
+    pool: str = ""
+    position: str = ""
+    owner: str = ""
+    fee_a_claimed: int = 0
+    fee_b_claimed: int = 0
+
+
+@dataclass
 class MeteoraDammV2CreatePositionEvent(DexEventBase):
     """Meteora DAMM v2 创建仓位事件"""
     pool: str = ""
@@ -1584,6 +1594,7 @@ TypedDexEvent = Union[
     MeteoraPoolsPoolCreatedEvent,
     MeteoraDammV2SwapEvent,
     MeteoraDammV2CreatePositionEvent,
+    MeteoraDammV2ClaimPositionFeeEvent,
     MeteoraDammV2ClosePositionEvent,
     MeteoraDammV2AddLiquidityEvent,
     MeteoraDammV2RemoveLiquidityEvent,
@@ -2060,6 +2071,15 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         return MeteoraDammV2AddLiquidityEvent(metadata=meta, pool=_get_str(data, "pool"))
     if event_type == EventType.METEORA_DAMM_V2_REMOVE_LIQUIDITY:
         return MeteoraDammV2RemoveLiquidityEvent(metadata=meta, pool=_get_str(data, "pool"))
+    if event_type == EventType.METEORA_DAMM_V2_CLAIM_POSITION_FEE:
+        return MeteoraDammV2ClaimPositionFeeEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            position=_get_str(data, "position"),
+            owner=_get_str(data, "owner"),
+            fee_a_claimed=_get_int(data, "fee_a_claimed"),
+            fee_b_claimed=_get_int(data, "fee_b_claimed"),
+        )
     if event_type == EventType.METEORA_DAMM_V2_CREATE_POSITION:
         return MeteoraDammV2CreatePositionEvent(metadata=meta, pool=_get_str(data, "pool"))
     if event_type == EventType.METEORA_DAMM_V2_CLOSE_POSITION:

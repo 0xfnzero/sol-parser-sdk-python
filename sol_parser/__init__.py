@@ -148,6 +148,7 @@ from .event_types import (
     # Meteora DAMM v2 events
     MeteoraDammV2SwapEvent,
     MeteoraDammV2CreatePositionEvent,
+    MeteoraDammV2ClaimPositionFeeEvent,
     MeteoraDammV2ClosePositionEvent,
     MeteoraDammV2AddLiquidityEvent,
     MeteoraDammV2RemoveLiquidityEvent,
@@ -433,6 +434,7 @@ __all__ = [
     "MeteoraPoolsPoolCreatedEvent",
     "MeteoraDammV2SwapEvent",
     "MeteoraDammV2CreatePositionEvent",
+    "MeteoraDammV2ClaimPositionFeeEvent",
     "MeteoraDammV2ClosePositionEvent",
     "MeteoraDammV2AddLiquidityEvent",
     "MeteoraDammV2RemoveLiquidityEvent",

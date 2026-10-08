@@ -80,6 +80,17 @@ def _fill_trade_common(
         e.coin_creator_vault_authority = get(18)
 
 
+def fill_boost_buy_accounts(e: PumpSwapBuyEvent, get: AccountGetter) -> None:
+    """Boost has different vault slots and no user ATAs or fee accounts."""
+    for field, index in (
+        ("pool", 0), ("base_mint", 3), ("quote_mint", 4),
+        ("pool_base_token_account", 5), ("pool_quote_token_account", 6),
+        ("base_token_program", 9), ("quote_token_program", 10),
+    ):
+        if _empty(getattr(e, field)):
+            setattr(e, field, get(index))
+
+
 def fill_buy_accounts(e: PumpSwapBuyEvent, get: AccountGetter) -> None:
     _fill_trade_common(e, get)
     if _is_compact_trade(get):

@@ -10,9 +10,11 @@ from sol_parser.grpc_types import EventType
 
 FIXTURE = json.loads((Path(__file__).parent / 'fixtures/pump_upgrade/account_context.json').read_text())
 
-@pytest.mark.parametrize('case', FIXTURE['cases'], ids=lambda c: c['signature'][:12])
+BOOST_FIXTURE = json.loads((Path(__file__).parent / 'fixtures/pump_upgrade/boost_account_context.json').read_text())
+
+@pytest.mark.parametrize('case', FIXTURE['cases'] + BOOST_FIXTURE['cases'], ids=lambda c: c['signature'][:12])
 @pytest.mark.parametrize('inner', [False, True])
-def test_mainnet_log_only_account_context(case, inner):
+def test_log_only_account_context(case, inner):
     tx, meta = pb.Transaction(), pb.TransactionStatusMeta()
     tx.message.account_keys.extend(base58.b58decode(k) for k in case['keys'])
     instructions = []
@@ -34,10 +36,20 @@ def test_mainnet_log_only_account_context(case, inner):
         fill_accounts_with_owned_keys(event, meta, tx, invokes)
         for field, key in expected['expected'].items():
             assert getattr(event.data, field) == key, field
+        if case["signature"].startswith("IDL-"):
+            assert event.data.user == case["keys"][7]
+            for field in ["user_base_token_account", "user_quote_token_account", "protocol_fee_recipient", "coin_creator_vault_ata", "pool_v2"]:
+                assert getattr(event.data, field) in ("", "11111111111111111111111111111111")
+            for field in ["base_mint", "pool_base_token_account", "user_base_token_account", "protocol_fee_recipient"]:
+                setattr(event.data, field, case["keys"][2])
+            fill_accounts_with_owned_keys(event, meta, tx, invokes)
+            for field in ["base_mint", "pool_base_token_account", "user_base_token_account", "protocol_fee_recipient"]:
+                assert getattr(event.data, field) == case["keys"][2]
 
+@pytest.mark.parametrize('fixture', [FIXTURE, BOOST_FIXTURE], ids=['compact', 'boost'])
 @pytest.mark.parametrize('mode', ['duplicate', 'wrong_user', 'wrong_direction', 'truncated', 'foreign_instruction'])
-def test_unmatched_or_ambiguous_context_stays_unresolved(mode):
-    case = FIXTURE['cases'][0]
+def test_unmatched_or_ambiguous_context_stays_unresolved(mode, fixture):
+    case = fixture['cases'][0]
     expected = case['events'][0]
     i = case['instructions'][0]
     tx, meta = pb.Transaction(), pb.TransactionStatusMeta()

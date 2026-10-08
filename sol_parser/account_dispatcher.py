@@ -121,24 +121,27 @@ def fill_accounts_with_owned_keys(
                    bytes([194, 171, 28, 70, 104, 77, 91, 47])) if buy else (bytes([93, 246, 130, 60, 231, 233, 64, 178]),)
         for invocation in invokes.get(base58.b58decode(PUMPSWAP_PROGRAM_ID), []):
             raw = get_instruction_data(meta_pb, transaction_pb, invocation)
-            if raw is None or raw[:8] not in legacy + compact:
+            boost = buy and raw is not None and raw[:8] == bytes([105, 68, 6, 175, 0, 7, 35, 162])
+            if raw is None or (not boost and raw[:8] not in legacy + compact):
                 continue
             oi, ii = invocation
             instruction = (transaction_pb.message.instructions[oi] if ii < 0 else
                            next(g for g in meta_pb.inner_instructions if g.index == oi).instructions[ii])
-            minimum = 17 if raw[:8] in compact else (23 if buy else 21)
+            minimum = 13 if boost else (17 if raw[:8] in compact else (23 if buy else 21))
             if len(instruction.accounts) < minimum:
                 continue
             get = get_instruction_account_getter(meta_pb, transaction_pb, static_keys, w, r, invocation)
             if get is None or get(0) != data.pool:
                 continue
-            if data.user and data.user != "11111111111111111111111111111111" and get(1) != data.user:
+            if data.user and data.user != "11111111111111111111111111111111" and get(7 if boost else 1) != data.user:
                 continue
             if selected is not None:
                 return  # Invocation positions are unavailable; ambiguous context stays blank.
-            selected = get
+            selected = (get, boost)
         if selected is not None:
-            (pumpswap.fill_buy_accounts if buy else pumpswap.fill_sell_accounts)(data, selected)
+            get, boost = selected
+            filler = pumpswap.fill_boost_buy_accounts if boost else (pumpswap.fill_buy_accounts if buy else pumpswap.fill_sell_accounts)
+            filler(data, get)
 
     def fill_create(v2_only=False):
         selected = None

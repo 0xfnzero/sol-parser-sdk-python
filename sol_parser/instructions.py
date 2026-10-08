@@ -1693,7 +1693,8 @@ def parse_raydium_clmm_instruction(
         return legacy_dict_to_dex_event({"RaydiumClmmIncreaseLiquidity": {
             "metadata": meta,
             "pool": _get_account_safe(accounts, 2),
-            "position_nft_mint": _get_account_safe(accounts, 1),
+            "position_nft_mint": "", # Account 1 is an NFT token account, not its mint.
+            "personal_position": _get_account_safe(accounts, 4),
             "user": _get_account_safe(accounts, 0),
             "liquidity": str(liquidity),
             "amount_0": 0, "amount_1": 0,
@@ -1708,7 +1709,8 @@ def parse_raydium_clmm_instruction(
         return legacy_dict_to_dex_event({"RaydiumClmmDecreaseLiquidity": {
             "metadata": meta,
             "pool": _get_account_safe(accounts, 3),
-            "position_nft_mint": _get_account_safe(accounts, 1),
+            "position_nft_mint": "", # Account 1 is an NFT token account, not its mint.
+            "personal_position": _get_account_safe(accounts, 2),
             "user": _get_account_safe(accounts, 0),
             "liquidity": str(liquidity),
             "decrease_amount_0": 0, "decrease_amount_1": 0,

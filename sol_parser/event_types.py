@@ -746,6 +746,7 @@ class RaydiumClmmSwapEvent(DexEventBase):
 class RaydiumClmmIncreaseLiquidityEvent(DexEventBase):
     """Raydium CLMM 增加流动性事件"""
     pool: str = ""
+    personal_position: str = ""
     position_nft_mint: str = ""
     user: str = ""
     liquidity: str = ""
@@ -761,6 +762,7 @@ class RaydiumClmmIncreaseLiquidityEvent(DexEventBase):
 class RaydiumClmmDecreaseLiquidityEvent(DexEventBase):
     """Raydium CLMM 减少流动性事件"""
     pool: str = ""
+    personal_position: str = ""
     position_nft_mint: str = ""
     user: str = ""
     liquidity: str = ""
@@ -2136,6 +2138,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         return RaydiumClmmIncreaseLiquidityEvent(
             metadata=meta,
             pool=_get_str(data, "pool"),
+            personal_position=_get_str(data, "personal_position"),
             position_nft_mint=_get_str(data, "position_nft_mint"),
             user=_get_str(data, "user"),
             liquidity=_get_str(data, "liquidity"),
@@ -2150,6 +2153,7 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         return RaydiumClmmDecreaseLiquidityEvent(
             metadata=meta,
             pool=_get_str(data, "pool"),
+            personal_position=_get_str(data, "personal_position"),
             position_nft_mint=_get_str(data, "position_nft_mint"),
             user=_get_str(data, "user"),
             liquidity=_get_str(data, "liquidity"),

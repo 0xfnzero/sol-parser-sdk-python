@@ -119,6 +119,13 @@ def _dedupe_key(
         return f"PumpSwapLiquidityAdded|{getattr(data, 'pool', '')}|{getattr(data, 'user', '')}"
     if t == EventType.PUMP_SWAP_LIQUIDITY_REMOVED:
         return f"PumpSwapLiquidityRemoved|{getattr(data, 'pool', '')}|{getattr(data, 'user', '')}"
+    if t in (EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY, EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY):
+        position = getattr(data, "personal_position", "")
+        if _empty(position):
+            return None
+        # base_flag may resolve requested liquidity=0 to a nonzero execution.
+        base = (t.value, position)
+        return "|".join(base) + f"|{_next_occurrence(base, occurrence_counts)}"
     if t == EventType.RAYDIUM_CLMM_SWAP:
         pool = getattr(data, "pool_state", "")
         occurrence = _next_occurrence(("RaydiumClmm", pool), occurrence_counts)
@@ -344,6 +351,12 @@ def _merge_grpc_instruction_into_log(log_ev: DexEvent, ix_ev: DexEvent) -> None:
     ):
         for attr in ("user_base_token_account", "user_quote_token_account", "user_pool_token_account"):
             _fill_attr(log, attr, ix)
+    elif log_ev.type in (EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY, EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY) and log_ev.type == ix_ev.type:
+        for attr in ("pool", "user", "personal_position"):
+            _fill_attr(log, attr, ix)
+        limits = ("amount0_max", "amount1_max") if log_ev.type == EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY else ("amount0_min", "amount1_min")
+        for attr in limits:
+            setattr(log, attr, getattr(ix, attr))
     elif log_ev.type == EventType.RAYDIUM_CLMM_SWAP and ix_ev.type == EventType.RAYDIUM_CLMM_SWAP:
         for attr in ("token_account_0", "token_account_1", "sender"):
             _fill_attr(log, attr, ix)
@@ -395,7 +408,7 @@ def dedupe_log_instruction_events(
     # A missing invocation makes ordinal pairing ambiguous. Keep both sources.
     instruction_keys = [_dedupe_key(ev, ix_occurrences) for ev in instruction_events]
     for base, count in log_occurrences.items():
-        if base[0] not in ("PumpFun", "PumpSwapBuy", "PumpSwapSell", "OrcaWhirlpoolLiquidityIncreased", "OrcaWhirlpoolLiquidityDecreased") or count == ix_occurrences.get(base):
+        if base[0] not in ("PumpFun", "PumpSwapBuy", "PumpSwapSell", "OrcaWhirlpoolLiquidityIncreased", "OrcaWhirlpoolLiquidityDecreased", "RaydiumClmmIncreaseLiquidity", "RaydiumClmmDecreaseLiquidity") or count == ix_occurrences.get(base):
             continue
         name = "PumpFunTrade" if base[0] == "PumpFun" else base[0]
         prefix = "|".join(str(part) for part in (name, *base[1:]))

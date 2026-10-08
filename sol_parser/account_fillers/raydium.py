@@ -46,11 +46,15 @@ def fill_clmm_create_pool_accounts(e: RaydiumClmmCreatePoolEvent, get: AccountGe
 def fill_clmm_increase_liquidity_accounts(e: RaydiumClmmIncreaseLiquidityEvent, get: AccountGetter) -> None:
     if _empty(e.user):
         e.user = get(0)
+    if _empty(e.pool):
+        e.pool = get(2)
 
 
 def fill_clmm_decrease_liquidity_accounts(e: RaydiumClmmDecreaseLiquidityEvent, get: AccountGetter) -> None:
     if _empty(e.user):
         e.user = get(0)
+    if _empty(e.pool):
+        e.pool = get(3)
 
 
 def fill_clmm_open_position_accounts(e: RaydiumClmmOpenPositionEvent, get: AccountGetter) -> None:
@@ -122,3 +126,24 @@ def fill_amm_v4_withdraw_accounts(e: RaydiumAmmV4WithdrawEvent, get: AccountGett
         e.amm_authority = get(2)
     if _empty(e.amm_open_orders):
         e.amm_open_orders = get(3)
+
+
+def clmm_position_matches(mint: str, position: str) -> bool:
+    """Match a candidate PDA to the log mint without a crypto dependency.
+
+    This checks seed hashes against an existing instruction address; it does
+    not create or validate a new PDA or prove transaction authorization.
+    """
+    import base58
+    import hashlib
+    if _empty(mint) or _empty(position):
+        return False
+    try:
+        raw_mint = base58.b58decode(mint)
+        target = base58.b58decode(position)
+    except ValueError:
+        return False
+    if len(raw_mint) != 32 or len(target) != 32:
+        return False
+    program = base58.b58decode("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK")
+    return any(hashlib.sha256(b"position" + raw_mint + bytes([bump]) + program + b"ProgramDerivedAddress").digest() == target for bump in range(255, -1, -1))

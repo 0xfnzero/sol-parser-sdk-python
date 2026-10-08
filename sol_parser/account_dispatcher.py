@@ -110,6 +110,24 @@ def fill_accounts_with_owned_keys(
             return
         filler(get)
 
+    def fill_clmm_liquidity(remove=False):
+        position_index = 2 if remove else 4
+        allowed = (bytes([58,127,188,62,79,82,196,96]), bytes([160,38,208,111,104,91,44,1])) if remove else (bytes([133,29,89,223,69,238,176,10]), bytes([46,156,243,118,13,205,251,178]))
+        selected = None
+        for invocation in invokes.get(base58.b58decode(RAYDIUM_CLMM_PROGRAM_ID), []):
+            raw = get_instruction_data(meta_pb, transaction_pb, invocation)
+            if not raw or raw[:8] not in allowed:
+                continue
+            get = get_instruction_account_getter(meta_pb, transaction_pb, static_keys, w, r, invocation)
+            if get is None or not raydium.clmm_position_matches(data.position_nft_mint, get(position_index)):
+                continue
+            data.personal_position = get(position_index)
+            if selected is not None and any(selected(i) != get(i) for i in range(18)):
+                return
+            selected = get
+        if selected is not None:
+            (raydium.fill_clmm_decrease_liquidity_accounts if remove else raydium.fill_clmm_increase_liquidity_accounts)(data, selected)
+
     def fill_pump_trade():
         if not data.mint or data.mint == "11111111111111111111111111111111":
             return
@@ -244,9 +262,9 @@ def fill_accounts_with_owned_keys(
     elif et == EventType.RAYDIUM_CLMM_CLOSE_POSITION:
         run(RAYDIUM_CLMM_PROGRAM_ID, lambda g: raydium.fill_clmm_close_position_accounts(data, g))
     elif et == EventType.RAYDIUM_CLMM_INCREASE_LIQUIDITY:
-        run(RAYDIUM_CLMM_PROGRAM_ID, lambda g: raydium.fill_clmm_increase_liquidity_accounts(data, g))
+        fill_clmm_liquidity()
     elif et == EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY:
-        run(RAYDIUM_CLMM_PROGRAM_ID, lambda g: raydium.fill_clmm_decrease_liquidity_accounts(data, g))
+        fill_clmm_liquidity(True)
     elif et == EventType.RAYDIUM_CPMM_SWAP:
         run(RAYDIUM_CPMM_PROGRAM_ID, lambda g: raydium.fill_cpmm_swap_accounts(data, g))
     elif et == EventType.RAYDIUM_CPMM_DEPOSIT:

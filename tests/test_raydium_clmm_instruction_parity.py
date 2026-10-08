@@ -36,7 +36,7 @@ from sol_parser.parser import parse_log_optimized
 
 
 DEC_LIQ_V2_DISC = bytes([58, 127, 188, 62, 79, 82, 196, 96])
-DEC_LIQ_LOG_DISC = bytes([160, 38, 208, 111, 104, 91, 44, 1])
+DEC_LIQ_LEGACY_DISC = bytes([160, 38, 208, 111, 104, 91, 44, 1])
 CREATE_CUSTOMIZABLE_POOL_DISC = bytes([43, 68, 212, 167, 89, 47, 164, 1])
 OPEN_POSITION_DISC = bytes([135, 128, 47, 77, 15, 152, 240, 49])
 OPEN_POSITION_V2_DISC = bytes([77, 184, 74, 214, 112, 86, 241, 199])
@@ -101,14 +101,15 @@ def test_parse_raydium_clmm_decrease_uses_rust_v2_instruction_discriminator() ->
     assert ev.type == EventType.RAYDIUM_CLMM_DECREASE_LIQUIDITY
     assert isinstance(ev.data, RaydiumClmmDecreaseLiquidityEvent)
     assert ev.data.pool == "account_3"
-    assert ev.data.position_nft_mint == "account_1"
+    assert ev.data.position_nft_mint == ""  # Account 1 is the NFT token account.
+    assert ev.data.personal_position == "account_2"
     assert ev.data.user == "account_0"
     assert ev.data.liquidity == str((1 << 80) + 111)
     assert ev.data.amount0_min == 222
     assert ev.data.amount1_min == 333
 
     assert parse_raydium_clmm_instruction(
-        _liquidity_instruction(DEC_LIQ_LOG_DISC, 111, 222, 333),
+        _liquidity_instruction(DEC_LIQ_LEGACY_DISC, 111, 222, 333),
         _accounts(4),
         "sig",
         1,

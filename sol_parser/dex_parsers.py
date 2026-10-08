@@ -1449,7 +1449,7 @@ def parse_amm_init2_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
 
 
 def parse_cpmm_swap_event_from_data(data: bytes, meta: dict) -> Optional[DexEvent]:
-    if len(data) < 32 + 6 * 8 + 1:
+    if len(data) < 81 or (81 < len(data) < 162) or data[80] > 1 or (len(data) >= 162 and data[161] > 1):
         return None
     o = 0
     pool = _pub(data, o)
@@ -1470,6 +1470,11 @@ def parse_cpmm_swap_event_from_data(data: bytes, meta: dict) -> Optional[DexEven
     return DexEvent(
         type=EventType.RAYDIUM_CPMM_SWAP,
         data=RaydiumCpmmSwapEvent(
+            input_mint=_pub(data,81) if len(data)>=162 else "",
+            output_mint=_pub(data,113) if len(data)>=162 else "",
+            trade_fee=_u64le(data,145) if len(data)>=162 else 0,
+            creator_fee=_u64le(data,153) if len(data)>=162 else 0,
+            creator_fee_on_input=len(data)>=162 and bool(data[161]),
             metadata=_make_meta(meta),
             pool_id=pool,
             input_vault_before=input_vault_before,
@@ -1906,6 +1911,8 @@ DAMM_CREATE_CONFIG = _d(131, 207, 180, 174, 180, 73, 165, 54)
 DAMM_CREATE_DYNAMIC_CONFIG = _d(231, 197, 13, 164, 248, 213, 133, 152)
 # Mainnet upgrade: trading_fee/partner_fee → claiming_fee/compounding_fee in EvtSwap2
 COMPOUNDING_FEE_LAYOUT_ACTIVATION_SLOT = 406_048_752
+DBC_SWAP2 = _d(189, 66, 51, 168, 38, 80, 117, 153)
+DBC_SWAP2_TRANSFER_HOOK = _d(134, 59, 168, 120, 94, 51, 114, 231)
 DBC_SWAP = DAMM_SWAP
 DBC_INIT_POOL = DAMM_INIT_POOL
 DBC_CURVE_COMPLETE = _d(229, 231, 86, 84, 156, 134, 75, 24)
@@ -1956,6 +1963,8 @@ def parse_meteora_damm_from_buf(buf: bytes, meta: dict) -> Optional[DexEvent]:
 
 
 def parse_meteora_dbc_from_discriminator(disc: int, data: bytes, meta: dict) -> Optional[DexEvent]:
+    if disc in (DBC_SWAP2, DBC_SWAP2_TRANSFER_HOOK):
+        return _parse_dbc_swap2(data, meta, disc == DBC_SWAP2_TRANSFER_HOOK)
     if disc == DBC_SWAP:
         return _parse_dbc_swap(data, meta)
     if disc == DBC_INIT_POOL:
@@ -3241,6 +3250,8 @@ def parse_dlmm_event_from_data(d: int, data: bytes, meta: dict) -> Optional[DexE
     if d == DLMM_SWAP2:
         if len(data) < 32 + 32 + 4 + 4 + 1 + 16 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 1:
             return None
+        if any(data[x] > 1 for x in (72, 145, 146)):
+            return None
         o = 0
         pool = _pub(data, o)
         o += 32
@@ -3256,19 +3267,26 @@ def parse_dlmm_event_from_data(d: int, data: bytes, meta: dict) -> Optional[DexE
         o += 16
         ai = _u64le(data, o)
         o += 8
+        amount_left = _u64le(data, o)
         o += 8
         ao = _u64le(data, o)
         o += 8
-        fee = _u64le(data, o)
+        mm_fee = _u64le(data, o)
         o += 8
         pf = _u64le(data, o)
         o += 8
+        limit_order_fee = _u64le(data, o)
         o += 8
         hf = _u64le(data, o)
+        fee = mm_fee + pf + limit_order_fee
+        if fee > (1 << 64) - 1:
+            return None
         return DexEvent(
             type=EventType.METEORA_DLMM_SWAP,
             data=MeteoraDlmmSwapEvent(
                 metadata=_make_meta(meta),
+                event_version=2, amount_left=amount_left, mm_fee=mm_fee, limit_order_fee=limit_order_fee,
+                fees_on_input=bool(data[145]), fees_on_token_x=bool(data[146]),
                 pool=pool,
                 from_addr=frm,
                 start_bin_id=sb,
@@ -3742,7 +3760,7 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
             return EventType.METEORA_DAMM_V2_CREATE_DYNAMIC_CONFIG
         return None
     if program_id == METEORA_DBC_PROGRAM_ID:
-        if disc == DBC_SWAP:
+        if disc in (DBC_SWAP, DBC_SWAP2, DBC_SWAP2_TRANSFER_HOOK):
             return EventType.METEORA_DBC_SWAP
         if disc == DBC_INIT_POOL:
             return EventType.METEORA_DBC_INITIALIZE_POOL
@@ -4232,3 +4250,21 @@ def dispatch_program_data(
     if raydium_launchlab:
         return raydium_launchlab
     return parse_dlmm_from_program_data(buf, meta)
+
+
+def _parse_dbc_swap2(data: bytes, meta: dict, has_transfer_hook: bool) -> Optional[DexEvent]:
+    if len(data) < 179 or data[82] > 2 or data[64] > 1 or data[65] > 1:
+        return None
+    mode = data[82]
+    amount_0, amount_1 = _u64le(data,66), _u64le(data,74)
+    included = _u64le(data,83)
+    return DexEvent(EventType.METEORA_DBC_SWAP, MeteoraDbcSwapEvent(
+        metadata=_make_meta(meta), pool=_pub(data,0), config=_pub(data,32),
+        trade_direction=data[64], has_referral=bool(data[65]), event_version=2,
+        swap_mode=mode, amount_0=amount_0, amount_1=amount_1, has_transfer_hook=has_transfer_hook,
+        amount_in=included, minimum_amount_out=0 if mode == 2 else amount_1,
+        maximum_amount_in=amount_1 if mode == 2 else 0,
+        included_fee_input_amount=included, actual_input_amount=_u64le(data,91),
+        amount_left=_u64le(data,99), output_amount=_u64le(data,107), next_sqrt_price=_u128le_int(data,115),
+        trading_fee=_u64le(data,131), protocol_fee=_u64le(data,139), referral_fee=_u64le(data,147),
+        quote_reserve_amount=_u64le(data,155), migration_threshold=_u64le(data,163), current_timestamp=_u64le(data,171)))

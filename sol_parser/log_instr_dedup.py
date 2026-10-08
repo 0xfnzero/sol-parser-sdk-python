@@ -410,4 +410,21 @@ def dedupe_log_instruction_events(
             continue
         _merge_grpc_instruction_into_log(out[idx], ev)
 
-    return out
+    return _prefer_current_dbc_events(out)
+
+
+def _prefer_current_dbc_events(events: List[DexEvent]) -> List[DexEvent]:
+    groups = {}
+    for i, event in enumerate(events):
+        if event.type != EventType.METEORA_DBC_SWAP: continue
+        e = event.data
+        key = (e.pool,e.config,e.trade_direction,e.amount_in,e.output_amount,e.next_sqrt_price,e.trading_fee,e.protocol_fee,e.referral_fee,e.current_timestamp)
+        group = groups.setdefault(key, ([], []))
+        group[1 if e.event_version == 2 else 0].append(i)
+    removed = set()
+    for old, current in groups.values():
+        if len(old) != len(current): continue
+        for i,j in zip(old,current):
+            events[i] = events[j]
+            removed.add(j)
+    return [e for i,e in enumerate(events) if i not in removed] if removed else events

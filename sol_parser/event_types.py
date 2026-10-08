@@ -945,6 +945,11 @@ class RaydiumCpmmSwapEvent(DexEventBase):
     output_transfer_fee: int = 0
     base_input: bool = False
 
+    input_mint: str = ""
+    output_mint: str = ""
+    trade_fee: int = 0
+    creator_fee: int = 0
+    creator_fee_on_input: bool = False
 
 @dataclass
 class RaydiumCpmmDepositEvent(DexEventBase):
@@ -1062,6 +1067,12 @@ class MeteoraDlmmSwapEvent(DexEventBase):
     fee_bps: str = ""
     host_fee: int = 0
 
+    event_version: int = 0
+    amount_left: int = 0
+    mm_fee: int = 0
+    limit_order_fee: int = 0
+    fees_on_input: bool = False
+    fees_on_token_x: bool = False
 
 @dataclass
 class MeteoraDlmmAddLiquidityEvent(DexEventBase):
@@ -1367,6 +1378,17 @@ class MeteoraDammV2CreateDynamicConfigEvent(DexEventBase):
 
 @dataclass
 class MeteoraDbcSwapEvent(DexEventBase):
+    event_version: int = 0
+    swap_mode: int = 0
+    amount_0: int = 0
+    amount_1: int = 0
+    maximum_amount_in: int = 0
+    included_fee_input_amount: int = 0
+    amount_left: int = 0
+    quote_reserve_amount: int = 0
+    migration_threshold: int = 0
+    has_transfer_hook: bool = False
+
     """Meteora DBC 交易事件"""
     pool: str = ""
     config: str = ""

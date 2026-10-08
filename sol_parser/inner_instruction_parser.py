@@ -80,9 +80,11 @@ from .event_types import (
     MeteoraPoolsRemoveLiquidityEvent,
     MeteoraPoolsSwapEvent,
 )
+from .dex_parsers import parse_meteora_dbc_from_discriminator
 from .grpc_types import EventType, EventTypeFilter
 from .grpc_types import (
     event_type_filter_includes_pump_fees,
+    event_type_filter_includes_meteora_dbc,
     event_type_filter_includes_meteora_damm_v2,
     event_type_filter_includes_meteora_dlmm,
     event_type_filter_includes_meteora_pools,
@@ -96,6 +98,7 @@ from .grpc_types import (
 )
 from .instructions import (
     RAYDIUM_LAUNCHLAB_PROGRAM_ID,
+    METEORA_DBC_PROGRAM_ID,
     METEORA_DAMM_V2_PROGRAM_ID,
     METEORA_DLMM_PROGRAM_ID,
     METEORA_POOLS_PROGRAM_ID,
@@ -422,6 +425,11 @@ def parse_inner_instruction(
         if disc16 == _MP_SET_POOL_FEES:
             return emit(parse_meteora_pools_set_pool_fees_from_data(inner, meta_d))
         return None
+
+    if program_id_b58 == METEORA_DBC_PROGRAM_ID:
+        if filter is not None and not event_type_filter_includes_meteora_dbc(filter): return None
+        if disc16[:8] != bytes((228,69,165,46,81,203,154,29)): return None
+        return emit(parse_meteora_dbc_from_discriminator(int.from_bytes(disc16[8:], "little"), inner, meta_d))
 
     if program_id_b58 == METEORA_DAMM_V2_PROGRAM_ID:
         if filter is not None and not event_type_filter_includes_meteora_damm_v2(filter):

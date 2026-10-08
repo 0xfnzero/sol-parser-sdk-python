@@ -315,8 +315,8 @@ def test_log_shared_discriminators_respect_filter_and_program_scope() -> None:
     assert ev.data.amount_out == 444
 
 
-def test_meteora_dbc_log_events_do_not_enable_instruction_prefilter() -> None:
-    assert not event_type_filter_allows_instruction_parsing([EventType.METEORA_DBC_SWAP])
+def test_meteora_dbc_events_enable_event_cpi_instruction_prefilter() -> None:
+    assert event_type_filter_allows_instruction_parsing([EventType.METEORA_DBC_SWAP])
 
 
 def test_parse_meteora_pools_and_dlmm_outer_instructions_are_routed() -> None:

@@ -1394,6 +1394,23 @@ class MeteoraDammV2WithdrawIneligibleRewardEvent(DexEventBase):
 
 
 @dataclass
+class MeteoraDammV2FundRewardEvent(DexEventBase):
+    """IDL EvtFundReward; amount is net new funding plus carried empty rewards.
+
+    The post rate also includes unexpired rewards from the previous period.
+    """
+    pool: str = ""
+    funder: str = ""
+    mint_reward: str = ""
+    reward_index: int = 0
+    amount: int = 0
+    transfer_fee_excluded_amount_in: int = 0
+    reward_duration_end: int = 0
+    pre_reward_rate: int = 0
+    post_reward_rate: int = 0
+
+
+@dataclass
 class MeteoraDammV2CreateConfigEvent(DexEventBase):
     """Meteora DAMM v2 EvtCreateConfig（含 0.2.4 permission）"""
     base_fee_data: bytes = field(default_factory=lambda: bytes(27))
@@ -1636,6 +1653,7 @@ TypedDexEvent = Union[
     MeteoraDammV2UpdateDelegatePermissionEvent,
     MeteoraDammV2WithdrawDeadLiquidityRewardEvent,
     MeteoraDammV2WithdrawIneligibleRewardEvent,
+    MeteoraDammV2FundRewardEvent,
     MeteoraDammV2CreateConfigEvent,
     MeteoraDammV2CreateDynamicConfigEvent,
     RaydiumLaunchlabTradeEvent,
@@ -2162,6 +2180,19 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             pool=_get_str(data, "pool"),
             reward_mint=_get_str(data, "reward_mint"),
             amount=_get_int(data, "amount"),
+        )
+    if event_type == EventType.METEORA_DAMM_V2_FUND_REWARD:
+        return MeteoraDammV2FundRewardEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            funder=_get_str(data, "funder"),
+            mint_reward=_get_str(data, "mint_reward"),
+            reward_index=_get_int(data, "reward_index"),
+            amount=_get_int(data, "amount"),
+            transfer_fee_excluded_amount_in=_get_int(data, "transfer_fee_excluded_amount_in"),
+            reward_duration_end=_get_int(data, "reward_duration_end"),
+            pre_reward_rate=_get_int(data, "pre_reward_rate"),
+            post_reward_rate=_get_int(data, "post_reward_rate"),
         )
     if event_type == EventType.METEORA_DAMM_V2_CREATE_CONFIG:
         return MeteoraDammV2CreateConfigEvent(

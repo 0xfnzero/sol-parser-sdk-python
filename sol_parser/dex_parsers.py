@@ -53,6 +53,7 @@ from .event_types import (
     MeteoraDammV2UpdateDelegatePermissionEvent,
     MeteoraDammV2WithdrawDeadLiquidityRewardEvent,
     MeteoraDammV2WithdrawIneligibleRewardEvent,
+    MeteoraDammV2FundRewardEvent,
     MeteoraDammV2CreateConfigEvent,
     MeteoraDammV2CreateDynamicConfigEvent,
     MeteoraDbcCurveCompleteEvent, MeteoraDbcInitializePoolEvent, MeteoraDbcSwapEvent,
@@ -1914,6 +1915,7 @@ DAMM_INIT_POOL = _d(228, 50, 246, 85, 203, 66, 134, 37)
 DAMM_UPDATE_DELEGATE_PERMISSION = _d(66, 188, 75, 151, 150, 232, 87, 93)
 DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD = _d(228, 66, 150, 195, 42, 62, 163, 13)
 DAMM_WITHDRAW_INELIGIBLE_REWARD = _d(248, 215, 184, 78, 31, 180, 179, 168)
+DAMM_FUND_REWARD = _d(104, 233, 237, 122, 199, 191, 121, 85)
 DAMM_CREATE_CONFIG = _d(131, 207, 180, 174, 180, 73, 165, 54)
 DAMM_CREATE_DYNAMIC_CONFIG = _d(231, 197, 13, 164, 248, 213, 133, 152)
 # Mainnet upgrade: trading_fee/partner_fee → claiming_fee/compounding_fee in EvtSwap2
@@ -1968,6 +1970,8 @@ def parse_meteora_damm_from_buf(buf: bytes, meta: dict) -> Optional[DexEvent]:
         return _parse_damm_withdraw_dead_liquidity_reward(data, meta)
     if d == DAMM_WITHDRAW_INELIGIBLE_REWARD:
         return _parse_damm_withdraw_ineligible_reward(data, meta)
+    if d == DAMM_FUND_REWARD:
+        return _parse_damm_fund_reward(data, meta)
     if d == DAMM_CREATE_CONFIG:
         return _parse_damm_create_config(data, meta)
     if d == DAMM_CREATE_DYNAMIC_CONFIG:
@@ -2640,6 +2644,26 @@ def _parse_damm_withdraw_ineligible_reward(data: bytes, meta: dict) -> Optional[
             pool=pool,
             reward_mint=reward_mint,
             amount=amount,
+        ),
+    )
+
+
+def _parse_damm_fund_reward(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 153:
+        return None
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_FUND_REWARD,
+        data=MeteoraDammV2FundRewardEvent(
+            metadata=_make_meta(meta),
+            pool=_pub(data, 0),
+            funder=_pub(data, 32),
+            mint_reward=_pub(data, 64),
+            reward_index=data[96],
+            amount=_u64le(data, 97),
+            transfer_fee_excluded_amount_in=_u64le(data, 105),
+            reward_duration_end=_u64le(data, 113),
+            pre_reward_rate=_u128le_int(data, 121),
+            post_reward_rate=_u128le_int(data, 137),
         ),
     )
 
@@ -3646,6 +3670,7 @@ _LOG_DISCRIMINATOR_EVENT_TYPES = {
     DAMM_UPDATE_DELEGATE_PERMISSION: EventType.METEORA_DAMM_V2_UPDATE_DELEGATE_PERMISSION,
     DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD: EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD,
     DAMM_WITHDRAW_INELIGIBLE_REWARD: EventType.METEORA_DAMM_V2_WITHDRAW_INELIGIBLE_REWARD,
+    DAMM_FUND_REWARD: EventType.METEORA_DAMM_V2_FUND_REWARD,
     DAMM_CREATE_CONFIG: EventType.METEORA_DAMM_V2_CREATE_CONFIG,
     DAMM_CREATE_DYNAMIC_CONFIG: EventType.METEORA_DAMM_V2_CREATE_DYNAMIC_CONFIG,
     DISC_RAYDIUM_LAUNCHLAB_POOL_CREATE: EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE,
@@ -3803,6 +3828,8 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
             return EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD
         if disc == DAMM_WITHDRAW_INELIGIBLE_REWARD:
             return EventType.METEORA_DAMM_V2_WITHDRAW_INELIGIBLE_REWARD
+        if disc == DAMM_FUND_REWARD:
+            return EventType.METEORA_DAMM_V2_FUND_REWARD
         if disc == DAMM_CREATE_CONFIG:
             return EventType.METEORA_DAMM_V2_CREATE_CONFIG
         if disc == DAMM_CREATE_DYNAMIC_CONFIG:
@@ -4296,6 +4323,7 @@ def dispatch_program_data(
         DAMM_UPDATE_DELEGATE_PERMISSION,
         DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD,
         DAMM_WITHDRAW_INELIGIBLE_REWARD,
+        DAMM_FUND_REWARD,
         DAMM_CREATE_CONFIG,
         DAMM_CREATE_DYNAMIC_CONFIG,
     ):

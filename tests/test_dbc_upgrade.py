@@ -42,3 +42,17 @@ def test_real_bank_dbc_events(case):
         assert events
         if len(events)==1:assert events[-1].data.output_amount==case['bank_output_balances'][0]
     else:assert not events
+
+REFERRAL=json.loads((Path(__file__).parent/'fixtures/dbc_referral_live_20261008.json').read_text())
+@pytest.mark.parametrize('case',REFERRAL['cases'],ids=lambda c:c['name'])
+def test_referral_events_match_bank_credits(case):
+    events=[]
+    for row in case['events']:
+        e=parse_inner_instruction(base64.b64decode(row['data']),case['program'],{'signature':'simulation','slot':1},None,False)
+        assert e.data.referral_fee==row['expected_referral_fee']
+        assert e.data.has_referral==row['expected_has_referral']
+        events.append(e)
+    current=dedupe_log_instruction_events([],events)
+    assert len(current)==case['dedup_count']
+    if case['error']is None:assert sum(e.data.referral_fee for e in current)==case['referral_bank_credit']
+    else:assert not current

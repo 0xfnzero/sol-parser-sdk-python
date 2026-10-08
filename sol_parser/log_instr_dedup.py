@@ -42,9 +42,14 @@ def _fill_raydium_launchlab_mint_param(log: Any, ix: Any, key: str) -> None:
 
 
 def _ix_lane(ix_name: Any) -> int:
-    if ix_name in ("sell", "sell_v2"):
+    if ix_name in ("sell", "sell_v2", "sell_v3"):
         return 1
-    if ix_name in ("buy_exact_sol_in", "buy_exact_quote_in", "buy_exact_quote_in_v2"):
+    if ix_name in (
+        "buy_exact_sol_in",
+        "buy_exact_quote_in",
+        "buy_exact_quote_in_v2",
+        "buy_exact_quote_in_v3",
+    ):
         return 2
     return 0
 

@@ -22,6 +22,21 @@ def _empty(s: str) -> bool:
 AccountGetter = Callable[[int], str]
 
 
+TOKEN_PROGRAMS = {
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+}
+
+
+def _is_compact_trade(get: AccountGetter) -> bool:
+    # Both legacy and compact layouts have the PumpSwap program at index 16.
+    return (
+        get(16) == "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
+        and get(9) in TOKEN_PROGRAMS
+        and get(10) in TOKEN_PROGRAMS
+    )
+
+
 def _fill_trade_common(
     e: PumpSwapBuyEvent | PumpSwapSellEvent,
     get: AccountGetter,
@@ -42,10 +57,14 @@ def _fill_trade_common(
         e.pool_base_token_account = get(7)
     if _empty(e.pool_quote_token_account):
         e.pool_quote_token_account = get(8)
-    if get(16)=="pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA":
-        for field,index in (("base_token_program",9),("quote_token_program",10),("fee_recipient_quote_token_account",14)):
-            if _empty(getattr(e,field)):
-                setattr(e,field,get(index))
+    if _is_compact_trade(get):
+        for field, index in (
+            ("base_token_program", 9),
+            ("quote_token_program", 10),
+            ("fee_recipient_quote_token_account", 14),
+        ):
+            if _empty(getattr(e, field)):
+                setattr(e, field, get(index))
         return
     if _empty(e.protocol_fee_recipient):
         e.protocol_fee_recipient = get(9)
@@ -63,7 +82,7 @@ def _fill_trade_common(
 
 def fill_buy_accounts(e: PumpSwapBuyEvent, get: AccountGetter) -> None:
     _fill_trade_common(e, get)
-    if get(16)=="pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA":
+    if _is_compact_trade(get):
         return
     a26 = get(26)
     if not _empty(a26):
@@ -89,7 +108,7 @@ def fill_buy_accounts(e: PumpSwapBuyEvent, get: AccountGetter) -> None:
 
 def fill_sell_accounts(e: PumpSwapSellEvent, get: AccountGetter) -> None:
     _fill_trade_common(e, get)
-    if get(16)=="pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA":
+    if _is_compact_trade(get):
         return
     a25 = get(25)
     if not _empty(a25):
@@ -134,9 +153,13 @@ def fill_create_pool_accounts(e: PumpSwapCreatePoolEvent, get: AccountGetter) ->
         e.user_quote_token_account = get(7)
 
 
-def fill_liquidity_added_accounts(_e: PumpSwapLiquidityAddedEvent, _get: AccountGetter) -> None:
+def fill_liquidity_added_accounts(
+    _e: PumpSwapLiquidityAddedEvent, _get: AccountGetter
+) -> None:
     pass
 
 
-def fill_liquidity_removed_accounts(_e: PumpSwapLiquidityRemovedEvent, _get: AccountGetter) -> None:
+def fill_liquidity_removed_accounts(
+    _e: PumpSwapLiquidityRemovedEvent, _get: AccountGetter
+) -> None:
     pass

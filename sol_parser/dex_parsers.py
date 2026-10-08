@@ -44,6 +44,8 @@ from .event_types import (
     MeteoraPoolsAddLiquidityEvent, MeteoraPoolsRemoveLiquidityEvent,
     MeteoraPoolsBootstrapLiquidityEvent, MeteoraPoolsPoolCreatedEvent, MeteoraDammV2SwapEvent,
     MeteoraDammV2ClaimPositionFeeEvent,
+    MeteoraDammV2ClaimRewardEvent,
+    MeteoraDlmmClaimRewardEvent,
     MeteoraDammV2CreatePositionEvent, MeteoraDammV2ClosePositionEvent,
     MeteoraDammV2AddLiquidityEvent, MeteoraDammV2RemoveLiquidityEvent,
     MeteoraDammV2InitializePoolEvent,
@@ -1902,6 +1904,7 @@ DAMM_SWAP = _d(27, 60, 21, 213, 138, 170, 187, 147)
 DAMM_SWAP2 = _d(189, 66, 51, 168, 38, 80, 117, 153)
 DAMM_CREATE_POSITION = _d(156, 15, 119, 198, 29, 181, 221, 55)
 DAMM_CLAIM_POSITION_FEE = _d(198, 182, 183, 52, 97, 12, 49, 56)
+DAMM_CLAIM_REWARD = _d(218, 86, 147, 200, 235, 188, 215, 231)
 DAMM_CLOSE_POSITION = _d(20, 145, 144, 68, 143, 142, 214, 178)
 DAMM_ADD_LIQUIDITY = _d(175, 242, 8, 157, 30, 247, 185, 169)
 DAMM_REMOVE_LIQUIDITY = _d(87, 46, 88, 98, 175, 96, 34, 91)
@@ -1943,6 +1946,8 @@ def parse_meteora_damm_from_buf(buf: bytes, meta: dict) -> Optional[DexEvent]:
         return _parse_damm_swap2(data, meta)
     if d == DAMM_CLAIM_POSITION_FEE:
         return _parse_damm_claim_position_fee(data, meta)
+    if d == DAMM_CLAIM_REWARD:
+        return _parse_damm_claim_reward(data, meta)
     if d == DAMM_CREATE_POSITION:
         return _parse_damm_create_position(data, meta)
     if d == DAMM_CLOSE_POSITION:
@@ -3188,6 +3193,7 @@ DLMM_INIT_POOL = _d(185, 74, 252, 125, 27, 215, 188, 111)
 DLMM_INIT_BIN = _d(11, 18, 155, 194, 33, 115, 238, 119)
 DLMM_CREATE_POS = _d(144, 142, 252, 84, 157, 53, 37, 121)
 DLMM_CLOSE_POS = _d(255, 196, 16, 107, 28, 202, 53, 128)
+DLMM_CLAIM_REWARD2 = _d(27, 143, 244, 33, 80, 43, 110, 146)
 DLMM_CLAIM_FEE = _d(75, 122, 154, 48, 140, 74, 123, 163)
 DLMM_CLAIM_FEE2 = _d(232, 171, 242, 97, 58, 77, 35, 45)
 
@@ -3490,6 +3496,11 @@ def parse_dlmm_event_from_data(d: int, data: bytes, meta: dict) -> Optional[DexE
                 owner=owner,
             ),
         )
+    if d == DLMM_CLAIM_REWARD2:
+        if len(data) < 116:
+            return None
+        return DexEvent(type=EventType.METEORA_DLMM_CLAIM_REWARD,
+            data=MeteoraDlmmClaimRewardEvent(metadata=_make_meta(meta),pool=_pub(data,0),position=_pub(data,32),owner=_pub(data,64),reward_index=_u64le(data,96),total_reward=_u64le(data,104),active_bin_id=int.from_bytes(data[112:116],"little",signed=True)))
     if d in (DLMM_CLAIM_FEE, DLMM_LEGACY_CLAIM_FEE):
         if len(data) < 32 + 32 + 32 + 8 + 8:
             return None
@@ -3606,6 +3617,7 @@ _LOG_DISCRIMINATOR_EVENT_TYPES = {
     DAMM_INIT_POOL: EventType.METEORA_DAMM_V2_INITIALIZE_POOL,
     DAMM_CREATE_POSITION: EventType.METEORA_DAMM_V2_CREATE_POSITION,
     DAMM_CLAIM_POSITION_FEE: EventType.METEORA_DAMM_V2_CLAIM_POSITION_FEE,
+    DAMM_CLAIM_REWARD: EventType.METEORA_DAMM_V2_CLAIM_REWARD,
     DAMM_CLOSE_POSITION: EventType.METEORA_DAMM_V2_CLOSE_POSITION,
     DAMM_UPDATE_DELEGATE_PERMISSION: EventType.METEORA_DAMM_V2_UPDATE_DELEGATE_PERMISSION,
     DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD: EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD,
@@ -3619,6 +3631,7 @@ _LOG_DISCRIMINATOR_EVENT_TYPES = {
     DLMM_CREATE_POS: EventType.METEORA_DLMM_CREATE_POSITION,
     DLMM_CLOSE_POS: EventType.METEORA_DLMM_CLOSE_POSITION,
     DLMM_CLAIM_FEE: EventType.METEORA_DLMM_CLAIM_FEE,
+    DLMM_CLAIM_REWARD2: EventType.METEORA_DLMM_CLAIM_REWARD,
 }
 
 
@@ -3753,6 +3766,8 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
             return EventType.METEORA_DAMM_V2_INITIALIZE_POOL
         if disc == DAMM_CLAIM_POSITION_FEE:
             return EventType.METEORA_DAMM_V2_CLAIM_POSITION_FEE
+        if disc == DAMM_CLAIM_REWARD:
+            return EventType.METEORA_DAMM_V2_CLAIM_REWARD
         if disc == DAMM_CREATE_POSITION:
             return EventType.METEORA_DAMM_V2_CREATE_POSITION
         if disc == DAMM_CLOSE_POSITION:
@@ -3789,6 +3804,8 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
             return EventType.METEORA_DLMM_CREATE_POSITION
         if disc in (DLMM_CLOSE_POS, DLMM_LEGACY_CLOSE_POS):
             return EventType.METEORA_DLMM_CLOSE_POSITION
+        if disc == DLMM_CLAIM_REWARD2:
+            return EventType.METEORA_DLMM_CLAIM_REWARD
         if disc in (DLMM_CLAIM_FEE, DLMM_CLAIM_FEE2, DLMM_LEGACY_CLAIM_FEE):
             return EventType.METEORA_DLMM_CLAIM_FEE
         return None
@@ -4247,6 +4264,7 @@ def dispatch_program_data(
         DAMM_INIT_POOL,
         DAMM_CREATE_POSITION,
         DAMM_CLAIM_POSITION_FEE,
+        DAMM_CLAIM_REWARD,
         DAMM_CLOSE_POSITION,
         DAMM_UPDATE_DELEGATE_PERMISSION,
         DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD,
@@ -4290,5 +4308,22 @@ def _parse_damm_claim_position_fee(data: bytes, meta: dict) -> Optional[DexEvent
             owner=_pub(data, 64),
             fee_a_claimed=int.from_bytes(data[96:104], "little"),
             fee_b_claimed=int.from_bytes(data[104:112], "little"),
+        ),
+    )
+
+
+def _parse_damm_claim_reward(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 137:
+        return None
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_CLAIM_REWARD,
+        data=MeteoraDammV2ClaimRewardEvent(
+            metadata=_make_meta(meta),
+            pool=_pub(data, 0),
+            position=_pub(data, 32),
+            owner=_pub(data, 64),
+            mint_reward=_pub(data, 96),
+            reward_index=data[128],
+            total_reward=int.from_bytes(data[129:137], "little"),
         ),
     )

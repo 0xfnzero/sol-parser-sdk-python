@@ -1255,6 +1255,28 @@ class MeteoraDammV2ClaimPositionFeeEvent(DexEventBase):
 
 
 @dataclass
+class MeteoraDammV2ClaimRewardEvent(DexEventBase):
+    """Official EvtClaimReward gross token quantities (before transfer fees)."""
+    pool: str = ""
+    position: str = ""
+    owner: str = ""
+    mint_reward: str = ""
+    reward_index: int = 0
+    total_reward: int = 0
+
+
+@dataclass
+class MeteoraDlmmClaimRewardEvent(DexEventBase):
+    """Modern ClaimReward2; ignores the accompanying legacy duplicate notification."""
+    pool: str = ""
+    position: str = ""
+    owner: str = ""
+    reward_index: int = 0
+    total_reward: int = 0
+    active_bin_id: int = 0
+
+
+@dataclass
 class MeteoraDammV2CreatePositionEvent(DexEventBase):
     """Meteora DAMM v2 创建仓位事件"""
     pool: str = ""
@@ -1597,6 +1619,8 @@ TypedDexEvent = Union[
     MeteoraDammV2SwapEvent,
     MeteoraDammV2CreatePositionEvent,
     MeteoraDammV2ClaimPositionFeeEvent,
+    MeteoraDammV2ClaimRewardEvent,
+    MeteoraDlmmClaimRewardEvent,
     MeteoraDammV2ClosePositionEvent,
     MeteoraDammV2AddLiquidityEvent,
     MeteoraDammV2RemoveLiquidityEvent,
@@ -2081,6 +2105,26 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             owner=_get_str(data, "owner"),
             fee_a_claimed=_get_int(data, "fee_a_claimed"),
             fee_b_claimed=_get_int(data, "fee_b_claimed"),
+        )
+    if event_type == EventType.METEORA_DAMM_V2_CLAIM_REWARD:
+        return MeteoraDammV2ClaimRewardEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            position=_get_str(data, "position"),
+            owner=_get_str(data, "owner"),
+            mint_reward=_get_str(data, "mint_reward"),
+            reward_index=_get_int(data, "reward_index"),
+            total_reward=_get_int(data, "total_reward"),
+        )
+    if event_type == EventType.METEORA_DLMM_CLAIM_REWARD:
+        return MeteoraDlmmClaimRewardEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            position=_get_str(data, "position"),
+            owner=_get_str(data, "owner"),
+            reward_index=_get_int(data, "reward_index"),
+            total_reward=_get_int(data, "total_reward"),
+            active_bin_id=_get_int(data, "active_bin_id"),
         )
     if event_type == EventType.METEORA_DAMM_V2_CREATE_POSITION:
         return MeteoraDammV2CreatePositionEvent(metadata=meta, pool=_get_str(data, "pool"))

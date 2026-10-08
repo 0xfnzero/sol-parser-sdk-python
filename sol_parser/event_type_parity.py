@@ -75,6 +75,8 @@ RUST_EVENT_TYPES = [
     "MeteoraDammV2InitializePool",
     "MeteoraDammV2CreatePosition",
     "MeteoraDammV2ClaimPositionFee",
+    "MeteoraDammV2ClaimReward",
+    "MeteoraDlmmClaimReward",
     "MeteoraDammV2ClosePosition",
     "MeteoraDammV2UpdateDelegatePermission",
     "MeteoraDammV2WithdrawDeadLiquidityReward",

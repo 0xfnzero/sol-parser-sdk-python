@@ -151,12 +151,12 @@ LAB = {
     _disc([95, 200, 71, 34, 8, 9, 11, 166]): (False, False),
 }
 PUMP = {
-    "b817ee6167c5d33d":(True,False),"c2ab1c46684d5b2f":(True,True),"5df6823ce7e940b2":(False,True),
+    bytes.fromhex("b817ee6167c5d33d"):(True,False),bytes.fromhex("c2ab1c46684d5b2f"):(True,True),bytes.fromhex("5df6823ce7e940b2"):(False,True),
     _disc([198, 46, 21, 82, 180, 217, 232, 112]): (True, True),
     _disc([102, 6, 61, 18, 1, 218, 235, 234]): (True, False),
     _disc([51, 230, 133, 164, 1, 127, 131, 173]): (False, True),
 }
-CURVE_V3={"07051dc4f5176550":(True,False),"e1f7501ed5b38488":(True,True),"1c92de7726c469d5":(False,True)}
+CURVE_V3={bytes.fromhex("07051dc4f5176550"):(True,False),bytes.fromhex("e1f7501ed5b38488"):(True,True),bytes.fromhex("1c92de7726c469d5"):(False,True)}
 CURVE_V2={
     _disc([194,171,28,70,104,77,91,47]):(True,True),
     _disc([184,23,238,97,103,197,211,61]):(True,False),
@@ -219,7 +219,7 @@ def _swap(
         LAB if protocol == "LaunchLab" else PUMP
     ):
         buy, exact = (LAB if protocol == "LaunchLab" else PUMP)[disc]
-        if n < (18 if protocol == "LaunchLab" else (17 if disc in ("b817ee6167c5d33d","c2ab1c46684d5b2f","5df6823ce7e940b2") else 21)):
+        if n < (18 if protocol == "LaunchLab" else (17 if disc in (bytes.fromhex("b817ee6167c5d33d"),bytes.fromhex("c2ab1c46684d5b2f"),bytes.fromhex("5df6823ce7e940b2")) else 21)):
             return None
         source, dest = a(6 if buy else 5), a(5 if buy else 6)
         if protocol == "LaunchLab":

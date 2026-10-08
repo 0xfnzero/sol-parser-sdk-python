@@ -417,3 +417,19 @@ def test_supply_cpi_exact_encoding_and_integer_validation(kind, opcode, program)
     if checked:
         malformed=copy.deepcopy(info);malformed["tokenAmount"]["decimals"]=256
         with pytest.raises(ValueError): _account_setup(program, kind, malformed)
+
+LIFECYCLE=json.loads((Path(__file__).parent/'fixtures/account_lifecycle_20261008.json').read_text())
+@pytest.mark.parametrize('case',LIFECYCLE['cases'],ids=lambda c:c['name'])
+def test_current_bank_account_lifecycle_and_rollback(case):
+    route=analyze_simulation_routes(base64.b64decode(case['wire']),case['response'])
+    assert canonical(route.to_dict())==case['expected']
+    validation=case['validation']
+    if validation['status']=='execution_verified':
+        assert route.succeeded and validation['bank_net_credit']>0
+    else:
+        assert not route.succeeded and route.legs
+        assert all(l.actual_input_amount is None and l.actual_output_amount is None for l in route.legs)
+        error=case['response']['result']['value']['err']
+        assert error['InstructionError'][0]==validation['expected_failure_index']
+        assert error['InstructionError'][1]==({'Custom':11}if validation['scenario']=='close_funded_token_account'else'IllegalOwner')
+        assert case['response']['result']['value']['accounts']==[None]

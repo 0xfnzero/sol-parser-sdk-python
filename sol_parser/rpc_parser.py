@@ -13,6 +13,8 @@ from .grpc_types import EventTypeFilter, EventType, event_type_filter_allows_ins
 from .inner_instruction_parser import parse_inner_instruction
 from .instructions import (
     METEORA_DLMM_PROGRAM_ID,
+    PUMPFUN_PROGRAM_ID,
+    PUMPSWAP_PROGRAM_ID,
     parse_inner_compiled_instruction_if_supported,
     parse_instruction_unified,
 )
@@ -226,7 +228,7 @@ def parse_rpc_transaction(
 
     indexed_instruction_events: List[Tuple[Any, ...]] = []
     from .grpc_instruction_parser import (
-        _is_dlmm_event_cpi,
+        _is_event_cpi,
         detect_pumpfun_create_from_logs,
         merge_instruction_events,
     )
@@ -275,7 +277,7 @@ def parse_rpc_transaction(
                         int(group.index),
                         inner_idx,
                         ix.stack_height,
-                        pid == METEORA_DLMM_PROGRAM_ID and _is_dlmm_event_cpi(ix.data),
+                        pid in (METEORA_DLMM_PROGRAM_ID, PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID) and _is_event_cpi(ix.data),
                         ev,
                     ))
 

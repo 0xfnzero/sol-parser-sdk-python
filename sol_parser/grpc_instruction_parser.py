@@ -17,7 +17,8 @@ from .grpc_types import (
     event_type_filter_allows_instruction_parsing,
 )
 from .inner_instruction_parser import parse_inner_instruction
-from .instructions import parse_inner_compiled_instruction_if_supported, parse_instruction_unified
+from .instructions import (METEORA_DLMM_PROGRAM_ID, PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID,
+                           parse_inner_compiled_instruction_if_supported, parse_instruction_unified)
 from .merger import try_merge_dex_events
 from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
@@ -138,11 +139,17 @@ _DLMM_EVENT_TYPES = {
 }
 
 
-def _is_dlmm_event_cpi(data: bytes) -> bool:
+def _is_event_cpi(data: bytes) -> bool:
     return len(data) >= 16 and (
         data[:8] == bytes((228, 69, 165, 46, 81, 203, 154, 29))
         or data[8:16] == bytes((155, 167, 108, 32, 122, 76, 173, 64))
     )
+
+
+def _is_pump_trade(event):
+    return event.type in (EventType.PUMP_FUN_TRADE, EventType.PUMP_FUN_BUY,
+                         EventType.PUMP_FUN_SELL, EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
+                         EventType.PUMP_SWAP_BUY, EventType.PUMP_SWAP_SELL)
 
 
 def merge_instruction_events(events: List[Tuple[Any, ...]]) -> List[DexEvent]:
@@ -157,18 +164,40 @@ def merge_instruction_events(events: List[Tuple[Any, ...]]) -> List[DexEvent]:
     result: List[DexEvent] = []
     outer_target: Optional[Tuple[int, int]] = None
     dlmm_targets: List[Tuple[int, Optional[int], int]] = []
+    pump_targets = []
 
-    for outer_idx, inner_idx, stack_height, is_dlmm_event_cpi, event in normalized:
+    for outer_idx, inner_idx, stack_height, is_event_cpi, event in normalized:
         if inner_idx is None:
             result.append(event)
             target_idx = len(result) - 1
             outer_target = (outer_idx, target_idx)
+            pump_targets = [[outer_idx, stack_height, target_idx, False]] if _is_pump_trade(event) else []
             dlmm_targets = (
                 [(outer_idx, stack_height, target_idx)] if event.type in _DLMM_EVENT_TYPES else []
             )
             continue
 
-        if is_dlmm_event_cpi:
+        if _is_pump_trade(event) and (is_event_cpi or event.type in (EventType.PUMP_SWAP_BUY, EventType.PUMP_SWAP_SELL) or getattr(event.data, "ix_name", "")):
+            if is_event_cpi:
+                candidate = next((t for t in reversed(pump_targets)
+                                  if t[0] == outer_idx and (t[1] is None or stack_height is None or stack_height == t[1] + 1)), None)
+                if candidate is not None and not candidate[3]:
+                    candidate[3] = True
+                    if try_merge_dex_events(result[candidate[2]], event):
+                        continue
+                result.append(event)
+            else:
+                if stack_height is None:
+                    pump_targets.clear()
+                else:
+                    while pump_targets and (pump_targets[-1][0] != outer_idx or
+                          (pump_targets[-1][1] is not None and pump_targets[-1][1] >= stack_height)):
+                        pump_targets.pop()
+                result.append(event)
+                pump_targets.append([outer_idx, stack_height, len(result) - 1, False])
+            continue
+
+        if is_event_cpi and event.type in _DLMM_EVENT_TYPES:
             for candidate_idx in range(len(dlmm_targets) - 1, -1, -1):
                 target_outer, target_height, target_idx = dlmm_targets[candidate_idx]
                 direct_child = (
@@ -364,7 +393,7 @@ def parse_instructions_enhanced_from_parsed(
                     int(outer_idx),
                     j,
                     int(inner_ix.stack_height) if inner_ix.HasField("stack_height") else None,
-                    pid == METEORA_DLMM_PROGRAM_ID and _is_dlmm_event_cpi(data),
+                    pid in (METEORA_DLMM_PROGRAM_ID, PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID) and _is_event_cpi(data),
                     ev,
                 ))
 

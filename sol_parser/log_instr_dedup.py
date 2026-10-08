@@ -105,9 +105,11 @@ def _dedupe_key(
             f"{getattr(data, 'new_pool', '')}|{getattr(data, 'user', '')}"
         )
     if t == EventType.PUMP_SWAP_BUY:
-        return f"PumpSwapBuy|{getattr(data, 'pool', '')}|{getattr(data, 'user', '')}"
+        base = ("PumpSwapBuy", getattr(data, "pool", ""), getattr(data, "user", ""))
+        return f"{base[0]}|{base[1]}|{base[2]}|{_next_occurrence(base, occurrence_counts)}"
     if t == EventType.PUMP_SWAP_SELL:
-        return f"PumpSwapSell|{getattr(data, 'pool', '')}|{getattr(data, 'user', '')}"
+        base = ("PumpSwapSell", getattr(data, "pool", ""), getattr(data, "user", ""))
+        return f"{base[0]}|{base[1]}|{base[2]}|{_next_occurrence(base, occurrence_counts)}"
     if t == EventType.PUMP_SWAP_CREATE_POOL:
         return (
             f"PumpSwapCreatePool|{getattr(data, 'pool', '')}|"

@@ -64,3 +64,29 @@ def test_repeated_swap_calls_pair_with_their_own_cpi(kind,known):
     def h(n): return n if known else None
     out=merge_instruction_events([(0,None,h(1),False,event(100)),(0,0,h(2),True,event(90,True)),(0,1,h(2),False,event(200)),(0,2,h(3),True,event(180,True))])
     assert [(e.data.user_base_token_account,getattr(e.data,executed)) for e in out]==[('100',90),('200',180)]
+
+@pytest.mark.parametrize('kind', ['pump', 'buy', 'sell'])
+@pytest.mark.parametrize('counts', [(1,2), (2,1)])
+def test_incomplete_trade_sources_are_not_paired(kind, counts):
+    from sol_parser.log_instr_dedup import dedupe_log_instruction_events
+    cls = PumpFunTradeEvent if kind == 'pump' else (PumpSwapBuyEvent if kind == 'buy' else PumpSwapSellEvent)
+    et = EventType.PUMP_FUN_TRADE if kind == 'pump' else (EventType.PUMP_SWAP_BUY if kind == 'buy' else EventType.PUMP_SWAP_SELL)
+    base = {'mint':'mint', 'is_buy':True, 'ix_name':'buy_v3'} if kind == 'pump' else {'pool':'pool'}
+    field = 'bonding_curve' if kind == 'pump' else 'user_base_token_account'
+    logs = [DexEvent(et, cls(user='user', **base)) for _ in range(counts[0])]
+    before = copy.deepcopy(logs)
+    instructions = [DexEvent(et, cls(user='user', **base, **{field:f'account{i}'})) for i in range(counts[1])]
+    out = dedupe_log_instruction_events(logs, instructions)
+    assert len(out) == sum(counts)
+    assert out[:counts[0]] == before
+
+def test_incomplete_source_guard_is_scoped_to_pump_lane():
+    from sol_parser.log_instr_dedup import dedupe_log_instruction_events
+    def event(lane, account=''):
+        return DexEvent(EventType.PUMP_FUN_TRADE, PumpFunTradeEvent(mint='mint',user='user',is_buy=True,ix_name=lane,bonding_curve=account))
+    out = dedupe_log_instruction_events(
+        [event('buy_v3'),event('buy_exact_quote_in_v3')],
+        [event('buy_v3','first'),event('buy_v3','second'),event('buy_exact_quote_in_v3','exact')])
+    assert len(out) == 4
+    assert out[0].data.bonding_curve == ''
+    assert out[1].data.bonding_curve == 'exact'

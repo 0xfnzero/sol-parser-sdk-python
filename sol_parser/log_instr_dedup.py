@@ -389,8 +389,17 @@ def dedupe_log_instruction_events(
             index_by_key[key] = len(out)
         out.append(ev)
 
-    for ev in instruction_events:
-        key = _dedupe_key(ev, ix_occurrences)
+    # A missing invocation makes ordinal pairing ambiguous. Keep both sources.
+    instruction_keys = [_dedupe_key(ev, ix_occurrences) for ev in instruction_events]
+    for base, count in log_occurrences.items():
+        if base[0] not in ("PumpFun", "PumpSwapBuy", "PumpSwapSell") or count == ix_occurrences.get(base):
+            continue
+        name = "PumpFunTrade" if base[0] == "PumpFun" else base[0]
+        prefix = "|".join(str(part) for part in (name, *base[1:]))
+        for occurrence in range(count):
+            index_by_key.pop(f"{prefix}|{occurrence}", None)
+
+    for ev, key in zip(instruction_events, instruction_keys):
         if key is None:
             out.append(ev)
             continue

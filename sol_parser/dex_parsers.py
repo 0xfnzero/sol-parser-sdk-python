@@ -53,6 +53,9 @@ from .event_types import (
     MeteoraDammV2UpdateDelegatePermissionEvent,
     MeteoraDammV2WithdrawDeadLiquidityRewardEvent,
     MeteoraDammV2WithdrawIneligibleRewardEvent,
+    MeteoraDammV2UpdateRewardFunderEvent,
+    MeteoraDammV2UpdateRewardDurationEvent,
+    MeteoraDammV2InitializeRewardEvent,
     MeteoraDammV2FundRewardEvent,
     MeteoraDammV2CreateConfigEvent,
     MeteoraDammV2CreateDynamicConfigEvent,
@@ -1915,6 +1918,9 @@ DAMM_INIT_POOL = _d(228, 50, 246, 85, 203, 66, 134, 37)
 DAMM_UPDATE_DELEGATE_PERMISSION = _d(66, 188, 75, 151, 150, 232, 87, 93)
 DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD = _d(228, 66, 150, 195, 42, 62, 163, 13)
 DAMM_WITHDRAW_INELIGIBLE_REWARD = _d(248, 215, 184, 78, 31, 180, 179, 168)
+DAMM_UPDATE_REWARD_FUNDER = _d(76, 154, 208, 13, 40, 115, 246, 146)
+DAMM_UPDATE_REWARD_DURATION = _d(149, 135, 65, 231, 129, 153, 65, 57)
+DAMM_INITIALIZE_REWARD = _d(129, 91, 188, 3, 246, 52, 185, 249)
 DAMM_FUND_REWARD = _d(104, 233, 237, 122, 199, 191, 121, 85)
 DAMM_CREATE_CONFIG = _d(131, 207, 180, 174, 180, 73, 165, 54)
 DAMM_CREATE_DYNAMIC_CONFIG = _d(231, 197, 13, 164, 248, 213, 133, 152)
@@ -1970,6 +1976,12 @@ def parse_meteora_damm_from_buf(buf: bytes, meta: dict) -> Optional[DexEvent]:
         return _parse_damm_withdraw_dead_liquidity_reward(data, meta)
     if d == DAMM_WITHDRAW_INELIGIBLE_REWARD:
         return _parse_damm_withdraw_ineligible_reward(data, meta)
+    if d == DAMM_UPDATE_REWARD_FUNDER:
+        return _parse_damm_update_reward_funder(data, meta)
+    if d == DAMM_UPDATE_REWARD_DURATION:
+        return _parse_damm_update_reward_duration(data, meta)
+    if d == DAMM_INITIALIZE_REWARD:
+        return _parse_damm_initialize_reward(data, meta)
     if d == DAMM_FUND_REWARD:
         return _parse_damm_fund_reward(data, meta)
     if d == DAMM_CREATE_CONFIG:
@@ -2647,6 +2659,50 @@ def _parse_damm_withdraw_ineligible_reward(data: bytes, meta: dict) -> Optional[
         ),
     )
 
+
+def _parse_damm_update_reward_funder(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 97:
+        return None
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_UPDATE_REWARD_FUNDER,
+        data=MeteoraDammV2UpdateRewardFunderEvent(
+            metadata=_make_meta(meta),
+            pool=_pub(data, 0),
+            reward_index=data[32],
+            old_funder=_pub(data, 33),
+            new_funder=_pub(data, 65),
+        ),
+    )
+
+def _parse_damm_update_reward_duration(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 49:
+        return None
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_UPDATE_REWARD_DURATION,
+        data=MeteoraDammV2UpdateRewardDurationEvent(
+            metadata=_make_meta(meta),
+            pool=_pub(data, 0),
+            reward_index=data[32],
+            old_reward_duration=_u64le(data, 33),
+            new_reward_duration=_u64le(data, 41),
+        ),
+    )
+
+def _parse_damm_initialize_reward(data: bytes, meta: dict) -> Optional[DexEvent]:
+    if len(data) < 137:
+        return None
+    return DexEvent(
+        type=EventType.METEORA_DAMM_V2_INITIALIZE_REWARD,
+        data=MeteoraDammV2InitializeRewardEvent(
+            metadata=_make_meta(meta),
+            pool=_pub(data, 0),
+            reward_mint=_pub(data, 32),
+            funder=_pub(data, 64),
+            creator=_pub(data, 96),
+            reward_index=data[128],
+            reward_duration=_u64le(data, 129),
+        ),
+    )
 
 def _parse_damm_fund_reward(data: bytes, meta: dict) -> Optional[DexEvent]:
     if len(data) < 153:
@@ -3670,6 +3726,9 @@ _LOG_DISCRIMINATOR_EVENT_TYPES = {
     DAMM_UPDATE_DELEGATE_PERMISSION: EventType.METEORA_DAMM_V2_UPDATE_DELEGATE_PERMISSION,
     DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD: EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD,
     DAMM_WITHDRAW_INELIGIBLE_REWARD: EventType.METEORA_DAMM_V2_WITHDRAW_INELIGIBLE_REWARD,
+    DAMM_UPDATE_REWARD_FUNDER: EventType.METEORA_DAMM_V2_UPDATE_REWARD_FUNDER,
+    DAMM_UPDATE_REWARD_DURATION: EventType.METEORA_DAMM_V2_UPDATE_REWARD_DURATION,
+    DAMM_INITIALIZE_REWARD: EventType.METEORA_DAMM_V2_INITIALIZE_REWARD,
     DAMM_FUND_REWARD: EventType.METEORA_DAMM_V2_FUND_REWARD,
     DAMM_CREATE_CONFIG: EventType.METEORA_DAMM_V2_CREATE_CONFIG,
     DAMM_CREATE_DYNAMIC_CONFIG: EventType.METEORA_DAMM_V2_CREATE_DYNAMIC_CONFIG,
@@ -3828,6 +3887,12 @@ def event_type_for_program_discriminator(program_id: Optional[str], disc: int) -
             return EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD
         if disc == DAMM_WITHDRAW_INELIGIBLE_REWARD:
             return EventType.METEORA_DAMM_V2_WITHDRAW_INELIGIBLE_REWARD
+        if disc == DAMM_UPDATE_REWARD_FUNDER:
+            return EventType.METEORA_DAMM_V2_UPDATE_REWARD_FUNDER
+        if disc == DAMM_UPDATE_REWARD_DURATION:
+            return EventType.METEORA_DAMM_V2_UPDATE_REWARD_DURATION
+        if disc == DAMM_INITIALIZE_REWARD:
+            return EventType.METEORA_DAMM_V2_INITIALIZE_REWARD
         if disc == DAMM_FUND_REWARD:
             return EventType.METEORA_DAMM_V2_FUND_REWARD
         if disc == DAMM_CREATE_CONFIG:
@@ -4323,6 +4388,9 @@ def dispatch_program_data(
         DAMM_UPDATE_DELEGATE_PERMISSION,
         DAMM_WITHDRAW_DEAD_LIQUIDITY_REWARD,
         DAMM_WITHDRAW_INELIGIBLE_REWARD,
+        DAMM_UPDATE_REWARD_FUNDER,
+        DAMM_UPDATE_REWARD_DURATION,
+        DAMM_INITIALIZE_REWARD,
         DAMM_FUND_REWARD,
         DAMM_CREATE_CONFIG,
         DAMM_CREATE_DYNAMIC_CONFIG,

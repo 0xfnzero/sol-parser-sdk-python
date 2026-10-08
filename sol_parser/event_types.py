@@ -1394,6 +1394,35 @@ class MeteoraDammV2WithdrawIneligibleRewardEvent(DexEventBase):
 
 
 @dataclass
+class MeteoraDammV2UpdateRewardFunderEvent(DexEventBase):
+    """Official IDL EvtUpdateRewardFunder."""
+    pool: str = ""
+    reward_index: int = 0
+    old_funder: str = ""
+    new_funder: str = ""
+
+
+@dataclass
+class MeteoraDammV2UpdateRewardDurationEvent(DexEventBase):
+    """Official IDL EvtUpdateRewardDuration."""
+    pool: str = ""
+    reward_index: int = 0
+    old_reward_duration: int = 0
+    new_reward_duration: int = 0
+
+
+@dataclass
+class MeteoraDammV2InitializeRewardEvent(DexEventBase):
+    """Official IDL EvtInitializeReward."""
+    pool: str = ""
+    reward_mint: str = ""
+    funder: str = ""
+    creator: str = ""
+    reward_index: int = 0
+    reward_duration: int = 0
+
+
+@dataclass
 class MeteoraDammV2FundRewardEvent(DexEventBase):
     """IDL EvtFundReward; amount is net new funding plus carried empty rewards.
 
@@ -1653,6 +1682,9 @@ TypedDexEvent = Union[
     MeteoraDammV2UpdateDelegatePermissionEvent,
     MeteoraDammV2WithdrawDeadLiquidityRewardEvent,
     MeteoraDammV2WithdrawIneligibleRewardEvent,
+    MeteoraDammV2UpdateRewardFunderEvent,
+    MeteoraDammV2UpdateRewardDurationEvent,
+    MeteoraDammV2InitializeRewardEvent,
     MeteoraDammV2FundRewardEvent,
     MeteoraDammV2CreateConfigEvent,
     MeteoraDammV2CreateDynamicConfigEvent,
@@ -2180,6 +2212,32 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             pool=_get_str(data, "pool"),
             reward_mint=_get_str(data, "reward_mint"),
             amount=_get_int(data, "amount"),
+        )
+    if event_type == EventType.METEORA_DAMM_V2_UPDATE_REWARD_FUNDER:
+        return MeteoraDammV2UpdateRewardFunderEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            reward_index=_get_int(data, "reward_index"),
+            old_funder=_get_str(data, "old_funder"),
+            new_funder=_get_str(data, "new_funder"),
+        )
+    if event_type == EventType.METEORA_DAMM_V2_UPDATE_REWARD_DURATION:
+        return MeteoraDammV2UpdateRewardDurationEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            reward_index=_get_int(data, "reward_index"),
+            old_reward_duration=_get_int(data, "old_reward_duration"),
+            new_reward_duration=_get_int(data, "new_reward_duration"),
+        )
+    if event_type == EventType.METEORA_DAMM_V2_INITIALIZE_REWARD:
+        return MeteoraDammV2InitializeRewardEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            reward_mint=_get_str(data, "reward_mint"),
+            funder=_get_str(data, "funder"),
+            creator=_get_str(data, "creator"),
+            reward_index=_get_int(data, "reward_index"),
+            reward_duration=_get_int(data, "reward_duration"),
         )
     if event_type == EventType.METEORA_DAMM_V2_FUND_REWARD:
         return MeteoraDammV2FundRewardEvent(

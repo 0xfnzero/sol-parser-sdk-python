@@ -80,6 +80,7 @@ RUST_EVENT_TYPES = [
     "MeteoraDammV2ClosePosition",
     "MeteoraDammV2UpdateDelegatePermission",
     "MeteoraDammV2WithdrawDeadLiquidityReward",
+    "MeteoraDammV2WithdrawIneligibleReward",
     "MeteoraDammV2CreateConfig",
     "MeteoraDammV2CreateDynamicConfig",
     "MeteoraDbcSwap",

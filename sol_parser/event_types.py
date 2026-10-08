@@ -1386,6 +1386,14 @@ class MeteoraDammV2WithdrawDeadLiquidityRewardEvent(DexEventBase):
 
 
 @dataclass
+class MeteoraDammV2WithdrawIneligibleRewardEvent(DexEventBase):
+    """Meteora DAMM v2 EvtWithdrawIneligibleReward"""
+    pool: str = ""
+    reward_mint: str = ""
+    amount: int = 0
+
+
+@dataclass
 class MeteoraDammV2CreateConfigEvent(DexEventBase):
     """Meteora DAMM v2 EvtCreateConfig（含 0.2.4 permission）"""
     base_fee_data: bytes = field(default_factory=lambda: bytes(27))
@@ -1627,6 +1635,7 @@ TypedDexEvent = Union[
     MeteoraDammV2InitializePoolEvent,
     MeteoraDammV2UpdateDelegatePermissionEvent,
     MeteoraDammV2WithdrawDeadLiquidityRewardEvent,
+    MeteoraDammV2WithdrawIneligibleRewardEvent,
     MeteoraDammV2CreateConfigEvent,
     MeteoraDammV2CreateDynamicConfigEvent,
     RaydiumLaunchlabTradeEvent,
@@ -2142,6 +2151,13 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         )
     if event_type == EventType.METEORA_DAMM_V2_WITHDRAW_DEAD_LIQUIDITY_REWARD:
         return MeteoraDammV2WithdrawDeadLiquidityRewardEvent(
+            metadata=meta,
+            pool=_get_str(data, "pool"),
+            reward_mint=_get_str(data, "reward_mint"),
+            amount=_get_int(data, "amount"),
+        )
+    if event_type == EventType.METEORA_DAMM_V2_WITHDRAW_INELIGIBLE_REWARD:
+        return MeteoraDammV2WithdrawIneligibleRewardEvent(
             metadata=meta,
             pool=_get_str(data, "pool"),
             reward_mint=_get_str(data, "reward_mint"),

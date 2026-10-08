@@ -110,6 +110,43 @@ def fill_accounts_with_owned_keys(
             return
         filler(get)
 
+    def fill_pump_trade():
+        if not data.mint or data.mint == "11111111111111111111111111111111":
+            return
+        layouts = {
+            bytes([102,6,61,18,1,218,235,234]): (2,6,True,16),
+            bytes([56,252,116,8,158,223,205,95]): (2,6,True,16),
+            bytes([51,230,133,164,1,127,131,173]): (2,6,False,14),
+            bytes([184,23,238,97,103,197,211,61]): (1,13,True,27),
+            bytes([194,171,28,70,104,77,91,47]): (1,13,True,27),
+            bytes([93,246,130,60,231,233,64,178]): (1,13,False,26),
+            bytes([7,5,29,196,245,23,101,80]): (1,8,True,17),
+            bytes([225,247,80,30,213,179,132,136]): (1,8,True,17),
+            bytes([28,146,222,119,38,196,105,213]): (1,8,False,17),
+        }
+        selected = None
+        for invocation in invokes.get(base58.b58decode(PUMPFUN_PROGRAM_ID), []):
+            raw = get_instruction_data(meta_pb, transaction_pb, invocation)
+            layout = layouts.get(raw[:8]) if raw else None
+            if layout is None:
+                continue
+            mint_index, user_index, buy, minimum = layout
+            oi, ii = invocation
+            instruction = (transaction_pb.message.instructions[oi] if ii < 0 else
+                           next(g for g in meta_pb.inner_instructions if g.index == oi).instructions[ii])
+            if buy != data.is_buy or len(instruction.accounts) < minimum:
+                continue
+            get = get_instruction_account_getter(meta_pb, transaction_pb, static_keys, w, r, invocation)
+            if get is None or get(mint_index) != data.mint:
+                continue
+            if data.user and data.user != "11111111111111111111111111111111" and get(user_index) != data.user:
+                continue
+            if selected is not None:
+                return
+            selected = get
+        if selected is not None:
+            pumpfun.fill_trade_accounts(data, selected)
+
     def fill_swap(buy):
         # Match the event's own pool, user and direction, not the largest invoke.
         if not data.pool or data.pool == "11111111111111111111111111111111":
@@ -177,7 +214,7 @@ def fill_accounts_with_owned_keys(
         EventType.PUMP_FUN_SELL,
         EventType.PUMP_FUN_BUY_EXACT_SOL_IN,
     ):
-        run(PUMPFUN_PROGRAM_ID, lambda g: pumpfun.fill_trade_accounts(data, g))
+        fill_pump_trade()
     elif et == EventType.PUMP_FUN_CREATE:
         fill_create()
     elif et == EventType.PUMP_FUN_CREATE_V2:

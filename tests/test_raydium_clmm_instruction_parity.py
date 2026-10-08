@@ -223,8 +223,8 @@ def test_parse_raydium_cpmm_normal_instruction_uses_rust_accounts_and_defaults()
     )
     assert deposit is not None
     assert deposit.type == EventType.RAYDIUM_CPMM_DEPOSIT
-    assert deposit.data.pool == "account_0"
-    assert deposit.data.user == "account_1"
+    assert deposit.data.pool == "account_2"
+    assert deposit.data.user == "account_0"
     assert deposit.data.lp_token_amount == 111
     assert deposit.data.token0_amount == 222
     assert deposit.data.token1_amount == 333
@@ -240,8 +240,8 @@ def test_parse_raydium_cpmm_normal_instruction_uses_rust_accounts_and_defaults()
     )
     assert withdraw is not None
     assert withdraw.type == EventType.RAYDIUM_CPMM_WITHDRAW
-    assert withdraw.data.pool == "account_0"
-    assert withdraw.data.user == "account_1"
+    assert withdraw.data.pool == "account_2"
+    assert withdraw.data.user == "account_0"
     assert withdraw.data.lp_token_amount == 444
     assert withdraw.data.token0_amount == 555
     assert withdraw.data.token1_amount == 666

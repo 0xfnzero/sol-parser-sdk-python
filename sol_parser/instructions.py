@@ -1820,13 +1820,14 @@ def parse_raydium_cpmm_instruction(
             "init_amount0": struct.unpack_from("<Q", data, 8)[0],
             "init_amount1": struct.unpack_from("<Q", data, 16)[0],
         }})
+    # LP token amounts below are deposit maxima / withdrawal minima, not executed fills.
     if discriminator == _DISC_CPMM_DEP:
         if len(data) < 8 + 8 + 8 + 8:
             return None
         return legacy_dict_to_dex_event({"RaydiumCpmmDeposit": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 0),
-            "user": _get_account_safe(accounts, 1),
+            "pool": _get_account_safe(accounts, 2),
+            "user": _get_account_safe(accounts, 0),
             "lp_token_amount": struct.unpack_from("<Q", data, 8)[0],
             "token0_amount": struct.unpack_from("<Q", data, 16)[0],
             "token1_amount": struct.unpack_from("<Q", data, 24)[0],
@@ -1836,8 +1837,8 @@ def parse_raydium_cpmm_instruction(
             return None
         return legacy_dict_to_dex_event({"RaydiumCpmmWithdraw": {
             "metadata": meta,
-            "pool": _get_account_safe(accounts, 0),
-            "user": _get_account_safe(accounts, 1),
+            "pool": _get_account_safe(accounts, 2),
+            "user": _get_account_safe(accounts, 0),
             "lp_token_amount": struct.unpack_from("<Q", data, 8)[0],
             "token0_amount": struct.unpack_from("<Q", data, 16)[0],
             "token1_amount": struct.unpack_from("<Q", data, 24)[0],

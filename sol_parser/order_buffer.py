@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import logging
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Tuple
 
@@ -34,11 +35,14 @@ class OrderDispatcher:
         self.micro_batch_s = max(0.000001, float(config.micro_batch_us or 100) / 1_000_000.0)
         self.slots: Dict[int, List[_Batch]] = {}
         self.watermarks: Dict[int, int] = {}
+        self.pending_indexes: set[int] = set()
         self.micro_batch: List[_Batch] = []
         self.micro_start = 0.0
         self.last_flush = time.monotonic()
         self.current_slot = 0
         self.seq = 0
+        self.ordered_watermark: Tuple[int, int] | None = None
+        self.ordered_late_transactions = 0
 
     @property
     def needs_timer(self) -> bool:
@@ -88,6 +92,16 @@ class OrderDispatcher:
         self._flush_micro_batch(emit)
 
     def _push_ordered(self, batch: _Batch, emit: Callable[[DexEvent], None]) -> None:
+        if batch.slot < self.current_slot or (self.ordered_watermark is not None and
+                (batch.slot, batch.tx_index) <= self.ordered_watermark):
+            self.ordered_late_transactions += 1
+            dropped = self.ordered_late_transactions
+            if dropped <= 10 or dropped & (dropped - 1) == 0:
+                logging.getLogger(__name__).warning(
+                    "Ordered continuity break: dropped late transaction (%s,%s); total=%s",
+                    batch.slot, batch.tx_index, dropped
+                )
+            return
         if batch.slot > self.current_slot and self.current_slot > 0:
             self._flush_before(batch.slot, emit)
         if batch.slot > self.current_slot:
@@ -95,13 +109,16 @@ class OrderDispatcher:
         self.slots.setdefault(batch.slot, []).append(batch)
 
     def _push_streaming(self, batch: _Batch, emit: Callable[[DexEvent], None]) -> None:
-        if batch.slot > self.current_slot and self.current_slot > 0:
+        if batch.slot < self.current_slot:
+            return
+        if batch.slot > self.current_slot:
             self._flush_before(batch.slot, emit)
             for slot in list(self.watermarks):
                 if slot < batch.slot:
                     self.watermarks.pop(slot, None)
         if batch.slot > self.current_slot:
             self.current_slot = batch.slot
+            self.pending_indexes.clear()
 
         expected = self.watermarks.get(batch.slot, 0)
         if batch.tx_index == expected:
@@ -109,19 +126,20 @@ class OrderDispatcher:
             watermark = expected + 1
             buffered = self.slots.get(batch.slot, [])
             buffered.sort(key=_batch_key)
-            while True:
-                pos = next((i for i, item in enumerate(buffered) if item.tx_index == watermark), -1)
-                if pos < 0:
-                    break
-                self._emit_batch(buffered.pop(pos), emit)
+            released = 0
+            while released < len(buffered) and buffered[released].tx_index == watermark:
+                self._emit_batch(buffered[released], emit)
+                self.pending_indexes.discard(watermark)
+                released += 1
                 watermark += 1
-            if buffered:
-                self.slots[batch.slot] = buffered
+            if released < len(buffered):
+                self.slots[batch.slot] = buffered[released:]
             else:
                 self.slots.pop(batch.slot, None)
             self.watermarks[batch.slot] = watermark
             self.last_flush = time.monotonic()
-        elif batch.tx_index > expected:
+        elif batch.tx_index > expected and batch.tx_index not in self.pending_indexes:
+            self.pending_indexes.add(batch.tx_index)
             self.slots.setdefault(batch.slot, []).append(batch)
 
     def _push_micro_batch(self, batch: _Batch, emit: Callable[[DexEvent], None]) -> None:
@@ -147,8 +165,14 @@ class OrderDispatcher:
             batches.sort(key=_batch_key)
             for batch in batches:
                 self._emit_batch(batch, emit)
+            if self.mode == OrderMode.STREAMING_ORDERED and batches:
+                self.watermarks[s] = max(self.watermarks.get(s, 0), batches[-1].tx_index + 1)
         self.slots.clear()
-        self.watermarks.clear()
+        self.pending_indexes.clear()
+        if self.mode == OrderMode.STREAMING_ORDERED:
+            self.watermarks = {s: index for s, index in self.watermarks.items() if s == self.current_slot}
+        else:
+            self.watermarks.clear()
         self.last_flush = time.monotonic()
 
     def _flush_micro_batch(self, emit: Callable[[DexEvent], None]) -> None:
@@ -161,8 +185,9 @@ class OrderDispatcher:
         self.micro_start = 0.0
         self.last_flush = time.monotonic()
 
-    @staticmethod
-    def _emit_batch(batch: _Batch, emit: Callable[[DexEvent], None]) -> None:
+    def _emit_batch(self, batch: _Batch, emit: Callable[[DexEvent], None]) -> None:
+        if self.mode == OrderMode.ORDERED:
+            self.ordered_watermark = (batch.slot, batch.tx_index)
         for event in batch.events:
             emit(event)
 

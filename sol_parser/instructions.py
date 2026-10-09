@@ -1742,7 +1742,7 @@ def parse_raydium_clmm_instruction(
             "open_time": open_time,
         }})
     if discriminator == _DISC_CLMM_CREATE_CUSTOMIZABLE_POOL:
-        if len(data) < 8 + 16:
+        if len(data) != 26 or len(accounts) < 13 or data[24] > 2 or data[25] > 1:
             return None
         sqrt_price_x64 = int.from_bytes(data[8:24], "little")
         return legacy_dict_to_dex_event({"RaydiumClmmCreatePool": {

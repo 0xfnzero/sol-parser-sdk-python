@@ -122,28 +122,22 @@ def decode_wire_transaction(
             raise ValueError("Signature count does not match header")
     if (
         header[0] > len(keys)
-        or header[1] > header[0]
+        or header[1] >= header[0]
         or header[2] > len(keys) - header[0]
     ):
         raise ValueError("Invalid message header")
     if version == 1:
-        if header[1] >= header[0]:
-            raise ValueError("V1 requires a writable fee payer")
         if len(set(keys)) != len(keys):
             raise ValueError("Duplicate V1 accounts")
-        for ix in instructions:
-            if (
-                ix["programIdIndex"] == 0
-                or ix["programIdIndex"] >= len(keys)
-                or any(i >= len(keys) for i in ix["accounts"])
-            ):
-                raise ValueError("Invalid V1 instruction index")
-    account_count = len(keys) + sum(
-        len(l["writableIndexes"]) + len(l["readonlyIndexes"]) for l in lookups
-    )
+    account_count = len(keys)
+    for lookup in lookups:
+        count = len(lookup["writableIndexes"]) + len(lookup["readonlyIndexes"])
+        if not count:
+            raise ValueError("Empty address table lookup")
+        account_count += count
     if account_count > 256:
         raise ValueError("Too many resolved account keys")
-    if any(ix["programIdIndex"] >= len(keys) or any(i >= account_count for i in ix["accounts"]) for ix in instructions):
+    if any(ix["programIdIndex"] == 0 or ix["programIdIndex"] >= len(keys) or any(i >= account_count for i in ix["accounts"]) for ix in instructions):
         raise ValueError("Invalid instruction index")
     if require_complete and r.pos != len(data):
         raise ValueError("Trailing transaction bytes")

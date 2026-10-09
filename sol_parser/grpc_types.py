@@ -8,6 +8,10 @@ from dataclasses import dataclass, field
 
 
 class OrderMode(str, Enum):
+    """Ordered flushes on a newer slot/timeout; late data at/before emitted
+    progress or from closed slots is dropped with a continuity-break warning.
+    Completeness depends on the upstream stream.
+    """
     """gRPC 订阅顺序模式"""
     UNORDERED = "Unordered"
     ORDERED = "Ordered"

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+import base64
+import binascii
 from typing import Any, Dict, List, Optional, Tuple
 
 import base58
@@ -111,9 +113,40 @@ def enrich_dex_events_with_subscribe_tx_info(
 
 
 def detect_pumpfun_create_from_logs(log_messages: List[str]) -> bool:
-    """对齐 Rust ``detect_pumpfun_create``：Program data 前缀匹配 create 日志。"""
-    needle = "Program data: G3KpTd7rY3Y"
-    return any(needle in log for log in log_messages)
+    """Detect decoded Pump Create logs in their runtime invocation scope, without output filters."""
+    from .parser import parse_invoke_info, parse_program_complete_info, parse_log_optimized_with_program_id
+
+    stack: List[str] = []
+    for log in log_messages:
+        invoke = parse_invoke_info(log)
+        if invoke is not None:
+            program_id, depth = invoke
+            if log == f"Program {program_id} invoke [{depth}]":
+                del stack[depth - 1:]
+                stack.append(program_id)
+                continue
+        # Discriminator base64 ends mid-byte; the next character depends on payload bits.
+        if stack and stack[-1] == PUMPFUN_PROGRAM_ID and log.startswith("Program data: G3KpTd7rY3"):
+            encoded = log[len("Program data: "):]
+            try:
+                decoded = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error):
+                decoded = None
+            if decoded is not None and base64.b64encode(decoded).decode("ascii") == encoded:
+                event = parse_log_optimized_with_program_id(
+                    log, "", 0, grpc_recv_us=0, program_id=PUMPFUN_PROGRAM_ID
+                )
+                if event is not None and event.type in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
+                    return True
+        completed = parse_program_complete_info(log)
+        if completed is not None and (
+            log == f"Program {completed} success" or log.startswith(f"Program {completed} failed: ")
+        ):
+            for index in range(len(stack) - 1, -1, -1):
+                if stack[index] == completed:
+                    del stack[index:]
+                    break
+    return False
 
 
 def should_parse_instructions(filter: Optional[EventTypeFilter]) -> bool:

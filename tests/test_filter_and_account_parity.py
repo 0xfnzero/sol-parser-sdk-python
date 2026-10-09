@@ -1,4 +1,5 @@
 import base64
+import pytest
 import struct
 
 import base58
@@ -180,6 +181,15 @@ def _pumpfun_trade_payload(ix_name: str) -> bytes:
     buf += struct.pack("<q", 150)
     _push_string(buf, ix_name)
     return bytes(buf)
+
+
+def _pumpfun_create_log_for_detection(name="x"):
+    data = bytes([27, 114, 169, 77, 222, 235, 99, 118])
+    for value in (name, "SDK", "https://example.invalid"):
+        encoded = value.encode()
+        data += struct.pack("<I", len(encoded)) + encoded
+    data += bytes([70]) * 32 + bytes([80]) * 32 + bytes([90]) * 32
+    return "Program data: " + base64.b64encode(data).decode()
 
 
 def _pumpfun_trade_log(ix_name: str) -> str:
@@ -1128,7 +1138,7 @@ def test_rpc_parser_marks_pumpfun_log_trade_created_buy_from_whole_transaction()
             log_messages=[
                 f"Program {PUMPFUN_PROGRAM_ID} invoke [1]",
                 _pumpfun_trade_log("buy"),
-                "Program data: G3KpTd7rY3Y",
+                _pumpfun_create_log_for_detection(),
                 f"Program {PUMPFUN_PROGRAM_ID} success",
             ],
             inner_instructions=[],
@@ -1150,7 +1160,7 @@ def test_rpc_parser_marks_pumpfun_log_trade_created_buy_from_whole_transaction()
         transaction_index=7,
     )
 
-    events, err = rpc_parser.parse_rpc_transaction(tx, "sig", None, 99)
+    events, err = rpc_parser.parse_rpc_transaction(tx, "sig", IncludeOnlyFilter([EventType.PUMP_FUN_BUY]), 99)
 
     assert err is None
     assert len(events) == 1
@@ -1171,3 +1181,34 @@ def test_meteora_damm_initialize_pool_account_filler_matches_rust_indexes():
     assert ev.position == "account_7"
     assert ev.token_a_mint == "account_8"
     assert ev.token_b_mint == "account_9"
+
+
+_FOREIGN_CREATE_SCOPE = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+def _create_scope(program, line):
+    return [f"Program {program} invoke [1]", line, f"Program {program} success"]
+
+@pytest.mark.parametrize("name,prefix,expected", [
+    ("Memo text", _create_scope(_FOREIGN_CREATE_SCOPE, 'Program log: Memo: "Program data: G3KpTd7rY3Y"'), False),
+    ("foreign data", _create_scope(_FOREIGN_CREATE_SCOPE, _pumpfun_create_log_for_detection()), False),
+    ("unscoped data", [_pumpfun_create_log_for_detection()], False),
+    ("truncated", _create_scope(PUMPFUN_PROGRAM_ID, "Program data: G3KpTd7rY3Y"), False),
+    ("malformed base64", _create_scope(PUMPFUN_PROGRAM_ID, _pumpfun_create_log_for_detection() + "!"), False),
+    ("nested Pump", [f"Program {_FOREIGN_CREATE_SCOPE} invoke [1]", f"Program {PUMPFUN_PROGRAM_ID} invoke [2]", _pumpfun_create_log_for_detection(), f"Program {PUMPFUN_PROGRAM_ID} success", f"Program {_FOREIGN_CREATE_SCOPE} success"], True),
+    ("Pump event CPI", [f"Program {PUMPFUN_PROGRAM_ID} invoke [1]", f"Program {PUMPFUN_PROGRAM_ID} invoke [2]", _pumpfun_create_log_for_detection(), f"Program {PUMPFUN_PROGRAM_ID} success", f"Program {PUMPFUN_PROGRAM_ID} success"], True),
+    ("foreign child", [f"Program {PUMPFUN_PROGRAM_ID} invoke [1]", f"Program {_FOREIGN_CREATE_SCOPE} invoke [2]", _pumpfun_create_log_for_detection(), f"Program {_FOREIGN_CREATE_SCOPE} success", f"Program {PUMPFUN_PROGRAM_ID} success"], False),
+    ("scope after failed child", [f"Program {PUMPFUN_PROGRAM_ID} invoke [1]", f"Program {_FOREIGN_CREATE_SCOPE} invoke [2]", _pumpfun_create_log_for_detection(), f"Program {_FOREIGN_CREATE_SCOPE} failed: custom program error: 1", _pumpfun_create_log_for_detection(), f"Program {PUMPFUN_PROGRAM_ID} success"], True),
+    ("failed scope removed", [f"Program {PUMPFUN_PROGRAM_ID} invoke [1]", f"Program {PUMPFUN_PROGRAM_ID} failed: custom program error: 1", _pumpfun_create_log_for_detection()], False),
+    ("quoted invoke", [f"Program log: Program {PUMPFUN_PROGRAM_ID} invoke [1]", _pumpfun_create_log_for_detection()], False),
+    *[(f"name length {length}", _create_scope(PUMPFUN_PROGRAM_ID, _pumpfun_create_log_for_detection("x" * length)), True) for length in range(4)],
+])
+def test_create_detection_scope_and_trade_only_output(name, prefix, expected):
+    from sol_parser.grpc_instruction_parser import detect_pumpfun_create_from_logs
+    assert detect_pumpfun_create_from_logs(prefix) is expected
+    logs = prefix + _create_scope(PUMPFUN_PROGRAM_ID, _pumpfun_trade_log("buy"))
+    tx = rpc_parser.RpcTransactionResponse(
+        7, None, rpc_parser.RpcTransactionMeta(0, [], [], logs, [], [], [], None, None),
+        rpc_parser.RpcTransaction([], rpc_parser.RpcMessage([], None, "", [], [])),
+    )
+    events, error = rpc_parser.parse_rpc_transaction(tx, "sig", IncludeOnlyFilter([EventType.PUMP_FUN_BUY]), 0)
+    assert error is None and len(events) == 1
+    assert events[0].data.is_created_buy is expected

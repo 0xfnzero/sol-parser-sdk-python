@@ -81,7 +81,7 @@ def _open_position_instruction(disc: bytes, lower: int, upper: int, liquidity: i
 
 
 def _create_customizable_pool_instruction(sqrt_price_x64: int) -> bytes:
-    data = bytearray(8 + 16)
+    data = bytearray(8 + 18)
     data[:8] = CREATE_CUSTOMIZABLE_POOL_DISC
     data[8:24] = sqrt_price_x64.to_bytes(16, "little")
     return bytes(data)
@@ -193,7 +193,7 @@ def test_parse_raydium_clmm_create_customizable_pool_instruction() -> None:
     sqrt_price_x64 = (1 << 80) + 999
     ev = parse_raydium_clmm_instruction(
         _create_customizable_pool_instruction(sqrt_price_x64),
-        _accounts(7),
+        _accounts(13),
         "sig",
         1,
         0,
@@ -421,3 +421,16 @@ def test_non_pump_account_event_names_are_exposed_but_not_instruction_prefilter(
             EventType.ACCOUNT_ORCA_WHIRLPOOL,
         ]
     )
+
+
+def test_customizable_pool_rejects_invalid_idl_boundaries() -> None:
+    valid = bytearray(_create_customizable_pool_instruction(123))
+    parse = lambda data, n=13: parse_raydium_clmm_instruction(bytes(data), _accounts(n), "sig", 1, 0, None, 10)
+    for fee in range(3):
+        for dynamic in range(2):
+            valid[24:26] = bytes([fee, dynamic])
+            assert parse(valid) is not None
+    for data in (valid[:24], valid[:25], valid + b"\0", valid[:24] + b"\3\0", valid[:24] + b"\0\2"):
+        assert parse(data) is None
+    assert parse(valid, 12) is None
+    assert parse(valid) is not None

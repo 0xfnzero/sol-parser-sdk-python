@@ -153,6 +153,9 @@ def _events_from_versioned_tx_wire(
 
     try:
         vt = VersionedTransaction.from_bytes(raw)
+        # Decoding does not validate header/account/program indexes. Loaded ALT
+        # addresses may remain unresolved, but the wire structure must be valid.
+        vt.sanitize()
     except Exception:
         return []
     if not vt.signatures:
@@ -164,7 +167,7 @@ def _events_from_versioned_tx_wire(
     if isinstance(msg, MessageV0):
         keys = [str(k) for k in msg.account_keys]
         ixs: List[tuple] = []
-        for cix in msg.compiled_instructions:
+        for cix in msg.instructions:
             pid = keys[cix.program_id_index] if cix.program_id_index < len(keys) else None
             ixs.append((pid, bytes(cix.data), _ix_accounts_bytes(cix.accounts)))
     elif isinstance(msg, LegacyMessage):

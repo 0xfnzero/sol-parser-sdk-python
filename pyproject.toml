@@ -1,6 +1,6 @@
 [project]
 name = "sol-parser-sdk-python"
-version = "0.5.10"
+version = "0.5.11"
 description = "Solana DEX program log parsing (pure Python, API aligned with sol-parser-sdk)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,6 +16,7 @@ shredstream = [
     "solders>=0.21.0",
 ]
 dev = [
+    "cryptography>=44.0", # Independent Ed25519 verification in signed wire regressions.
     "pytest>=8.0",
     "pytest-asyncio>=0.21",
     "requests>=2.31",

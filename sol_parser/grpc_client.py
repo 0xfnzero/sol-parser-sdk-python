@@ -647,7 +647,8 @@ class YellowstoneGrpc:
         event_type_filter: Optional[Any],
         request_queue: asyncio.Queue,
     ) -> None:
-        delay = 1.0
+        base_delay = max(0.001, float(self.config.retry_delay_ms) / 1000.0)
+        delay = base_delay
         from .order_buffer import OrderDispatcher
 
         order_dispatcher = OrderDispatcher(self.config)
@@ -689,6 +690,7 @@ class YellowstoneGrpc:
                         if cancel_event.is_set():
                             break
                         if isinstance(queue, DexEventQueue): queue.transition("connected")
+                        delay = base_delay
                         if pb_update.HasField("ping"):
                             await outgoing.put(
                                 geyser_pb2.SubscribeRequest(
@@ -727,7 +729,7 @@ class YellowstoneGrpc:
                             )
                     if not cancel_event.is_set():
                         raise ConnectionError("Yellowstone DEX stream ended")
-                    delay = 1.0
+                    delay = base_delay
                 except asyncio.CancelledError:
                     break
                 except Exception as error:

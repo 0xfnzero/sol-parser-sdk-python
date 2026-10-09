@@ -3,6 +3,7 @@ from __future__ import annotations
 import base58
 import base64
 import struct
+import re
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
@@ -77,7 +78,7 @@ def parse_log_optimized(
     recent_blockhash: str = "",
     program_id: Optional[str] = None,
 ) -> Optional[DexEvent]:
-    """单次 base64 decode 后按 discriminator 做 early filter，再按实际事件类型二次过滤。"""
+    """先按固定长度 discriminator 前缀过滤，再完整 base64 decode，再按实际事件类型二次过滤。"""
     grpc = int(time.time() * 1_000_000) if grpc_recv_us is None else grpc_recv_us
     if program_id == "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" and "ray_log: " in log:
         from .dex_parsers import parse_amm_ray_log_swap
@@ -90,10 +91,22 @@ def parse_log_optimized(
         return parse_amm_ray_log_swap(
             log, _meta(signature, slot, tx_index, block_time_us, grpc, recent_blockhash)
         )
-    buf = decode_program_data_line(log)
-    if not buf:
-        return None
-    disc = _disc8(buf[:8])
+    # Only canonical prefixes use the bounded fast path; unusual encodings keep
+    # the original decoder's permissive behavior.
+    buf = None
+    disc = None
+    if event_type_filter is not None:
+        start = log.find("Program data: ")
+        if start < 0:
+            return None
+        prefix = log[start + 14:start + 26]
+        if re.fullmatch(r"[A-Za-z0-9+/]{12}", prefix):
+            disc = _disc8(base64.standard_b64decode(prefix)[:8])
+    if disc is None:
+        buf = decode_program_data_line(log)
+        if not buf:
+            return None
+        disc = _disc8(buf[:8])
     if event_type_filter is not None:
         is_unscoped_shared_discriminator = program_id is None and disc in (
             _disc8(bytes([189, 219, 127, 211, 78, 230, 97, 238])),
@@ -113,6 +126,10 @@ def parse_log_optimized(
             if not filter_includes_program(event_type_filter, program_id):
                 return None
         elif not filter_allows_unscoped_discriminator(event_type_filter, disc):
+            return None
+    if buf is None:
+        buf = decode_program_data_line(log)
+        if not buf:
             return None
     data = buf[8:]
     meta = _meta(signature, slot, tx_index, block_time_us, grpc, recent_blockhash)

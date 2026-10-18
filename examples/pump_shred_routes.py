@@ -27,6 +27,23 @@ def run_replay():
             w,r=f['loaded_writable'],f['loaded_readonly']
             def parse(filter=None):
                 return parse_shred_transaction_with_loaded_addresses(raw,w,r,slot=f['slot'],tx_index=888,recv_us=999,filter=filter)
+            if f['expected'][0]['kind'] in ('RapidBuy', 'BuyPumpDelta'):
+                events = parse()
+                keys = [*m['accountKeys'], *w, *r]
+                assert len(events) == len(f['expected'])
+                for event in events:
+                    assert event.type == EventType.RAW_INSTRUCTION
+                    e = event.data
+                    ix = m['instructions'][e.instruction_index]
+                    assert e.program_id == keys[ix['programIdIndex']]
+                    assert e.accounts == [keys[i] for i in ix['accounts']]
+                    assert e.account_indices == ix['accounts']
+                    assert e.instruction_data == list(base58.b58decode(ix['data']))
+                    assert not hasattr(e, 'is_buy') and not hasattr(e, 'ix_name')
+                assert not parse(IncludeOnlyFilter([EventType.PUMP_FUN_TRADE]))
+                assert not parse(ExcludeFilter([EventType.RAW_INSTRUCTION]))
+                trace.append((f['signature'], [e.type for e in events]))
+                continue
             events=parse(IncludeOnlyFilter([EventType.PUMP_FUN_TRADE,EventType.PUMP_FUN_CREATE]))
             assert len(events)==len(f['expected'])
             assert len(parse_shred_transaction(raw))==(0 if w or r else len(events))

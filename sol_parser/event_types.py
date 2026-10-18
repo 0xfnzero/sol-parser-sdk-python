@@ -1816,6 +1816,11 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             values={name:(_get_str(data,name) if typ=='pubkey' else _get_int(data,name)) for name,typ in fields}
             return cls(metadata=meta,**values)
 
+    if event_type == EventType.RAW_INSTRUCTION:
+        from .raw_instruction import RawInstructionEvent
+        return RawInstructionEvent(metadata=meta, program_id=data['program_id'],
+            instruction_index=int(data['instruction_index']), accounts=list(data['accounts']),
+            account_indices=list(data['account_indices']), instruction_data=list(data['instruction_data']))
     if event_type == EventType.PUMP_ROUTE_INTENT:
         from .pump_routes import PumpRouteHop, PumpRouteIntentEvent
         return PumpRouteIntentEvent(metadata=meta,kind=data['kind'],program=data['program'],

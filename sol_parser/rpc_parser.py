@@ -11,6 +11,7 @@ import base58
 from .dex_parsers import DexEvent
 from .grpc_types import EventTypeFilter, EventType, event_type_filter_allows_instruction_parsing
 from .inner_instruction_parser import parse_inner_instruction
+from .instructions import clear_pump_instruction_execution_amounts
 from .instructions import (
     METEORA_DLMM_PROGRAM_ID,
     PUMPFUN_PROGRAM_ID,
@@ -386,7 +387,7 @@ def _parse_rpc_instruction(
             program_id,
         )
         if ev:
-            return ev
+            return clear_pump_instruction_execution_amounts(ev)
         return parse_inner_instruction(
             data,
             program_id,
@@ -402,9 +403,9 @@ def _parse_rpc_instruction(
             is_created_buy,
         )
 
-    return parse_instruction_unified(
+    return clear_pump_instruction_execution_amounts(parse_instruction_unified(
         data, accounts, signature, slot, tx_index, block_time_us, grpc_recv_us, filter, program_id
-    )
+    ))
 
 
 def convert_rpc_to_grpc(

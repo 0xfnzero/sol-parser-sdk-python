@@ -76,6 +76,15 @@ PUMPSWAP_FEES_PROGRAM_ID = "pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ"
 PUMP_FEES_PROGRAM_ID = PUMPSWAP_FEES_PROGRAM_ID
 
 
+def clear_pump_instruction_execution_amounts(event: Optional[DexEvent]) -> Optional[DexEvent]:
+    """RPC/gRPC compiled arguments are limits, not observed execution amounts."""
+    if event is not None and isinstance(event.data, PumpFunTradeEvent):
+        event.data.sol_amount = 0
+        event.data.token_amount = 0
+        event.data.quote_amount = 0
+    return event
+
+
 def _d(*xs: int) -> int:
     return struct.unpack("<Q", bytes(xs))[0]
 

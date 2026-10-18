@@ -48,6 +48,7 @@ class EventType(str, Enum):
     RAYDIUM_LAUNCHLAB_POOL_CREATE = "RaydiumLaunchlabPoolCreate"
     RAYDIUM_LAUNCHLAB_MIGRATE_AMM = "RaydiumLaunchlabMigrateAmm"
     PUMP_ROUTE_INTENT = "PumpRouteIntent"
+    RAW_INSTRUCTION = "RawInstruction"
     # PumpFun
     PUMP_FUN_TRADE = "PumpFunTrade"
     PUMP_FUN_BUY = "PumpFunBuy"
@@ -313,7 +314,7 @@ RAYDIUM_LAUNCHLAB_FILTER_TYPES = (
     EventType.RAYDIUM_LAUNCHLAB_MIGRATE_AMM,
 )
 INSTRUCTION_EVENT_TYPES = (
-    EventType.PUMP_ROUTE_INTENT,
+    EventType.PUMP_ROUTE_INTENT, EventType.RAW_INSTRUCTION,
     *PUMPFUN_FILTER_TYPES,
     *PUMP_FEES_EVENT_TYPES,
     *PUMPSWAP_FILTER_TYPES,
@@ -460,7 +461,7 @@ def all_event_types() -> List[EventType]:
         EventType.ACCOUNT_ORCA_TICK_ARRAY,
         EventType.ACCOUNT_ORCA_FEE_TIER,
         EventType.ACCOUNT_ORCA_WHIRLPOOLS_CONFIG,
-        EventType.PUMP_ROUTE_INTENT,
+        EventType.PUMP_ROUTE_INTENT, EventType.RAW_INSTRUCTION,
     ]
 
 

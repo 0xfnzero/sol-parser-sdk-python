@@ -280,13 +280,13 @@ def parse_inner_instruction(
     if program_id_b58 == PUMPFUN_PROGRAM_ID:
         if filter is not None and not event_type_filter_includes_pumpfun(filter):
             return None
-        if disc16 == _PUMPFUN_INNER_TRADE:
+        if disc16 == _PUMPFUN_INNER_TRADE or (disc16[:8] == _EVENT_CPI_PREFIX and disc16[8:] == _PUMPFUN_INNER_TRADE[:8]):
             ev = parse_trade_from_data(inner, meta_d, is_created_buy)
             return emit(ev if ev.is_valid() else None)
-        if disc16 == _PUMPFUN_INNER_CREATE:
+        if disc16 == _PUMPFUN_INNER_CREATE or (disc16[:8] == _EVENT_CPI_PREFIX and disc16[8:] == _PUMPFUN_INNER_CREATE[:8]):
             ev = parse_create_from_data(inner, meta_d)
             return emit(ev if ev.is_valid() else None)
-        if disc16 == _PUMPFUN_INNER_MIGRATE:
+        if disc16 == _PUMPFUN_INNER_MIGRATE or (disc16[:8] == _EVENT_CPI_PREFIX and disc16[8:] == _PUMPFUN_INNER_MIGRATE[:8]):
             ev = parse_migrate_from_data(inner, meta_d)
             return emit(ev if ev.is_valid() else None)
         return None

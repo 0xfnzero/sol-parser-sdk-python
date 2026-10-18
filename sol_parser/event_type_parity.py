@@ -120,6 +120,7 @@ RUST_EVENT_TYPES = [
     "AccountOrcaFeeTier",
     "AccountOrcaWhirlpoolsConfig",
     "PumpRouteIntent",
+    "RawInstruction",
 ]
 
 

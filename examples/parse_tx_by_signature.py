@@ -30,7 +30,7 @@ from sol_parser.rpc_parser import (
 )
 
 DEFAULT_SIGNATURE = (
-    "64srGF8CnTz9zPbdayWYmzs5aVRFBcfjDcidFVvBgAD25VMh52wr88vma7ytSbAZT3C5Giu5BPyGfNfLexLSrKhP"
+    "4ARos3Yq1SMNE3izDpy9YdKrRgMmD7UCDxvnVrBRaGCJHiifPHSmQWc4DPfjUaEUcxS7puGmEN64K7EZdeXLJaj2"
 )
 
 
@@ -42,7 +42,7 @@ def fetch_transaction(signature: str, rpc_url: str) -> dict | None:
             "method": "getTransaction",
             "params": [
                 signature,
-                {"encoding": "json", "maxSupportedTransactionVersion": 0},
+                {"encoding": "json", "maxSupportedTransactionVersion": 1},
             ],
         }
     ).encode()

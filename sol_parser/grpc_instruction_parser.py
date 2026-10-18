@@ -19,6 +19,7 @@ from .grpc_types import (
     event_type_filter_allows_instruction_parsing,
 )
 from .inner_instruction_parser import parse_inner_instruction
+from .instructions import clear_pump_instruction_execution_amounts
 from .instructions import (METEORA_DLMM_PROGRAM_ID, PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID,
                            parse_inner_compiled_instruction_if_supported, parse_instruction_unified)
 from .merger import try_merge_dex_events
@@ -395,6 +396,7 @@ def parse_instructions_enhanced_from_parsed(
         ev = parse_instruction_unified(
             data, accounts, signature, slot, tx_index, block_time_us, grpc_us, filter, pid
         )
+        ev = clear_pump_instruction_execution_amounts(ev)
         if ev:
             result.append((i, None, 1, False, ev))
 
@@ -404,7 +406,7 @@ def parse_instructions_enhanced_from_parsed(
             pid = get_key_b58(inner_ix.program_id_index)
             data = bytes(inner_ix.data)
             accounts = [get_key_b58(b) for b in bytes(inner_ix.accounts)]
-            ev = parse_inner_compiled_instruction_if_supported(
+            ev = clear_pump_instruction_execution_amounts(parse_inner_compiled_instruction_if_supported(
                 data,
                 accounts,
                 signature,
@@ -414,7 +416,7 @@ def parse_instructions_enhanced_from_parsed(
                 grpc_us,
                 filter,
                 pid,
-            ) or parse_inner_instruction(
+            )) or parse_inner_instruction(
                 data,
                 pid,
                 _meta_dict(signature, slot, tx_index, block_time_us, grpc_us, recent_bh),

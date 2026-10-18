@@ -16,10 +16,12 @@ def test_signed_raw_payloads_and_json():
         tx, _ = decode_wire_transaction(wire)
         msg = tx['message']
         keys = msg['accountKeys'] + f['loaded_writable'] + f['loaded_readonly']
-        events = parse_shred_transaction_with_loaded_addresses(wire,f['loaded_writable'],f['loaded_readonly'],filter=IncludeOnlyFilter([EventType.RAW_INSTRUCTION]))
+        events = parse_shred_transaction_with_loaded_addresses(wire,f['loaded_writable'],f['loaded_readonly'],tx_index=71,recv_us=123456,filter=IncludeOnlyFilter([EventType.RAW_INSTRUCTION]))
         assert len(events) == len(msg['instructions'])
         for event, ix in zip(events, msg['instructions']):
             e=event.data
+            assert e.metadata.tx_index == 71
+            assert e.metadata.grpc_recv_us == 123456
             assert e.program_id == keys[ix['programIdIndex']]
             assert e.accounts == [keys[i] for i in ix['accounts']]
             assert e.account_indices == ix['accounts']

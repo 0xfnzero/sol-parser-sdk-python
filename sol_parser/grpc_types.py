@@ -471,9 +471,11 @@ class EventMetadata:
 
     signature: str = ""
     slot: int = 0
-    #: 区块内交易序号（Yellowstone ``SubscribeUpdateTransactionInfo.index`` / RPC ``transactionIndex``）
+    #: 调用方序号：Yellowstone 为节点 index；Entries 为单条消息内序号，下条消息从 0 开始。
+    #: Shred 跨消息去重使用交易签名，不能使用 (slot, tx_index)。
     tx_index: int = 0
     block_time_us: int = 0
+    #: 本地接收时间（微秒），不代表链上执行顺序。
     grpc_recv_us: int = 0
     recent_blockhash: str = ""
     is_created_buy: bool = False

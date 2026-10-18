@@ -1,6 +1,6 @@
 [project]
 name = "sol-parser-sdk-python"
-version = "0.5.12"
+version = "0.5.13"
 description = "Solana DEX program log parsing (pure Python, API aligned with sol-parser-sdk)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,7 +15,11 @@ dependencies = [
 shredstream = [
     "solders>=0.21.0",
 ]
+simulation = [
+    "solders==0.26.0",
+]
 dev = [
+    "solders==0.26.0", # Native offline SBF simulation examples.
     "cryptography>=44.0", # Independent Ed25519 verification in signed wire regressions.
     "pytest>=8.0",
     "pytest-asyncio>=0.21",

@@ -2,6 +2,19 @@
 
 from __future__ import annotations
 import base58
+try:
+    from solders.pubkey import Pubkey
+    from solders.signature import Signature
+except ImportError:
+    # solders is an optional ShredStream accelerator; core parsing stays usable.
+    def _key_string(raw):
+        return base58.b58encode(raw).decode()
+    _signature_string = _key_string
+else:
+    def _key_string(raw):
+        return str(Pubkey.from_bytes(raw))
+    def _signature_string(raw):
+        return str(Signature.from_bytes(raw))
 
 
 class _Reader:
@@ -32,9 +45,12 @@ class _Reader:
         raise ValueError("Invalid short-u16")
 
 
-def decode_wire_transaction(
-    data: bytes, offset: int = 0, require_complete: bool = True
-) -> tuple[dict, int]:
+def decode_wire_transaction(data: bytes, offset: int = 0, require_complete: bool = True) -> tuple[dict, int]:
+    return _decode_wire_transaction(data, offset, require_complete)
+
+
+def _decode_wire_transaction(data: bytes, offset: int = 0, require_complete: bool = True,
+                             *, raw_instructions: bool = False) -> tuple[dict, int]:
     if not isinstance(offset, int) or offset < 0 or offset >= len(data):
         raise ValueError("Invalid wire offset")
     r = _Reader(data, offset)
@@ -69,7 +85,7 @@ def decode_wire_transaction(
             {
                 "programIdIndex": program,
                 "accounts": list(r.take(accounts)),
-                "data": base58.b58encode(r.take(length)).decode(),
+                "data": (r.take(length) if raw_instructions else base58.b58encode(r.take(length)).decode()),
             }
             for program, accounts, length in headers
         ]
@@ -103,7 +119,7 @@ def decode_wire_transaction(
                 {
                     "programIdIndex": program,
                     "accounts": accounts,
-                    "data": base58.b58encode(payload).decode(),
+                    "data": (payload if raw_instructions else base58.b58encode(payload).decode()),
                 }
             )
         if version == 0:
@@ -113,7 +129,7 @@ def decode_wire_transaction(
                 readonly = list(r.take(r.short()))
                 lookups.append(
                     {
-                        "accountKey": base58.b58encode(key).decode(),
+                        "accountKey": _key_string(key),
                         "writableIndexes": writable,
                         "readonlyIndexes": readonly,
                     }
@@ -152,15 +168,15 @@ def decode_wire_transaction(
                 header,
             )
         ),
-        "accountKeys": [base58.b58encode(key).decode() for key in keys],
-        "recentBlockhash": base58.b58encode(blockhash).decode(),
+        "accountKeys": [_key_string(key) for key in keys],
+        "recentBlockhash": _key_string(blockhash),
         "instructions": instructions,
         "addressTableLookups": lookups,
     }
     if config is not None:
         message["config"] = config
     return {
-        "signatures": [base58.b58encode(s).decode() for s in signatures],
+        "signatures": [_signature_string(s) for s in signatures],
         "message": message,
         "version": version,
     }, r.pos - offset

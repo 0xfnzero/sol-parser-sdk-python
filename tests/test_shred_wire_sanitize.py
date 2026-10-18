@@ -34,7 +34,9 @@ def test_valid_wire_preserves_pump_instruction_parsing(version):
     events=parse(transaction)
     assert events and events[0].type.value=='PumpFunBuy'
 
-def test_valid_v0_with_missing_alt_preserves_documented_placeholder_mapping():
+def test_valid_v0_with_missing_alt_requires_explicit_best_effort():
     lookup=MessageAddressTableLookup(Pubkey.from_bytes(bytes([9])*32),bytes([0]),bytes())
     transaction=wire('v0',accounts=bytes([0,1,2,4]),lookups=[lookup]);transaction.sanitize()
-    assert parse(transaction)
+    assert parse(transaction)==[]
+    from sol_parser.shredstream_client import parse_shred_transaction_best_effort
+    assert parse_shred_transaction_best_effort(bytes(transaction))

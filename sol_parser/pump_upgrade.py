@@ -163,18 +163,11 @@ def parse_pump_upgrade_event(disc, data, metadata, program_id=None):
 
 def decode_pump_multi_hop_intent(program, data, accounts):
     """Instruction limits only. Actual execution is reported by per-hop trade events."""
-    if (
-        program != "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
-        or len(data) != 24
-        or data[:8] != bytes([43, 100, 73, 19, 233, 246, 111, 148])
-        or len(accounts) < 21
-        or (len(accounts) - 16) % 5
-    ):
+    from .pump_routes import multi_hop_args
+    args = multi_hop_args(program, data, accounts)
+    if args is None:
         return None
-    amount_in = int.from_bytes(data[8:16], "little")
-    minimum = int.from_bytes(data[16:24], "little")
-    if not amount_in or not minimum:
-        return None
+    amount_in, minimum = args
     return dict(
         user=accounts[0],
         input_account=accounts[1],

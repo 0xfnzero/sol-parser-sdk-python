@@ -119,6 +119,7 @@ RUST_EVENT_TYPES = [
     "AccountOrcaTickArray",
     "AccountOrcaFeeTier",
     "AccountOrcaWhirlpoolsConfig",
+    "PumpRouteIntent",
 ]
 
 

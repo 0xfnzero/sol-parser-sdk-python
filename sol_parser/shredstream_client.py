@@ -1,8 +1,7 @@
 """ShredStream gRPC 客户端：SubscribeEntries + bincode 解码 + DEX 外层指令。
 
 限制：与 Rust 文档一致——不解析 inner CPI 日志；当前 Python 热路径只使用静态账户，
-V0 ALT 加载账户用默认 pubkey 占位继续 best-effort 解析；若 program id 来自 ALT，
-会按候选 program id 尝试 discriminator 解析。需安装 ``solders``（``pip install 'sol-parser-sdk-python[shredstream]'``）。
+默认跳过未解析账户；ALT 只使用调用方预热缓存，不回退 RPC。Legacy/V0/V1 使用原生线格式解码。
 """
 
 from __future__ import annotations
@@ -133,102 +132,94 @@ def _should_parse_shred_instructions(filter: Optional[EventTypeFilter]) -> bool:
     return event_type_filter_allows_instruction_parsing(list(include_only))
 
 
-def _events_from_versioned_tx_wire(
-    raw: bytes,
-    signature: str,
-    slot: int,
-    tx_index: int,
-    recv_us: int,
-    filter: Optional[EventTypeFilter],
-) -> List[DexEvent]:
+def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, best_effort=False):
+    from .pump_routes import may_parse_route, parse_route
+    from .grpc_types import EventMetadata
     if not _should_parse_shred_instructions(filter):
         return []
-
-    try:
-        from solders.message import Message as LegacyMessage  # type: ignore
-        from solders.message import MessageV0  # type: ignore
-        from solders.transaction import VersionedTransaction  # type: ignore
-    except ImportError:
-        return []
-
-    try:
-        vt = VersionedTransaction.from_bytes(raw)
-        # Decoding does not validate header/account/program indexes. Loaded ALT
-        # addresses may remain unresolved, but the wire structure must be valid.
-        vt.sanitize()
-    except Exception:
-        return []
-    if not vt.signatures:
-        return []
-    sig = signature or base58.b58encode(bytes(vt.signatures[0])).decode("ascii")
-    msg = vt.message
-    out: List[DexEvent] = []
-
-    if isinstance(msg, MessageV0):
-        keys = [str(k) for k in msg.account_keys]
-        ixs: List[tuple] = []
-        for cix in msg.instructions:
-            pid = keys[cix.program_id_index] if cix.program_id_index < len(keys) else None
-            ixs.append((pid, bytes(cix.data), _ix_accounts_bytes(cix.accounts)))
-    elif isinstance(msg, LegacyMessage):
-        keys = [str(k) for k in msg.account_keys]
-        ixs = []
-        for ix in msg.instructions:
-            pid = keys[ix.program_id_index] if ix.program_id_index < len(keys) else None
-            ixs.append((pid, bytes(ix.data), _ix_accounts_bytes(ix.accounts)))
-    else:
-        return []
-
-    created: set = set()
-    mayhem: set = set()
+    msg = tx['message']
+    signature = signature or tx['signatures'][0]
+    instructions = [(keys[ix['programIdIndex']] if ix['programIdIndex'] < len(keys) else None,
+                     (ix['data'] if isinstance(ix['data'], bytes) else base58.b58decode(ix['data'])), bytes(ix['accounts'])) for ix in msg['instructions']]
+    created, mayhem = set(), set()
     if _pumpfun_filter_allows(filter):
-        for pid, data, ix_acc in ixs:
-            if pid is not None and pid != PUMPFUN_PROGRAM_ID:
-                continue
-            c, m = detect_pumpfun_create_mints(PUMPFUN_PROGRAM_ID, data, ix_acc, keys)
-            created |= c
-            mayhem |= m
-
-    for pid, data, ix_acc in ixs:
+        for pid, data, indices in instructions:
+            if pid == PUMPFUN_PROGRAM_ID and (best_effort or all(i < len(keys) for i in indices)):
+                c, m = detect_pumpfun_create_mints(pid, data, indices, keys)
+                created |= c
+                mayhem |= m
+    out = []
+    for index, (pid, data, indices) in enumerate(instructions):
+        resolved = pid is not None and all(i < len(keys) for i in indices)
+        if not resolved and not best_effort:
+            continue
+        if pid and may_parse_route(pid, data):
+            if resolved:
+                metadata = EventMetadata(signature=signature, slot=slot, tx_index=tx_index, grpc_recv_us=recv_us,
+                                         recent_blockhash=msg['recentBlockhash'])
+                event = parse_route(pid, data, [keys[i] for i in indices], metadata, index, filter)
+                if event:out.append(event)
+            continue
         if pid == PUMPFUN_PROGRAM_ID:
-            if not _pumpfun_filter_allows(filter):
-                continue
-            ev = parse_pumpfun_shred_ix(
-                data, keys, ix_acc, pid, sig, slot, tx_index, recv_us, created, mayhem
-            )
-            ev = _filter_parsed_event(ev, filter)
-            if ev:
-                out.append(ev)
-            continue
-        accounts = _static_ix_account_strings(keys, ix_acc)
-        if pid is None:
-            for candidate in _UNKNOWN_PROGRAM_CANDIDATES:
-                if candidate == PUMPFUN_PROGRAM_ID:
-                    if not _pumpfun_filter_allows(filter):
-                        continue
-                    ev = parse_pumpfun_shred_ix(
-                        data, keys, ix_acc, PUMPFUN_PROGRAM_ID, sig, slot, tx_index, recv_us, created, mayhem
-                    )
-                    ev = _filter_parsed_event(ev, filter)
-                else:
-                    ev = parse_instruction_unified(
-                        bytes(data), accounts, sig, slot, tx_index, None, recv_us, filter, candidate
-                    )
-                if ev:
-                    out.append(ev)
-                    break
-            continue
-        ev = parse_instruction_unified(
-            bytes(data), accounts, sig, slot, tx_index, None, recv_us, filter, pid
-        )
-        if ev:
-            out.append(ev)
-
-    for ev in out:
-        if hasattr(ev.data, "metadata"):
-            ev.data.metadata.grpc_recv_us = recv_us
+            if not _pumpfun_filter_allows(filter):continue
+            event = _filter_parsed_event(parse_pumpfun_shred_ix(data, keys, indices, pid, signature,
+                        slot, tx_index, recv_us, created, mayhem), filter)
+        else:
+            accounts = _static_ix_account_strings(keys, indices)
+            event = None
+            for program in ([pid] if pid else _UNKNOWN_PROGRAM_CANDIDATES):
+                event = parse_instruction_unified(data, accounts, signature, slot, tx_index, None, recv_us, filter, program)
+                if event:break
+        if event:
+            if hasattr(event.data, 'metadata'):event.data.metadata.recent_blockhash = msg['recentBlockhash']
+            out.append(event)
     enrich_pumpfun_same_tx_post_merge(out)
     return out
+
+
+def _decode_shred(raw, raw_instructions=True):
+    from .wire_transaction import _decode_wire_transaction
+    return _decode_wire_transaction(raw, raw_instructions=raw_instructions)[0]
+
+
+def parse_shred_transaction_with_loaded_addresses(raw, writable, readonly, signature='', slot=0, tx_index=0, recv_us=0, filter=None):
+    """Strict, offline parsing. Reject inconsistent ALT counts before producing events."""
+    tx = _decode_shred(raw)
+    return _parse_loaded_shred(tx, writable, readonly, signature, slot, tx_index, recv_us, filter)
+
+
+def _parse_loaded_shred(tx, writable, readonly, signature, slot, tx_index, recv_us, filter):
+    msg = tx['message']
+    lookups = msg.get('addressTableLookups', [])
+    if len(writable) != sum(len(l['writableIndexes']) for l in lookups) or len(readonly) != sum(len(l['readonlyIndexes']) for l in lookups):
+        raise ValueError('ALT address counts do not match transaction')
+    keys = [*msg['accountKeys'], *writable, *readonly]
+    if any(ix['programIdIndex'] >= len(keys) or any(i >= len(keys) for i in ix['accounts']) for ix in msg['instructions']):
+        raise ValueError('Unresolved instruction index')
+    return _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter)
+
+
+def parse_shred_transaction(raw, signature='', slot=0, tx_index=0, recv_us=0, filter=None, *, best_effort=False, address_lookup_resolver=None):
+    """Static keys by default; optional slot-aware resolver must read only a prewarmed cache."""
+    try:
+        # Resolver callbacks retain the public JSON-compatible decoded shape.
+        tx = _decode_shred(raw, raw_instructions=address_lookup_resolver is None)
+    except (ValueError, IndexError, TypeError):
+        return []
+    if address_lookup_resolver is not None and tx['message'].get('addressTableLookups'):
+        loaded = address_lookup_resolver(tx, slot)
+        if loaded is None:return []
+        return _parse_loaded_shred(tx, *loaded, signature, slot, tx_index, recv_us, filter)
+    return _parse_decoded_shred(tx, tx['message']['accountKeys'], signature, slot, tx_index, recv_us, filter, best_effort)
+
+
+def _events_from_versioned_tx_wire(raw, signature, slot, tx_index, recv_us, filter):
+    return parse_shred_transaction(raw, signature, slot, tx_index, recv_us, filter)
+
+
+def parse_shred_transaction_best_effort(raw, signature='', slot=0, tx_index=0, recv_us=0, filter=None):
+    """Explicit legacy placeholder mapping; route adapters still require resolved keys."""
+    return parse_shred_transaction(raw, signature, slot, tx_index, recv_us, filter, best_effort=True)
 
 
 class ShredStreamClient:
@@ -237,6 +228,12 @@ class ShredStreamClient:
     def __init__(self, endpoint: str, config: Optional[ShredStreamConfig] = None):
         self.endpoint = endpoint
         self.config = config or ShredStreamConfig()
+        self.address_lookup_resolver = None
+
+    def with_address_lookup_resolver(self, resolver):
+        """Set a synchronous slot-aware cache callback; no automatic RPC fallback."""
+        self.address_lookup_resolver = resolver
+        return self
 
     @classmethod
     def new_with_config(cls, endpoint: str, config: ShredStreamConfig) -> ShredStreamClient:
@@ -273,14 +270,12 @@ class ShredStreamClient:
                         on_error(e)
                     continue
                 for tx_counter, raw in enumerate(raws):
-                    sig0 = ""
                     try:
-                        from solders.transaction import VersionedTransaction  # type: ignore
-
-                        sig0 = base58.b58encode(bytes(VersionedTransaction.from_bytes(raw).signatures[0])).decode("ascii")
-                    except Exception:
-                        pass
-                    for ev in _events_from_versioned_tx_wire(raw, sig0, slot, tx_counter, recv_us, f):
-                        yield ev
+                        events = parse_shred_transaction(raw, slot=slot, tx_index=tx_counter, recv_us=recv_us,
+                                                       filter=f, address_lookup_resolver=self.address_lookup_resolver)
+                    except Exception as error:
+                        if on_error:on_error(error)
+                        continue
+                    yield from events
         finally:
             channel.close()

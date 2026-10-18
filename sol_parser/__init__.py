@@ -513,8 +513,8 @@ from .pump_upgrade import PumpFunPostCompleteBuyEvent, PumpFunSweepBondingCurveF
 __all__ += ['decode_pump_multi_hop_intent','PumpFunPostCompleteBuyEvent','PumpFunSweepBondingCurveFeeEvent','PumpFunCompleteEvent','PumpSwapSweepPoolFeeEvent']
 
 from .pump_routes import PumpRouteHop, PumpRouteIntentEvent
-from .raw_instruction import RawInstructionEvent
-__all__ += ["RawInstructionEvent"]
+from .raw_instruction import RawInstructionEvent, RawInstructionDex, RawInstructionDexType
+__all__ += ["RawInstructionEvent", "RawInstructionDex", "RawInstructionDexType"]
 from .shredstream_client import parse_shred_transaction, parse_shred_transaction_with_loaded_addresses, parse_shred_transaction_best_effort
 
 __all__ += ["PumpRouteHop", "PumpRouteIntentEvent", "parse_shred_transaction", "parse_shred_transaction_with_loaded_addresses", "parse_shred_transaction_best_effort"]

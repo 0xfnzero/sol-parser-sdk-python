@@ -8,6 +8,7 @@ import base58
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from sol_parser.shredstream_client import parse_shred_transaction,parse_shred_transaction_with_loaded_addresses
 from sol_parser.wire_transaction import decode_wire_transaction
+from sol_parser import RawInstructionDexType
 from sol_parser.grpc_types import EventType,IncludeOnlyFilter,ExcludeFilter,EventMetadata
 from sol_parser.pump_routes import AMM,parse_route
 
@@ -40,7 +41,9 @@ def run_replay():
                     assert e.account_indices == ix['accounts']
                     assert e.instruction_data == list(base58.b58decode(ix['data']))
                     assert not hasattr(e, 'is_buy') and not hasattr(e, 'ix_name')
-                assert not parse(IncludeOnlyFilter([EventType.PUMP_FUN_TRADE]))
+                selected = parse(IncludeOnlyFilter([EventType.PUMP_FUN_TRADE]))
+                assert selected
+                assert all(e.type == EventType.RAW_INSTRUCTION and any(d.dex_type == RawInstructionDexType.PUMPFUN for d in e.data.dexes) for e in selected)
                 assert not parse(ExcludeFilter([EventType.RAW_INSTRUCTION]))
                 trace.append((f['signature'], [e.type for e in events]))
                 continue

@@ -1817,8 +1817,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
             return cls(metadata=meta,**values)
 
     if event_type == EventType.RAW_INSTRUCTION:
-        from .raw_instruction import RawInstructionEvent
-        return RawInstructionEvent(metadata=meta, program_id=data['program_id'],
+        from .raw_instruction import RawInstructionEvent, RawInstructionDex
+        return RawInstructionEvent(metadata=meta, dexes=[RawInstructionDex(**d) for d in data.get('dexes', [])], program_id=data['program_id'],
             instruction_index=int(data['instruction_index']), accounts=list(data['accounts']),
             account_indices=list(data['account_indices']), instruction_data=list(data['instruction_data']))
     if event_type == EventType.PUMP_ROUTE_INTENT:

@@ -133,7 +133,7 @@ def _should_parse_shred_instructions(filter: Optional[EventTypeFilter]) -> bool:
 
 
 def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, best_effort=False):
-    from .raw_instruction import RawInstructionEvent, INFRASTRUCTURE_PROGRAMS
+    from .raw_instruction import RawInstructionEvent, INFRASTRUCTURE_PROGRAMS, raw_instruction_dexes, raw_instruction_matches_filter
     from .grpc_types import EventType
     from .pump_routes import may_parse_route, parse_route
     from .grpc_types import EventMetadata
@@ -154,10 +154,11 @@ def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, b
     for index, (pid, data, indices) in enumerate(instructions):
         unknown = pid and pid not in _UNKNOWN_PROGRAM_CANDIDATES and pid not in INFRASTRUCTURE_PROGRAMS
         explicit_raw = filter is not None and EventType.RAW_INSTRUCTION in (getattr(filter, 'include_only', None) or ())
-        if pid and (unknown or explicit_raw) and (filter is None or filter.should_include(EventType.RAW_INSTRUCTION)):
+        dexes = raw_instruction_dexes(pid, [keys[i] if i < len(keys) else None for i in indices]) if unknown or explicit_raw else []
+        if pid and (unknown or explicit_raw) and raw_instruction_matches_filter(dexes, filter):
             out.append(DexEvent(EventType.RAW_INSTRUCTION, RawInstructionEvent(
                 metadata=EventMetadata(signature=signature, slot=slot, tx_index=tx_index, grpc_recv_us=recv_us, recent_blockhash=msg['recentBlockhash']),
-                program_id=pid, instruction_index=index,
+                dexes=dexes, program_id=pid, instruction_index=index,
                 accounts=[keys[i] if i < len(keys) else None for i in indices],
                 account_indices=list(indices), instruction_data=list(data))))
         if unknown:

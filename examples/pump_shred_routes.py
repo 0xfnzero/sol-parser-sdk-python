@@ -38,6 +38,12 @@ def run_replay():
                 encoded=json.loads(dex_event_json_dumps(event))
                 assert encoded['data']['instruction_data']==e.instruction_data
                 assert to_typed_event({encoded['type']:encoded['data']})==e
+                assert e.is_buy is (True if e.kind in ('RapidBuy','BuyPumpDelta') else None)
+                assert e.ix_name == ('buy_exact_quote_in_v2' if e.kind == 'RapidBuy' else None)
+                legacy = dict(encoded['data'])
+                legacy.pop('is_buy'); legacy.pop('ix_name')
+                old = to_typed_event({encoded['type']:legacy})
+                assert old.is_buy is None and old.ix_name is None
                 assert e.kind==want['kind'] and e.user==want['user']
                 assert e.input_account==want['input'] and e.output_account==want['output']
                 assert e.amount_in==want['amount_in'] and e.min_amount_out==want['min_amount_out']
@@ -88,6 +94,7 @@ def check_boundaries(fixtures):
         tx=VersionedTransaction(MessageV0.try_compile(wallet.pubkey(),[ix],[],Hash.default()),[wallet]);tx.verify_and_hash_message()
         events=parse_shred_transaction(bytes(tx),filter=IncludeOnlyFilter([EventType.PUMP_FUN_TRADE]))
         assert len(events)==1 and events[0].data.kind=='MultiHopCurveSwap' and events[0].data.amount_in==amount
+        assert events[0].data.is_buy is None and events[0].data.ix_name is None
     assert parse_route(f['program'],data[:8]+bytes(8)+data[16:],a,EventMetadata(),0) is None
     first=next(f for f in fixtures if f['expected'][0]['kind']=='MultiHopSwap');tx,_=decode_wire_transaction(base64.b64decode(first['wire']));keys=[*tx['message']['accountKeys'],*first['loaded_writable'],*first['loaded_readonly']]
     ix=tx['message']['instructions'][first['expected'][0]['instruction_index']];a=[keys[i] for i in ix['accounts']];data=base58.b58decode(ix['data'])

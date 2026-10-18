@@ -1821,7 +1821,8 @@ def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         return PumpRouteIntentEvent(metadata=meta,kind=data['kind'],program=data['program'],
             instruction_index=int(data['instruction_index']),user=data['user'],input_account=data['input_account'],output_account=data['output_account'],
             amount_in=None if data.get('amount_in') is None else int(data['amount_in']),min_amount_out=None if data.get('min_amount_out') is None else int(data['min_amount_out']),
-            hops=[PumpRouteHop(**h) for h in data['hops']],instruction_data=list(data['instruction_data']))
+            hops=[PumpRouteHop(**h) for h in data['hops']],instruction_data=list(data['instruction_data']),
+            is_buy=data.get('is_buy'),ix_name=data.get('ix_name'))
 
     # PumpFun events
     if event_type in (EventType.PUMP_FUN_TRADE, EventType.PUMP_FUN_BUY,

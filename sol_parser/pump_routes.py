@@ -38,6 +38,10 @@ class PumpRouteIntentEvent(DexEventBase):
     min_amount_out: Optional[int] = None
     hops: list[PumpRouteHop] = field(default_factory=list)
     instruction_data: list[int] = field(default_factory=list)
+    # Intended direction relative to the wrapper hop's base mint, not a fill.
+    is_buy: Optional[bool] = None
+    # Official underlying instruction name encoded in the wrapper; unknown is None.
+    ix_name: Optional[str] = None
 
 
 def allows_route(filter, program):
@@ -86,4 +90,7 @@ def parse_route(program,data,a,metadata,index,filter=None):
         kind,fixed,user,source,dest,amount,minimum='BuyPumpDelta',0,0,16,15,None,None
     if amount==0:return None
     hops=[PumpRouteHop(*a[i:i+5]) for i in range(fixed,len(a),5)] if fixed else [PumpRouteHop(*(a[i] for i in ((7,2,16,17,18) if program==RAPID else (2,3,11,12,13))))]
-    return DexEvent(EventType.PUMP_ROUTE_INTENT,PumpRouteIntentEvent(metadata,kind,program,index,a[user],a[source],a[dest],amount,minimum,hops,list(data)))
+    return DexEvent(EventType.PUMP_ROUTE_INTENT,PumpRouteIntentEvent(
+        metadata,kind,program,index,a[user],a[source],a[dest],amount,minimum,hops,list(data),
+        is_buy=True if kind in ('RapidBuy', 'BuyPumpDelta') else None,
+        ix_name='buy_exact_quote_in_v2' if kind == 'RapidBuy' else None))

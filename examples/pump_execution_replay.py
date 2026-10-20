@@ -14,7 +14,8 @@ if len(sys.argv) > 1:
         raise RuntimeError('Transaction not found; use a recent signature or an archive RPC')
     cases = [{'raw': raw}]
 else:
-    cases = json.loads((Path(__file__).resolve().parents[1] / 'tests/fixtures/pump_execution_20261019.json').read_text())['cases']
+    cases = sum((json.loads((Path(__file__).resolve().parents[1] / 'tests/fixtures' / name).read_text())['cases']
+                 for name in ['pump_execution_20261019.json', 'wrapped_pumpfun_reported.json']), [])
 for case in cases:
     raw = case['raw']
     logs = raw['meta']['logMessages']

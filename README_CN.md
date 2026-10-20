@@ -1,3 +1,7 @@
+当前版本：**0.6.0**。本轮同步 SDK、原生语言测试、示例及文档。升级说明见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。
+
+[v0.6.0: SDK、原生 examples、股票目录与交易来源同步说明](docs/cross-language-sync.md)
+
 <div align="center">
 
 ## v0.5.17 — Shred 元数据透传与顺序范围
@@ -71,12 +75,12 @@
 
 | 语言 | 仓库 | 描述 | 版本 |
 |------|------|------|
-| Rust | [sol-parser-sdk](https://github.com/0xfnzero/sol-parser-sdk) | Solana DEX 交易与账户事件解析 | `v0.7.18` |
-| Node.js | [sol-parser-sdk-nodejs](https://github.com/0xfnzero/sol-parser-sdk-nodejs) | TypeScript/JavaScript，Node.js 支持 | `v0.5.24` |
-| Python | [sol-parser-sdk-python](https://github.com/0xfnzero/sol-parser-sdk-python) | 原生 async/await 支持 | `v0.5.17` |
-| Go | [sol-parser-sdk-golang](https://github.com/0xfnzero/sol-parser-sdk-golang) | Go 交易与账户事件解析 | `v0.5.17` |
-| **Rust** | [sol-shred-sdk](https://github.com/0xfnzero/sol-shred-sdk) | Solana 原始 shred 解码与 ShredStream DEX 事件解析 | `v4.0.9` |
-| **Rust** | [sol-trade-sdk](https://github.com/0xfnzero/sol-trade-sdk) | Solana DEX 交易构建与交易执行 | `v6.0.2` |
+| Rust | [sol-parser-sdk](https://github.com/0xfnzero/sol-parser-sdk) | Solana DEX 交易与账户事件解析 | `v0.8.0` |
+| Node.js | [sol-parser-sdk-nodejs](https://github.com/0xfnzero/sol-parser-sdk-nodejs) | TypeScript/JavaScript，Node.js 支持 | `v0.6.0` |
+| Python | [sol-parser-sdk-python](https://github.com/0xfnzero/sol-parser-sdk-python) | 原生 async/await 支持 | `v0.6.0` |
+| Go | [sol-parser-sdk-golang](https://github.com/0xfnzero/sol-parser-sdk-golang) | Go 交易与账户事件解析 | `v0.6.0` |
+| **Rust** | [sol-shred-sdk](https://github.com/0xfnzero/sol-shred-sdk) | Solana 原始 shred 解码与 ShredStream DEX 事件解析 | `v5.0.0` |
+| **Rust** | [sol-trade-sdk](https://github.com/0xfnzero/sol-trade-sdk) | Solana DEX 交易构建与交易执行 | `v8.0.0` |
 
 ---
 
@@ -167,7 +171,7 @@ Validation includes local CPU benchmarks and offline signed-bank scenarios. Meas
 **PyPI**
 
 ```bash
-pip install sol-parser-sdk-python==0.5.17
+pip install sol-parser-sdk-python==0.6.0
 ```
 
 **源码**
@@ -283,18 +287,18 @@ Python ShredStream 热路径默认严格解析静态账户；V0 ALT 指令需传
 | 描述 | 运行命令 | 源码 |
 |------|----------|------|
 | **PumpFun** | | |
-| PumpFun 交易过滤 | `python examples/pumpfun_trade_filter.py` | [pumpfun_trade_filter.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_trade_filter.py) | `v0.5.17` |
-| PumpFun 事件 + 性能指标 | `python examples/pumpfun_with_metrics.py` | [pumpfun_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_with_metrics.py) | `v0.5.17` |
-| PumpFun 快速连接测试 | `python examples/pumpfun_quick_test.py` | [pumpfun_quick_test.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_quick_test.py) | `v0.5.17` |
+| PumpFun 交易过滤 | `python examples/pumpfun_trade_filter.py` | [pumpfun_trade_filter.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_trade_filter.py) | `v0.6.0` |
+| PumpFun 事件 + 性能指标 | `python examples/pumpfun_with_metrics.py` | [pumpfun_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_with_metrics.py) | `v0.6.0` |
+| PumpFun 快速连接测试 | `python examples/pumpfun_quick_test.py` | [pumpfun_quick_test.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpfun_quick_test.py) | `v0.6.0` |
 | **PumpSwap** | | |
-| PumpSwap 超低延迟 | `python examples/pumpswap_low_latency.py` | [pumpswap_low_latency.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_low_latency.py) | `v0.5.17` |
-| PumpSwap 事件 + 性能指标 | `python examples/pumpswap_with_metrics.py` | [pumpswap_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_with_metrics.py) | `v0.5.17` |
+| PumpSwap 超低延迟 | `python examples/pumpswap_low_latency.py` | [pumpswap_low_latency.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_low_latency.py) | `v0.6.0` |
+| PumpSwap 事件 + 性能指标 | `python examples/pumpswap_with_metrics.py` | [pumpswap_with_metrics.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/pumpswap_with_metrics.py) | `v0.6.0` |
 | **Meteora DAMM** | | |
-| Meteora DAMM V2 事件 | `python examples/meteora_damm_grpc.py` | [meteora_damm_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/meteora_damm_grpc.py) | `v0.5.17` |
+| Meteora DAMM V2 事件 | `python examples/meteora_damm_grpc.py` | [meteora_damm_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/meteora_damm_grpc.py) | `v0.6.0` |
 | **多协议** | | |
-| 订阅 Rust `Protocol` / `program_ids` 中的全部程序 | `python examples/multi_protocol_grpc.py` | [multi_protocol_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/multi_protocol_grpc.py) | `v0.5.17` |
+| 订阅 Rust `Protocol` / `program_ids` 中的全部程序 | `python examples/multi_protocol_grpc.py` | [multi_protocol_grpc.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/multi_protocol_grpc.py) | `v0.6.0` |
 | **工具** | | |
-| 按签名解析交易（HTTP RPC，非 gRPC）。`.env` 或环境中 `TX_SIGNATURE` / `RPC_URL` 或 `SOLANA_RPC_URL`，或 `--sig` / `--rpc`。 | `python examples/parse_tx_by_signature.py` | [parse_tx_by_signature.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/parse_tx_by_signature.py) | `v0.5.17` |
+| 按签名解析交易（HTTP RPC，非 gRPC）。`.env` 或环境中 `TX_SIGNATURE` / `RPC_URL` 或 `SOLANA_RPC_URL`，或 `--sig` / `--rpc`。 | `python examples/parse_tx_by_signature.py` | [parse_tx_by_signature.py](https://github.com/0xfnzero/sol-parser-sdk-python/blob/main/examples/parse_tx_by_signature.py) | `v0.6.0` |
 
 **环境变量：** gRPC 示例需要 **`GRPC_URL`** 或 **`GRPC_ENDPOINT`**，以及 **`GRPC_AUTH_TOKEN`** 或 **`GRPC_TOKEN`**（或旧名 `GEYSER_*`）。详见 **`.env.example`**。
 

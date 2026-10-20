@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 import pytest
+from pump_method import expected_pump_method
 from sol_parser.rpc_parser import (
     rpc_get_transaction_result_dict_to_response,
     parse_rpc_transaction,
@@ -44,6 +45,7 @@ def test_mainnet_matches_official_idl_and_wire(case):
         assert len(matches) == 1
         actual = matches[0]
         for field, value in d.items():
+            if field == "ix_name": value = expected_pump_method(case["raw"], value)
             if field == "shareholders":
                 continue
             got = getattr(actual, field)

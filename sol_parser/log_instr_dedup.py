@@ -97,10 +97,9 @@ def _dedupe_key(
             f"{getattr(data, 'pool', '')}|{getattr(data, 'user', '')}"
         )
     if t == EventType.RAYDIUM_LAUNCHLAB_TRADE:
-        return (
-            f"RaydiumLaunchlabTrade|{getattr(data, 'pool_state', '')}|"
-            f"{getattr(data, 'user', '')}|{bool(getattr(data, 'is_buy', False))}"
-        )
+        base = ("RaydiumLaunchlabTrade", getattr(data, "pool_state", ""),
+                getattr(data, "user", ""), bool(getattr(data, "is_buy", False)))
+        return "|".join(map(str, base)) + f"|{_next_occurrence(base, occurrence_counts)}"
     if t == EventType.METEORA_POOLS_POOL_CREATED and not _empty(getattr(data, 'pool', None)):
         return f"MeteoraPoolsPoolCreated|{data.pool}"
     if t == EventType.RAYDIUM_LAUNCHLAB_POOL_CREATE:
@@ -213,7 +212,7 @@ def _merge_pumpfun_trade(log: Any, ix: Any) -> None:
     ):
         if getattr(log, attr, 0) == 0 and getattr(ix, attr, 0) != 0:
             setattr(log, attr, getattr(ix, attr))
-    if getattr(log, "ix_name", "") == "" and getattr(ix, "ix_name", "") != "":
+    if (not getattr(log, "ix_name", "") or getattr(ix, "ix_name", "").endswith(("_v2", "_v3"))) and getattr(ix, "ix_name", ""):
         log.ix_name = ix.ix_name
     log.is_created_buy = bool(getattr(log, "is_created_buy", False)) or bool(
         getattr(ix, "is_created_buy", False)
@@ -417,9 +416,11 @@ def dedupe_log_instruction_events(
     # A missing invocation makes ordinal pairing ambiguous. Keep both sources.
     instruction_keys = [_dedupe_key(ev, ix_occurrences) for ev in instruction_events]
     for base, count in log_occurrences.items():
-        if base[0] not in ("PumpFun", "PumpSwapBuy", "PumpSwapSell", "OrcaWhirlpoolLiquidityIncreased", "OrcaWhirlpoolLiquidityDecreased", "RaydiumClmmIncreaseLiquidity", "RaydiumClmmDecreaseLiquidity") or count == ix_occurrences.get(base):
+        if count == ix_occurrences.get(base):
             continue
-        name = "PumpFunTrade" if base[0] == "PumpFun" else base[0]
+        name = {"PumpFun": "PumpFunTrade", "RaydiumClmm": "RaydiumClmmSwap",
+                "RaydiumCpmm": "RaydiumCpmmSwap", "RaydiumAmmV4": "RaydiumAmmV4Swap",
+                "OrcaWhirlpool": "OrcaWhirlpoolSwap", "MeteoraDlmm": "MeteoraDlmmSwap"}.get(base[0], base[0])
         prefix = "|".join(str(part) for part in (name, *base[1:]))
         for occurrence in range(count):
             index_by_key.pop(f"{prefix}|{occurrence}", None)

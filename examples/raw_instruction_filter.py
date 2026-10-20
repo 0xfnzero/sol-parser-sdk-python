@@ -12,5 +12,4 @@ for case in json.loads((Path(__file__).parent / "fixtures/raw_instructions.json"
             base64.b64decode(case["wire"]), case["loaded_writable"], case["loaded_readonly"],
             filter=IncludeOnlyFilter([EventType(kind)]))
         print(json.dumps({"signature": case["signature"], "filter": kind,
-                          "raw_instructions": [json.loads(dex_event_json_dumps(e)) for e in events
-                                               if e.type == EventType.RAW_INSTRUCTION]}))
+                          "events": [json.loads(dex_event_json_dumps(e)) for e in events]}))

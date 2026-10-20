@@ -282,6 +282,11 @@ def parse_rpc_transaction(
                         ev,
                     ))
 
+    from .trade_source import mark_execution_source, log_outer_indices
+    tx_pb, meta_pb = rpc_response_to_solana_storage(tx)
+    if tx_pb is not None and meta_pb is not None:
+        for outer_index, _, _, _, event in indexed_instruction_events:
+            mark_execution_source(event, outer_index, tx_pb.message, meta_pb)
     instruction_events = merge_instruction_events(indexed_instruction_events)
     enrich_pumpfun_same_tx_post_merge(instruction_events)
     if msg.recent_blockhash:
@@ -296,7 +301,8 @@ def parse_rpc_transaction(
     from .parser import parse_invoke_info, parse_log_optimized_with_program_id, parse_program_complete_info
 
     active_program_stack: List[str] = []
-    for log in meta.log_messages:
+    source_indices = log_outer_indices(meta.log_messages, [full_account_keys[ix.program_id_index] if ix.program_id_index < len(full_account_keys) else None for ix in msg.instructions])
+    for log_index, log in enumerate(meta.log_messages):
         invoke = parse_invoke_info(log)
         if invoke is not None:
             program_id, depth = invoke
@@ -316,6 +322,8 @@ def parse_rpc_transaction(
             active_program_stack[-1] if active_program_stack else None,
         )
         if ev:
+            if tx_pb is not None and meta_pb is not None:
+                mark_execution_source(ev, source_indices[log_index], tx_pb.message, meta_pb)
             log_events.append(ev)
 
         completed = parse_program_complete_info(log)
@@ -325,7 +333,6 @@ def parse_rpc_transaction(
                     del active_program_stack[i:]
                     break
 
-    tx_pb, meta_pb = rpc_response_to_solana_storage(tx)
     if tx_pb is not None and meta_pb is not None:
         from .grpc_instruction_parser import apply_account_fill_to_events
 

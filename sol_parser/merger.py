@@ -148,7 +148,7 @@ def merge_pumpfun_trade(base: PumpFunTradeEvent, inner: PumpFunTradeEvent) -> No
         base.is_buy = inner.is_buy
         base.track_volume = bool(base.track_volume) or bool(inner.track_volume)
         base.mayhem_mode = bool(base.mayhem_mode) or bool(inner.mayhem_mode)
-        if inner.ix_name:
+        if inner.ix_name and (not base.ix_name.endswith(("_v2", "_v3")) or inner.ix_name.endswith(("_v2", "_v3"))):
             base.ix_name = inner.ix_name
         base.is_cashback_coin = bool(base.is_cashback_coin) or bool(inner.is_cashback_coin)
     else:
@@ -170,7 +170,7 @@ def merge_pumpfun_trade(base: PumpFunTradeEvent, inner: PumpFunTradeEvent) -> No
             _put_num_if_nonzero(base, attr, inner)
         base.track_volume = bool(base.track_volume) or bool(inner.track_volume)
         base.mayhem_mode = bool(base.mayhem_mode) or bool(inner.mayhem_mode)
-        if inner.ix_name:
+        if inner.ix_name and (not base.ix_name.endswith(("_v2", "_v3")) or inner.ix_name.endswith(("_v2", "_v3"))):
             base.ix_name = inner.ix_name
         base.is_cashback_coin = bool(base.is_cashback_coin) or bool(inner.is_cashback_coin)
 

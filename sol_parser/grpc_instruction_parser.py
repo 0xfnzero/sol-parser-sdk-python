@@ -26,6 +26,25 @@ from .merger import try_merge_dex_events
 from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 
 
+def fill_pump_creation_context(events: List[DexEvent], msg: Any, meta: Any) -> None:
+    """Scope create-buy to the actual mint, including router CPI creates; no I/O."""
+    from .event_types import PumpFunTradeEvent
+    keys = list(msg.account_keys) + list(meta.loaded_writable_addresses) + list(meta.loaded_readonly_addresses)
+    pump = base58.b58decode(PUMPFUN_PROGRAM_ID)
+    created = set()
+    instructions = list(msg.instructions) + [ix for group in meta.inner_instructions for ix in group.instructions]
+    for ix in instructions:
+        if ix.program_id_index >= len(keys) or bytes(keys[ix.program_id_index]) != pump:
+            continue
+        if bytes(ix.data[:8]) not in (bytes([24,30,200,40,5,28,7,119]), bytes([214,144,76,236,95,139,49,180])):
+            continue
+        if ix.accounts and ix.accounts[0] < len(keys):
+            created.add(base58.b58encode(bytes(keys[ix.accounts[0]])).decode())
+    for event in events:
+        if isinstance(event.data, PumpFunTradeEvent):
+            event.data.is_created_buy = event.data.is_buy and event.data.mint in created
+
+
 def collect_program_invokes(msg: Any, meta: Any) -> Dict[bytes, List[Tuple[int, int]]]:
     """从已解析的 ``Message`` + ``TransactionStatusMeta`` 收集各 program_id 的 (outer, inner) 指令索引。"""
     invokes_raw: Dict[bytes, List[Tuple[int, int]]] = {}
@@ -72,6 +91,7 @@ def apply_account_fill_to_events(
     if not msg.account_keys and not msg.instructions:
         return
     invokes_raw = collect_program_invokes(msg, meta_pb)
+    fill_pump_creation_context(events, msg, meta_pb)
     invokes_str: Dict[str, List[Tuple[int, int]]] = {
         base58.b58encode(k).decode("ascii"): v for k, v in invokes_raw.items()
     }
@@ -432,7 +452,11 @@ def parse_instructions_enhanced_from_parsed(
                     ev,
                 ))
 
+    from .trade_source import mark_execution_source
+    for outer_index, _, _, _, event in result:
+        mark_execution_source(event, outer_index, msg, meta)
     merged = merge_instruction_events(result)
+    fill_pump_creation_context(merged, msg, meta)
     enrich_pumpfun_same_tx_post_merge(merged)
 
     invokes_str: Dict[str, List[Tuple[int, int]]] = {

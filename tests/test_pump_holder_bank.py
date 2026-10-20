@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import pytest
+from pump_method import expected_pump_method
 from sol_parser.rpc_parser import parse_rpc_transaction,rpc_get_transaction_result_dict_to_response
 CASES=json.loads((Path(__file__).parent/'fixtures/pump_holder_20261009.json').read_text())['cases']
 @pytest.mark.parametrize('case',CASES,ids=lambda c:c['name'])
@@ -16,4 +17,5 @@ def test_pump_holder_bank(case):
  for event,want in zip(lp,case['expected']):
   assert event.type.value==want['type']
   for key,value in want.items():
+   if key=='ix_name': value=expected_pump_method(case['raw'],value)
    if key!='type':assert str(getattr(event.data,key)).lower()==value if isinstance(getattr(event.data,key),bool) else str(getattr(event.data,key))==value

@@ -514,7 +514,13 @@ __all__ += ['decode_pump_multi_hop_intent','PumpFunPostCompleteBuyEvent','PumpFu
 
 from .pump_routes import PumpRouteHop, PumpRouteIntentEvent
 from .raw_instruction import RawInstructionEvent, RawInstructionDex, RawInstructionDexType
+from .wrapped_pumpfun_parser import parse_wrapped_pumpfun_instruction
+__all__ += ["parse_wrapped_pumpfun_instruction"]
 __all__ += ["RawInstructionEvent", "RawInstructionDex", "RawInstructionDexType"]
 from .shredstream_client import parse_shred_transaction, parse_shred_transaction_with_loaded_addresses, parse_shred_transaction_best_effort
 
 __all__ += ["PumpRouteHop", "PumpRouteIntentEvent", "parse_shred_transaction", "parse_shred_transaction_with_loaded_addresses", "parse_shred_transaction_best_effort"]
+from .trade_source import RawInstructionPayload, TradeParseStatus
+from .stock_catalog import screened_stock_catalog, preferred_stock_pool, stock_conversion_legs
+from .stock_prices import StockPriceTracker, StockTokenPriceEvent
+__all__ += ["RawInstructionPayload", "TradeParseStatus", "screened_stock_catalog", "preferred_stock_pool", "stock_conversion_legs", "StockPriceTracker", "StockTokenPriceEvent"]

@@ -9,8 +9,8 @@ from sol_parser.event_types import PumpFunTradeEvent
 
 ROOT = Path(__file__).parent / 'fixtures'
 CASES = sum((json.loads((ROOT / name).read_text())['cases'] for name in
-             ['pump_execution_20261019.json', 'pump_routes_20261009.json']), [])
-FIELDS = ('mint', 'user', 'pool', 'is_buy', 'token_amount', 'sol_amount', 'quote_amount',
+             ['pump_execution_20261019.json', 'pump_routes_20261009.json', 'wrapped_pumpfun_reported.json']), [])
+FIELDS = ('mint', 'user', 'pool', 'is_buy', 'is_created_buy', 'ix_name', 'token_amount', 'sol_amount', 'quote_amount',
           'base_amount_in', 'base_amount_out', 'quote_amount_in', 'quote_amount_out')
 
 def parse(raw):

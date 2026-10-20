@@ -530,18 +530,24 @@ class YellowstoneGrpc:
         if subscribe_transaction_failed(info):
             return  # Suppress both instruction events and rolled-back log events.
 
-        instruction_events = parse_instructions_enhanced_from_subscribe_tx_info(
-            info,
-            slot,
-            event_type_filter,
-            block_time_us,
-            grpc_recv_us,
-        )
+        from . import solana_storage_pb2 as sol_pb
+        from .grpc_instruction_parser import parse_instructions_enhanced_from_parsed, apply_account_fill_to_events
+        from .trade_source import mark_execution_source, log_outer_indices
+        source_tx, source_meta = sol_pb.Transaction(), sol_pb.TransactionStatusMeta()
+        have_source = bool(info.transaction_raw and info.meta_raw)
+        if have_source:
+            source_tx.ParseFromString(info.transaction_raw)
+            source_meta.ParseFromString(info.meta_raw)
+        instruction_events = parse_instructions_enhanced_from_parsed(
+            source_tx.message, source_meta, signature, slot, int(info.index),
+            block_time_us, grpc_recv_us, event_type_filter, source_tx) if have_source else []
+        source_keys = [*source_tx.message.account_keys, *source_meta.loaded_writable_addresses, *source_meta.loaded_readonly_addresses]
+        source_indices = log_outer_indices(info.log_messages, [base58.b58encode(bytes(source_keys[ix.program_id_index])).decode() if ix.program_id_index < len(source_keys) else None for ix in source_tx.message.instructions])
 
         log_events = []
         has_pumpfun_create_log = detect_pumpfun_create_from_logs(list(info.log_messages))
         active_program_stack = []
-        for log in info.log_messages:
+        for log_index, log in enumerate(info.log_messages):
             invoke = parse_invoke_info(log)
             if invoke is not None:
                 program_id, depth = invoke
@@ -568,6 +574,8 @@ class YellowstoneGrpc:
                             del active_program_stack[i:]
                             break
                 continue
+            if have_source:
+                mark_execution_source(ev, source_indices[log_index], source_tx.message, source_meta)
             log_events.append(ev)
             completed = parse_program_complete_info(log)
             if completed is not None:
@@ -576,8 +584,8 @@ class YellowstoneGrpc:
                         del active_program_stack[i:]
                         break
 
-        enrich_dex_events_with_subscribe_tx_info(instruction_events, info)
-        enrich_dex_events_with_subscribe_tx_info(log_events, info)
+        if have_source:
+            apply_account_fill_to_events(log_events, source_tx, source_meta)
         events = dedupe_log_instruction_events(log_events, instruction_events)
         enrich_pumpfun_same_tx_post_merge(events)
         if order_dispatcher is not None:

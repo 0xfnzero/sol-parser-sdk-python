@@ -15,13 +15,16 @@ CASES = json.loads(
 
 @pytest.mark.parametrize(
     "case,expected",
-    list(zip(CASES, [343.6402644024645, 175.28120314435913, 904.3107197730765])),
+    list(zip(CASES, [343.6402644024645, None, 904.3107197730765])),
 )
 def test_captured_stock_execution(case, expected):
     events = replay_events(case.get("rpc") or case.get("wire_rpc") or case.get("raw"))
     tracker = StockPriceTracker(screened_stock_catalog())
     prices = [p for e in events if (p := tracker.process(e, 1_000_000)) is not None]
-    assert len(prices) == 1
+    # The historical ABNB pool is excluded from default stock-price monitoring.
+    assert len(prices) == (0 if expected is None else 1)
+    if expected is None:
+        return
     assert prices[0].price_usdc == pytest.approx(expected)
     assert prices[0].liquidity is None
     tracker.reset()

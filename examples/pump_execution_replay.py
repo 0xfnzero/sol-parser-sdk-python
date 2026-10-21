@@ -1,4 +1,8 @@
-"""Offline captured executions; optional signature fetch uses SOLANA_RPC_URL."""
+"""Offline execution replay; optional signature fetch uses SOLANA_RPC_URL.
+
+Inspect third_program and parse_status. Execution metadata is unavailable to Shred;
+one outer wrapper may produce several fills, so callback counts may differ.
+"""
 import json
 import os
 import sys
@@ -25,6 +29,6 @@ for case in cases:
         events, error = parse_rpc_transaction(rpc_get_transaction_result_dict_to_response(raw), signature, None, 0)
         if error:
             raise RuntimeError(error)
-        print(f'{mode} slot={raw["slot"]} signature={signature}')
+        print(f'execution_replay {mode} event_count={len(events)} slot={raw["slot"]} signature={signature}')
         for event in events:
             print(format_dex_event_json(event))

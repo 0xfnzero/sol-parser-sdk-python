@@ -24,8 +24,6 @@ from typing import TYPE_CHECKING, Union, List, Optional, Any, Generic, TypeVar, 
 from .grpc_types import EventMetadata, EventType
 from .trade_source import RawInstructionPayload, TradeParseStatus
 
-if TYPE_CHECKING:
-    from .pump_routes import PumpRouteIntentEvent
 
 T = TypeVar('T')
 
@@ -1652,7 +1650,6 @@ class RaydiumLaunchlabMigrateAmmEvent(DexEventBase):
 # ============================================================
 
 TypedDexEvent = Union[
-    "PumpRouteIntentEvent",
     PumpFunTradeEvent,
     PumpFunCreateEvent,
     PumpFunCreateV2TokenEvent,
@@ -1844,19 +1841,6 @@ def _to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         if event_type==kind:
             values={name:(_get_str(data,name) if typ=='pubkey' else _get_int(data,name)) for name,typ in fields}
             return cls(metadata=meta,**values)
-
-    if event_type == EventType.RAW_INSTRUCTION:
-        from .raw_instruction import RawInstructionEvent, RawInstructionDex
-        return RawInstructionEvent(metadata=meta, dexes=[RawInstructionDex(**d) for d in data.get('dexes', [])], program_id=data['program_id'],
-            instruction_index=int(data['instruction_index']), accounts=list(data['accounts']),
-            account_indices=list(data['account_indices']), instruction_data=list(data['instruction_data']))
-    if event_type == EventType.PUMP_ROUTE_INTENT:
-        from .pump_routes import PumpRouteHop, PumpRouteIntentEvent
-        return PumpRouteIntentEvent(metadata=meta,kind=data['kind'],program=data['program'],
-            instruction_index=int(data['instruction_index']),user=data['user'],input_account=data['input_account'],output_account=data['output_account'],
-            amount_in=None if data.get('amount_in') is None else int(data['amount_in']),min_amount_out=None if data.get('min_amount_out') is None else int(data['min_amount_out']),
-            hops=[PumpRouteHop(**h) for h in data['hops']],instruction_data=list(data['instruction_data']),
-            is_buy=data.get('is_buy'),ix_name=data.get('ix_name'))
 
     # PumpFun events
     if event_type in (EventType.PUMP_FUN_TRADE, EventType.PUMP_FUN_BUY,

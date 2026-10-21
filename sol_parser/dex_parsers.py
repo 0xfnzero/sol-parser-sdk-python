@@ -67,11 +67,11 @@ Z = "11111111111111111111111111111111"
 
 
 def normalize_pumpfun_ix_name(ix_name: str) -> str:
-    if ix_name == "buy_v2":
+    if ix_name in ("buy_v2", "buy_v3"):
         return "buy"
-    if ix_name == "sell_v2":
+    if ix_name in ("sell_v2", "sell_v3"):
         return "sell"
-    if ix_name == "buy_exact_quote_in_v2":
+    if ix_name in ("buy_exact_quote_in_v2", "buy_exact_quote_in_v3"):
         return "buy_exact_quote_in"
     return ix_name
 

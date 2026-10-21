@@ -436,6 +436,17 @@ def dedupe_log_instruction_events(
             continue
         _merge_grpc_instruction_into_log(out[idx], ev)
 
+    for index in range(1, len(out)):
+        event = out[index]
+        if event.type not in (EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_CREATE_V2):
+            continue
+        mint = event.data.mint
+        if not mint or mint == ZERO:
+            continue
+        first = next((i for i in range(index)
+                      if out[i].type in PUMPFUN_TRADE_TYPES and out[i].data.mint == mint), None)
+        if first is not None:
+            out.insert(first, out.pop(index))
     return _prefer_current_dbc_events(out)
 
 

@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from sol_parser.pump_upgrade import (
     parse_pump_upgrade_event,
-    decode_pump_multi_hop_intent,
 )
 from sol_parser.inner_instruction_parser import parse_inner_instruction
 

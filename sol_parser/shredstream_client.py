@@ -133,9 +133,8 @@ def _should_parse_shred_instructions(filter: Optional[EventTypeFilter]) -> bool:
 
 
 def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, best_effort=False):
-    from .raw_instruction import RawInstructionEvent, INFRASTRUCTURE_PROGRAMS, raw_instruction_dexes, raw_instruction_matches_filter
+    from .raw_instruction import INFRASTRUCTURE_PROGRAMS
     from .grpc_types import EventType
-    from .pump_routes import may_parse_route, parse_route
     from .grpc_types import EventMetadata
     if not _should_parse_shred_instructions(filter):
         return []
@@ -153,33 +152,23 @@ def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, b
     out = []
     for index, (pid, data, indices) in enumerate(instructions):
         unknown = pid and pid not in _UNKNOWN_PROGRAM_CANDIDATES and pid not in INFRASTRUCTURE_PROGRAMS
-        explicit_raw = filter is not None and EventType.RAW_INSTRUCTION in (getattr(filter, 'include_only', None) or ())
-        dexes = raw_instruction_dexes(pid, [keys[i] if i < len(keys) else None for i in indices]) if unknown or explicit_raw else []
-        if pid and (unknown or explicit_raw):
-            raw = RawInstructionEvent(
-                metadata=EventMetadata(signature=signature, slot=slot, tx_index=tx_index, grpc_recv_us=recv_us, recent_blockhash=msg['recentBlockhash']),
-                dexes=dexes, program_id=pid, instruction_index=index,
-                accounts=[keys[i] if i < len(keys) else None for i in indices],
-                account_indices=list(indices), instruction_data=list(data))
-            if explicit_raw and raw_instruction_matches_filter(dexes, filter):
-                out.append(DexEvent(EventType.RAW_INSTRUCTION, raw))
-            if unknown and any(d.program_id == PUMPFUN_PROGRAM_ID for d in dexes) and (not hasattr(filter, 'include_only') or EventType.PUMP_FUN_TRADE in filter.include_only) and (filter is None or filter.should_include(EventType.PUMP_FUN_TRADE)):
-                from .event_types import PumpFunTradeEvent
-                from .trade_source import RawInstructionPayload, TradeParseStatus
-                out.append(DexEvent(EventType.PUMP_FUN_TRADE, PumpFunTradeEvent(
-                    metadata=raw.metadata, third_program=RawInstructionPayload.from_raw(raw),
-                    parse_status=TradeParseStatus.UNRESOLVED)))
+        if (unknown and any(i < len(keys) and keys[i] == PUMPFUN_PROGRAM_ID for i in indices)
+                and EventType.PUMP_FUN_TRADE not in (getattr(filter, "exclude_types", None) or ())
+                and (filter is None or filter.should_include(EventType.PUMP_FUN_TRADE))):
+            from .event_types import PumpFunTradeEvent
+            from .trade_source import RawInstructionPayload, TradeParseStatus
+            out.append(DexEvent(EventType.PUMP_FUN_TRADE, PumpFunTradeEvent(
+                metadata=EventMetadata(signature=signature, slot=slot, tx_index=tx_index,
+                    grpc_recv_us=recv_us, recent_blockhash=msg['recentBlockhash']),
+                third_program=RawInstructionPayload(
+                    program_id=pid, instruction_index=index,
+                    accounts=[keys[i] if i < len(keys) else None for i in indices],
+                    account_indices=list(indices), instruction_data=list(data)),
+                parse_status=TradeParseStatus.UNRESOLVED)))
         if unknown:
             continue
         resolved = pid is not None and all(i < len(keys) for i in indices)
         if not resolved and not best_effort:
-            continue
-        if pid and may_parse_route(pid, data):
-            if resolved:
-                metadata = EventMetadata(signature=signature, slot=slot, tx_index=tx_index, grpc_recv_us=recv_us,
-                                         recent_blockhash=msg['recentBlockhash'])
-                event = parse_route(pid, data, [keys[i] for i in indices], metadata, index, filter)
-                if event:out.append(event)
             continue
         if pid == PUMPFUN_PROGRAM_ID:
             if not _pumpfun_filter_allows(filter):continue

@@ -159,29 +159,3 @@ def parse_pump_upgrade_event(disc, data, metadata, program_id=None):
     if offset != len(data):
         return None
     return DexEvent(kind, cls(metadata=metadata, **values))
-
-
-def decode_pump_multi_hop_intent(program, data, accounts):
-    """Instruction limits only. Actual execution is reported by per-hop trade events."""
-    from .pump_routes import multi_hop_args
-    args = multi_hop_args(program, data, accounts)
-    if args is None:
-        return None
-    amount_in, minimum = args
-    return dict(
-        user=accounts[0],
-        input_account=accounts[1],
-        output_account=accounts[2],
-        amount_in=amount_in,
-        min_amount_out=minimum,
-        hops=[
-            dict(
-                base_mint=accounts[i],
-                quote_mint=accounts[i + 1],
-                venue=accounts[i + 2],
-                base_vault=accounts[i + 3],
-                quote_vault=accounts[i + 4],
-            )
-            for i in range(16, len(accounts), 5)
-        ],
-    )

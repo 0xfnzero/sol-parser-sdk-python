@@ -534,7 +534,7 @@ def parse_pumpfun_instruction(
     meta = _make_meta(signature, slot, tx_index, block_time_us, grpc_recv_us)
 
     if data[:8] == bytes([7, 5, 29, 196, 245, 23, 101, 80]):
-        if len(accounts) != 17 or len(data) not in (24,25):
+        if len(accounts) < 17 or len(data) not in (24,25):
             return None
         if len(data)==25 and data[24]>1:
             return None
@@ -561,7 +561,7 @@ def parse_pumpfun_instruction(
             event.data.ix_name="buy_v3"
         return event
     if data[:8] == bytes([225, 247, 80, 30, 213, 179, 132, 136]):
-        if len(accounts) != 17 or len(data) not in (24,25):
+        if len(accounts) < 17 or len(data) not in (24,25):
             return None
         if len(data)==25 and data[24]>1:
             return None
@@ -588,7 +588,7 @@ def parse_pumpfun_instruction(
             event.data.ix_name="buy_exact_quote_in_v3"
         return event
     if data[:8] == bytes([28, 146, 222, 119, 38, 196, 105, 213]):
-        if len(accounts) != 17 or len(data) not in (24,):
+        if len(accounts) < 17 or len(data) not in (24,):
             return None
         mapped=[Z]*27
         mapped[0]=accounts[0]

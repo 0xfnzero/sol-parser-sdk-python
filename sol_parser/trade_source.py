@@ -18,17 +18,6 @@ class RawInstructionPayload:
     accounts: list[Optional[str]] = field(default_factory=list)
     account_indices: list[int] = field(default_factory=list)
     instruction_data: list[int] = field(default_factory=list)
-    rule_id: Optional[str] = None
-
-    @classmethod
-    def from_raw(cls, raw):
-        return cls(
-            raw.program_id,
-            raw.instruction_index,
-            list(raw.accounts),
-            list(raw.account_indices),
-            list(raw.instruction_data),
-        )
 
     def __getitem__(self, key):
         """Compatibility with the former dictionary-shaped third_program."""

@@ -24,6 +24,21 @@ def _accounts(n: int) -> list[str]:
     return [f"account_{i}" for i in range(n)]
 
 
+def test_v3_remaining_accounts_preserve_roles_and_metadata() -> None:
+    for disc in (bytes([7, 5, 29, 196, 245, 23, 101, 80]),
+                 bytes([225, 247, 80, 30, 213, 179, 132, 136]),
+                 bytes([28, 146, 222, 119, 38, 196, 105, 213])):
+        data = disc + struct.pack("<QQ", 100, 7)
+        def parse(count: int):
+            return parse_pumpfun_instruction(data, _accounts(count), "sig", 123, 71, None, 999)
+        event = parse(19)
+        assert event is not None
+        assert event == parse(17)
+        assert parse(16) is None
+        assert event.data.metadata.tx_index == 71
+        assert event.data.metadata.grpc_recv_us == 999
+
+
 def _u64_instruction(disc: bytes, first: int, second: int) -> bytes:
     return disc + struct.pack("<QQ", first, second)
 

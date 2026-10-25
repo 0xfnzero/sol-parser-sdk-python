@@ -1,7 +1,7 @@
 """ShredStream gRPC 客户端：SubscribeEntries + bincode 解码 + DEX 外层指令。
 
 限制：与 Rust 文档一致——不解析 inner CPI 日志；当前 Python 热路径只使用静态账户，
-默认跳过未解析账户；ALT 只使用调用方预热缓存，不回退 RPC。Legacy/V0/V1 使用原生线格式解码。
+已知 Pump.fun 指令保留回调，未展开 ALT 地址保持默认值；ALT 只使用调用方预热缓存，不回退 RPC。Legacy/V0/V1 使用原生线格式解码。
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ from .instructions import (
 )
 from .pumpfun_fee_enrich import enrich_pumpfun_same_tx_post_merge
 from .shredstream_pumpfun import detect_pumpfun_create_mints, parse_pumpfun_shred_ix
+from .shredstream_pump_multi_hop import MULTI_HOP_SWAP, parse_curve_hops
 from .shredstream_pb2 import SubscribeEntriesRequest
 from .shredstream_pb2_grpc import ShredstreamProxyStub
 
@@ -145,7 +146,7 @@ def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, b
     created, mayhem = set(), set()
     if _pumpfun_filter_allows(filter):
         for pid, data, indices in instructions:
-            if pid == PUMPFUN_PROGRAM_ID and (best_effort or all(i < len(keys) for i in indices)):
+            if pid == PUMPFUN_PROGRAM_ID:
                 c, m = detect_pumpfun_create_mints(pid, data, indices, keys)
                 created |= c
                 mayhem |= m
@@ -154,7 +155,7 @@ def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, b
         unknown = pid and pid not in _UNKNOWN_PROGRAM_CANDIDATES and pid not in INFRASTRUCTURE_PROGRAMS
         if (unknown and any(i < len(keys) and keys[i] == PUMPFUN_PROGRAM_ID for i in indices)
                 and EventType.PUMP_FUN_TRADE not in (getattr(filter, "exclude_types", None) or ())
-                and (filter is None or filter.should_include(EventType.PUMP_FUN_TRADE))):
+                and (getattr(filter, "include_only", None) is None or EventType.PUMP_FUN_TRADE in filter.include_only)):
             from .event_types import PumpFunTradeEvent
             from .trade_source import RawInstructionPayload, TradeParseStatus
             out.append(DexEvent(EventType.PUMP_FUN_TRADE, PumpFunTradeEvent(
@@ -167,9 +168,24 @@ def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, b
                 parse_status=TradeParseStatus.UNRESOLVED)))
         if unknown:
             continue
+        if pid == PUMPSWAP_PROGRAM_ID and data.startswith(MULTI_HOP_SWAP):
+            if (EventType.PUMP_FUN_TRADE not in (getattr(filter, 'exclude_types', None) or ())
+                    and (getattr(filter, "include_only", None) is None or EventType.PUMP_FUN_TRADE in filter.include_only)):
+                hops = parse_curve_hops(data, indices, keys, index, EventMetadata(signature=signature,
+                    slot=slot, tx_index=tx_index, grpc_recv_us=recv_us, recent_blockhash=msg['recentBlockhash']))
+                for hop in hops:
+                    hop.data.is_created_buy = hop.data.is_buy and hop.data.mint in created
+                out.extend(hops)
+            continue
         resolved = pid is not None and all(i < len(keys) for i in indices)
         if not resolved and not best_effort:
-            continue
+            if pid != PUMPFUN_PROGRAM_ID:
+                continue
+            minimum = {bytes([184,23,238,97,103,197,211,61]):27,
+                       bytes([194,171,28,70,104,77,91,47]):27,
+                       bytes([93,246,130,60,231,233,64,178]):26}.get(data[:8], 0)
+            if len(indices) < minimum:
+                continue
         if pid == PUMPFUN_PROGRAM_ID:
             if not _pumpfun_filter_allows(filter):continue
             event = _filter_parsed_event(parse_pumpfun_shred_ix(data, keys, indices, pid, signature,
@@ -181,6 +197,20 @@ def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, b
                 event = parse_instruction_unified(data, accounts, signature, slot, tx_index, None, recv_us, filter, program)
                 if event:break
         if event:
+            from .event_types import PumpFunTradeEvent
+            if pid == PUMPFUN_PROGRAM_ID and isinstance(event.data, PumpFunTradeEvent):
+                trade = event.data
+                def missing(i):
+                    return i < len(indices) and indices[i] >= len(keys)
+                if trade.ix_name.endswith(('_v2', '_v3')):
+                    for i, field in ((2, 'quote_mint'), (3, 'token_program'), (4, 'quote_token_program')):
+                        if missing(i):setattr(trade, field, Z)
+                elif missing(9 if trade.ix_name == 'sell' else 8):
+                    trade.token_program = Z
+                only = getattr(filter, 'include_only', None) or ()
+                if EventType.PUMP_FUN_TRADE in only and not any(t in only for t in
+                        (EventType.PUMP_FUN_BUY, EventType.PUMP_FUN_SELL, EventType.PUMP_FUN_BUY_EXACT_SOL_IN)):
+                    event.type = EventType.PUMP_FUN_TRADE
             if hasattr(event.data, 'metadata'):event.data.metadata.recent_blockhash = msg['recentBlockhash']
             out.append(event)
     enrich_pumpfun_same_tx_post_merge(out)

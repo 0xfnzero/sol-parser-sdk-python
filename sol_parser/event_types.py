@@ -248,6 +248,7 @@ class PumpFunCreateV2TokenEvent(DexEventBase):
     ``observed_fee_recipient`` 由同笔交易中后续 Buy 的 fee recipient 回填（见 ``pumpfun_fee_enrich``）。
     """
 
+    ix_name: str = "create_v2"
     name: str = ""
     symbol: str = ""
     uri: str = ""
@@ -1952,6 +1953,7 @@ def _to_typed_event(event: dict) -> Optional[TypedDexEvent]:
         g = _get_str(data, "global") or _get_str(data, "global_account")
         return PumpFunCreateV2TokenEvent(
             metadata=meta,
+            ix_name=_get_str(data, "ix_name") or "create_v2",
             name=_get_str(data, "name"),
             symbol=_get_str(data, "symbol"),
             uri=_get_str(data, "uri"),

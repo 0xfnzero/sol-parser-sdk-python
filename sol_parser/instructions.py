@@ -781,7 +781,6 @@ def _parse_pumpfun_trade_v2(
         event_type = EventType.PUMP_FUN_SELL
     else:
         event_type = EventType.PUMP_FUN_BUY
-    normalized_ix_name = normalize_pumpfun_ix_name(ix_name)
 
     return DexEvent(
         type=event_type,
@@ -803,7 +802,7 @@ def _parse_pumpfun_trade_v2(
             fee_recipient=_get_account_safe(accounts, 6),
             is_buy=ix_name != "sell_v2",
             is_created_buy=False,
-            ix_name=normalized_ix_name,
+            ix_name=ix_name,
             associated_bonding_curve=_get_account_safe(accounts, 11),
             associated_user=_get_account_safe(accounts, 14),
             system_program=_get_account_safe(accounts, 23 if ix_name == "sell_v2" else 24),

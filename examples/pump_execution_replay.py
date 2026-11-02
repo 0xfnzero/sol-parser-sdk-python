@@ -1,6 +1,6 @@
 """Offline execution replay; optional signature fetch uses SOLANA_RPC_URL.
 
-Inspect third_program and parse_status. Execution metadata is unavailable to Shred;
+Inspect third_program and instruction inputs. Execution metadata is unavailable to Shred;
 one outer wrapper may produce several fills, so callback counts may differ.
 """
 import json

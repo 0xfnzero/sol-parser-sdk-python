@@ -2,7 +2,6 @@ import json
 from sol_parser.trade_source import (
     log_outer_indices,
     RawInstructionPayload,
-    TradeParseStatus,
 )
 from sol_parser.event_types import PumpFunTradeEvent, to_typed_event, DexEvent
 from sol_parser.grpc_types import EventType
@@ -19,19 +18,18 @@ def test_truncated_log_mapping_is_not_shifted():
     ) == [0, 0, 1]
 
 
-def test_source_json_roundtrip_preserves_unknown_accounts_and_status():
+def test_source_json_roundtrip_preserves_unknown_accounts():
     raw = RawInstructionPayload(
         "router", 3, ["account", "account", None], [1, 1, 250], [255, 0, 3]
     )
     trade = PumpFunTradeEvent(
-        third_program=raw, parse_status=TradeParseStatus.UNRESOLVED
+        third_program=raw
     )
     encoded = json.loads(
         dex_event_json_dumps(DexEvent(EventType.PUMP_FUN_TRADE, trade))
     )
     restored = to_typed_event({encoded["type"]: encoded["data"]})
     assert restored.third_program == raw
-    assert restored.parse_status is TradeParseStatus.UNRESOLVED
 
 
 def test_other_dex_occurrence_mismatches_remain_unpaired():

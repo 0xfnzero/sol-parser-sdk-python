@@ -587,6 +587,11 @@ class YellowstoneGrpc:
         if have_source:
             apply_account_fill_to_events(log_events, source_tx, source_meta)
         events = dedupe_log_instruction_events(log_events, instruction_events)
+        if have_source and source_tx.HasField("message"):
+            from .grpc.transaction_meta import fill_creation_context
+            message = source_tx.message
+            version = 1 if message.HasField("config") else 0 if message.versioned else "legacy"
+            fill_creation_context(events, version, (l.account_key for l in message.address_table_lookups))
         enrich_pumpfun_same_tx_post_merge(events)
         if order_dispatcher is not None:
             order_dispatcher.push_transaction_events(

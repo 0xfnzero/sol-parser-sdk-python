@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Generator, List, Optional
 from urllib.parse import urlparse
 
@@ -52,6 +52,7 @@ class ShredStreamConfig:
     max_decoding_message_size: int = 100 * 1024 * 1024
     reconnect_delay_ms: int = 1000
     max_reconnect_attempts: int = 3
+    auth_token: Optional[str] = field(default=None, repr=False)
 
     @staticmethod
     def low_latency() -> ShredStreamConfig:
@@ -157,15 +158,14 @@ def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, b
                 and EventType.PUMP_FUN_TRADE not in (getattr(filter, "exclude_types", None) or ())
                 and (getattr(filter, "include_only", None) is None or EventType.PUMP_FUN_TRADE in filter.include_only)):
             from .event_types import PumpFunTradeEvent
-            from .trade_source import RawInstructionPayload, TradeParseStatus
+            from .trade_source import RawInstructionPayload
             out.append(DexEvent(EventType.PUMP_FUN_TRADE, PumpFunTradeEvent(
                 metadata=EventMetadata(signature=signature, slot=slot, tx_index=tx_index,
                     grpc_recv_us=recv_us, recent_blockhash=msg['recentBlockhash']),
                 third_program=RawInstructionPayload(
                     program_id=pid, instruction_index=index,
                     accounts=[keys[i] if i < len(keys) else None for i in indices],
-                    account_indices=list(indices), instruction_data=list(data)),
-                parse_status=TradeParseStatus.UNRESOLVED)))
+                    account_indices=list(indices), instruction_data=list(data)))))
         if unknown:
             continue
         if pid == PUMPSWAP_PROGRAM_ID and data.startswith(MULTI_HOP_SWAP):
@@ -213,6 +213,8 @@ def _parse_decoded_shred(tx, keys, signature, slot, tx_index, recv_us, filter, b
                     event.type = EventType.PUMP_FUN_TRADE
             if hasattr(event.data, 'metadata'):event.data.metadata.recent_blockhash = msg['recentBlockhash']
             out.append(event)
+    from .grpc.transaction_meta import fill_creation_context
+    fill_creation_context(out, tx.get('version'), (l['accountKey'] for l in msg.get('addressTableLookups', [])))
     enrich_pumpfun_same_tx_post_merge(out)
     return out
 
@@ -247,7 +249,7 @@ def parse_shred_transaction(raw, signature='', slot=0, tx_index=0, recv_us=0, fi
     except (ValueError, IndexError, TypeError):
         return []
     if address_lookup_resolver is not None and tx['message'].get('addressTableLookups'):
-        loaded = address_lookup_resolver(tx, slot)
+        loaded = address_lookup_resolver(tx, slot, recv_us, tx_index, filter)
         if loaded is None:return []
         return _parse_loaded_shred(tx, *loaded, signature, slot, tx_index, recv_us, filter)
     return _parse_decoded_shred(tx, tx['message']['accountKeys'], signature, slot, tx_index, recv_us, filter, best_effort)
@@ -271,7 +273,7 @@ class ShredStreamClient:
         self.address_lookup_resolver = None
 
     def with_address_lookup_resolver(self, resolver):
-        """Set a synchronous slot-aware cache callback; no automatic RPC fallback."""
+        """Callback (transaction, slot, recv_us, tx_index, filter); cache-only, no RPC fallback."""
         self.address_lookup_resolver = resolver
         return self
 
@@ -287,6 +289,10 @@ class ShredStreamClient:
     ) -> Generator[DexEvent, None, None]:
         """订阅 ``SubscribeEntries``，解码每笔线交易中的 DEX 外层指令事件。"""
         f = filter
+        token = (self.config.auth_token or "").strip()
+        if token and any(ord(c) < 32 or ord(c) > 126 for c in token):
+            raise ValueError("Invalid x-token metadata")
+        metadata = (("x-token", token),) if token else ()
         scheme, target = _parsed_endpoint(self.endpoint)
         opts = [
             ("grpc.max_receive_message_length", self.config.max_decoding_message_size),
@@ -300,7 +306,7 @@ class ShredStreamClient:
             channel = grpc.insecure_channel(target, options=opts)
         stub = ShredstreamProxyStub(channel)
         try:
-            for entry in stub.SubscribeEntries(SubscribeEntriesRequest()):
+            for entry in stub.SubscribeEntries(SubscribeEntriesRequest(), metadata=metadata):
                 slot = entry.slot
                 recv_us = int(time.time() * 1_000_000)
                 try:

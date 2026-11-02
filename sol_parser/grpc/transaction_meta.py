@@ -181,3 +181,27 @@ __all__ = [
     "collect_watch_transfer_counterparty_pairs",
     "try_yellowstone_signature",
 ]
+
+
+def fill_creation_context(events, version, alt_keys):
+    """Copy transaction-level context only onto creation events; never resolve ALT."""
+    from ..event_types import PumpFunCreateEvent, PumpFunCreateV2TokenEvent
+    keys = None
+    for event in events:
+        if not isinstance(event.data, (PumpFunCreateEvent, PumpFunCreateV2TokenEvent)):
+            continue
+        event.data.transaction_version = {"legacy": "legacy", 0: "v0", 1: "v1"}.get(version)
+        if keys is None:
+            keys = tuple(alt_keys)
+        addresses = []
+        for key in keys:
+            try:
+                raw = base58.b58decode(key) if isinstance(key, str) else bytes(key)
+                if len(raw) != 32:
+                    addresses = []
+                    break
+                addresses.append(key if isinstance(key, str) else base58.b58encode(raw).decode())
+            except (ValueError, TypeError):
+                addresses = []
+                break
+        event.data.alt_addresses = addresses or None

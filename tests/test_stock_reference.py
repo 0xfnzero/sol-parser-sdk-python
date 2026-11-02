@@ -2,7 +2,6 @@ from sol_parser import StockPriceTracker
 from sol_parser.stock_prices import STOCK_USDC, STOCK_WSOL, DEFAULT_STOCK_SOL_USDC_POOL
 from sol_parser.event_types import DexEvent,RaydiumCpmmSwapEvent
 from sol_parser.grpc_types import EventType,EventMetadata
-from sol_parser.trade_source import TradeParseStatus
 import base58
 import pytest
 MINT=base58.b58encode(bytes([21])*32).decode()
@@ -10,7 +9,6 @@ POOL=base58.b58encode(bytes([22])*32).decode()
 def swap(reference,index):
     return DexEvent(EventType.RAYDIUM_CPMM_SWAP,RaydiumCpmmSwapEvent(
         metadata=EventMetadata(slot=100,tx_index=index,grpc_recv_us=1000),
-        parse_status=TradeParseStatus.EXECUTION_CONFIRMED,
         pool_id=DEFAULT_STOCK_SOL_USDC_POOL if reference else POOL,
         input_mint=STOCK_WSOL if reference else MINT,output_mint=STOCK_USDC,
         input_amount=1_000_000_000 if reference else 1_000_000,

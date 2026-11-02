@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 import pytest
 from sol_parser import StockPriceTracker, screened_stock_catalog
-from sol_parser.trade_source import TradeParseStatus
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "examples"))
 from replay_input import replay_events
@@ -30,7 +29,12 @@ def test_captured_stock_execution(case, expected):
     tracker.reset()
     assert all(tracker.process(e, 100_000_000) is None for e in events)
     for e in events:
-        e.data.parse_status = TradeParseStatus.UNRESOLVED
+        for key in ("input_vault_before", "output_vault_before", "sqrt_price_x64", "post_sqrt_price", "pool_base_token_reserves", "pool_quote_token_reserves"):
+            if hasattr(e.data, key):
+                setattr(e.data, key, 0)
+    for e in events:
+        if hasattr(e.data, "event_version"):
+            e.data.event_version = 0
     assert all(tracker.process(e, 1_000_000) is None for e in events)
 
 

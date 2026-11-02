@@ -115,3 +115,25 @@ def test_shredstream_filter_applies_to_pumpfun_fast_path() -> None:
         IncludeOnlyFilter([EventType.ACCOUNT_PUMP_FUN_GLOBAL])
     )
     assert not _should_parse_shred_instructions(IncludeOnlyFilter([]))
+
+
+def test_subscription_x_token_metadata(monkeypatch):
+    import pytest
+    import sol_parser.shredstream_client as shred
+    class Channel:
+        def close(self): pass
+    monkeypatch.setattr(shred.grpc, 'insecure_channel', lambda *a, **k: Channel())
+    sent = []
+    class Stub:
+        def __init__(self, channel): pass
+        def SubscribeEntries(self, request, metadata=()):
+            sent.append(metadata)
+            return iter(())
+    monkeypatch.setattr(shred, 'ShredstreamProxyStub', Stub)
+    for token in (None, '', '  ', '  test-token  '):
+        config = shred.ShredStreamConfig(auth_token=token)
+        assert list(shred.ShredStreamClient('localhost:1', config).iter_dex_events()) == []
+        assert not token or token not in repr(config)
+    assert sent == [(), (), (), (("x-token", "test-token"),)]
+    with pytest.raises(ValueError, match='^Invalid x-token metadata$'):
+        list(shred.ShredStreamClient('localhost:1', shred.ShredStreamConfig(auth_token='secret\nbad')).iter_dex_events())

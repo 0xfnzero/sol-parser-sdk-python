@@ -48,7 +48,6 @@ def test_execution_without_logs(case):
 from base64 import b64decode
 from sol_parser.shredstream_client import parse_shred_transaction, parse_shred_transaction_with_loaded_addresses
 from sol_parser.grpc_types import EventType, IncludeOnlyFilter
-from sol_parser.trade_source import TradeParseStatus
 
 @pytest.mark.parametrize('i,case', list(enumerate(json.loads((ROOT/'pump_create_alt_20261026.json').read_text())['cases'])))
 def test_signed_alt_create_and_trade(i, case):
@@ -87,7 +86,6 @@ def test_official_multi_hop_curve_provenance_and_execution_amounts():
     assert t.mint == 'Aijxkeq5L9iaDYZxfaXUhnHQj4cYeo8um6a3t5vzpump'
     assert t.quote_mint == '6Vk3fAQWYEot6JbQb8Nx8j5wZeDnMhzk8FajjHhZpump'
     assert (t.sol_amount,t.token_amount,t.quote_amount) == (0,0,0)
-    assert t.parse_status == TradeParseStatus.INSTRUCTION_DECODED
     source = t.third_program
     assert source and source.instruction_data == list(base58.b58decode(case['raw']['transaction']['message']['instructions'][source.instruction_index]['data']))
     assert parse_shred_transaction(wire, filter=IncludeOnlyFilter([EventType.PUMP_FUN_BUY])) == []
@@ -125,3 +123,57 @@ def test_multi_hop_rejects_non_curve_venues_and_bad_layouts():
     missing_vault[24] = 255
     event = parse_hops(missing_vault)[0].data
     assert event.third_program.accounts[24] is None
+
+
+def test_resolver_context_and_creation_metadata():
+    case = json.loads((ROOT/'pump_create_alt_20261026.json').read_text())['cases'][0]
+    rpc = case['wire_rpc']
+    wire = b64decode(rpc['transaction'][0])
+    filter = IncludeOnlyFilter([EventType.PUMP_FUN_CREATE, EventType.PUMP_FUN_TRADE])
+    calls = []
+    def resolve(tx, slot, recv_us, tx_index, event_filter):
+        calls.append((tx, slot, recv_us, tx_index, event_filter))
+        return rpc['meta']['loadedAddresses']['writable'], rpc['meta']['loadedAddresses']['readonly']
+    events = parse_shred_transaction(wire, slot=42, tx_index=888, recv_us=123456, filter=filter, address_lookup_resolver=resolve)
+    assert len(calls) == 1
+    tx = calls[0][0]
+    assert calls[0][1:] == (42,123456,888,filter)
+    create = events[0].data
+    assert create.transaction_version == 'v0'
+    assert create.alt_addresses == [l['accountKey'] for l in tx['message']['addressTableLookups']]
+    assert parse_shred_transaction(wire, address_lookup_resolver=lambda *args: None) == []
+
+
+def test_grpc_creation_context_survives_protobuf():
+    import asyncio
+    from sol_parser import YellowstoneGrpc
+    from sol_parser.grpc_types import SubscribeUpdateTransactionInfo
+    from sol_parser.rpc_parser import rpc_response_to_solana_storage
+    from sol_parser.event_types import PumpFunCreateEvent, PumpFunCreateV2TokenEvent
+    async def run():
+        for case in CASES:
+            raw = case['raw']
+            response = rpc_get_transaction_result_dict_to_response(raw)
+            tx, meta = rpc_response_to_solana_storage(response)
+            info = SubscribeUpdateTransactionInfo(signature=base58.b58decode(raw['transaction']['signatures'][0]),
+                transaction_raw=tx.SerializeToString(), meta_raw=meta.SerializeToString())
+            queue = asyncio.Queue()
+            client = YellowstoneGrpc.new('http://localhost:1')
+            await client._enqueue_transaction_dex_events(queue, info, raw['slot'], None, 123456, None)
+            while not queue.empty():
+                event = queue.get_nowait()
+                if isinstance(event.data, (PumpFunCreateEvent, PumpFunCreateV2TokenEvent)):
+                    assert event.data.transaction_version == {"legacy":"legacy",0:"v0",1:"v1"}[raw['version']]
+                    assert event.data.alt_addresses == ([l['accountKey'] for l in raw['transaction']['message'].get('addressTableLookups',[])] or None)
+    asyncio.run(run())
+
+@pytest.mark.parametrize('case', [c for c in CASES if 'resolved_pump_trade_count' in c])
+def test_reported_alt_only_program_candidates(case):
+    rpc = case['wire_rpc']
+    wire = b64decode(rpc['transaction'][0])
+    filter = IncludeOnlyFilter([EventType.PUMP_FUN_TRADE])
+    assert parse_shred_transaction(wire, filter=filter) == []
+    loaded = rpc['meta']['loadedAddresses']
+    events = parse_shred_transaction_with_loaded_addresses(wire, loaded['writable'], loaded['readonly'], filter=filter)
+    assert len(events) == 3
+    assert all(e.data.third_program and not e.data.ix_name and e.data.token_amount == 0 for e in events)

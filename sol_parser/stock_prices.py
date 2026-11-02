@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import math
 import base58
 from .stock_catalog import STOCK_DEX_PROGRAMS
-from .trade_source import TradeParseStatus
 
 STOCK_WSOL = "So11111111111111111111111111111111111111112"
 STOCK_USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
@@ -40,8 +39,6 @@ def _valid_key(key):
 
 def _executed_swap(event):
     d = event.data
-    if getattr(d, "parse_status", None) != TradeParseStatus.EXECUTION_CONFIRMED:
-        return None
     name = event.type.value
     if (
         name == "RaydiumCpmmSwap"

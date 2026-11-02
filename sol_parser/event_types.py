@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Union, List, Optional, Any, Generic, TypeVar, Dict, Tuple
 
 from .grpc_types import EventMetadata, EventType
-from .trade_source import RawInstructionPayload, TradeParseStatus
+from .trade_source import RawInstructionPayload
 
 
 T = TypeVar('T')
@@ -121,7 +121,6 @@ class DexEventBase:
 
 @dataclass
 class PumpFunTradeEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     """PumpFun 交易事件"""
     third_program: Optional[RawInstructionPayload] = None
     mint: str = ""
@@ -203,6 +202,8 @@ class PumpFunTradeEvent(DexEventBase):
 @dataclass
 class PumpFunCreateEvent(DexEventBase):
     """PumpFun 创建代币事件"""
+    transaction_version: Optional[str] = None
+    alt_addresses: Optional[list[str]] = None
     depth: int = 0
     name: str = ""
     symbol: str = ""
@@ -248,6 +249,8 @@ class PumpFunCreateV2TokenEvent(DexEventBase):
     ``observed_fee_recipient`` 由同笔交易中后续 Buy 的 fee recipient 回填（见 ``pumpfun_fee_enrich``）。
     """
 
+    transaction_version: Optional[str] = None
+    alt_addresses: Optional[list[str]] = None
     ix_name: str = "create_v2"
     name: str = ""
     symbol: str = ""
@@ -416,7 +419,6 @@ class PumpFunMigrateBondingCurveCreatorEvent(DexEventBase):
 
 @dataclass
 class PumpSwapBuyEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """PumpSwap 买入事件"""
     timestamp: int = 0
@@ -477,7 +479,6 @@ class PumpSwapBuyEvent(DexEventBase):
 
 @dataclass
 class PumpSwapSellEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """PumpSwap 卖出事件"""
     timestamp: int = 0
@@ -608,7 +609,6 @@ _PLACEHOLDER_PK = "11111111111111111111111111111111"
 
 @dataclass
 class RaydiumAmmV4SwapEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """Raydium AMM V4 交换（swap_base_in / swap_base_out）"""
     amm: str = ""
@@ -740,7 +740,6 @@ class RaydiumAmmV4Initialize2Event(DexEventBase):
 class RaydiumClmmSwapEvent(DexEventBase):
     input_mint: str = ""
     output_mint: str = ""
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """Raydium CLMM 交换事件"""
     pool_state: str = ""
@@ -952,7 +951,6 @@ class RaydiumClmmUpdateRewardInfosEvent(DexEventBase):
 
 @dataclass
 class RaydiumCpmmSwapEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """Raydium CPMM 交换事件"""
     pool_id: str = ""
@@ -1007,7 +1005,6 @@ class RaydiumCpmmInitializeEvent(DexEventBase):
 class OrcaWhirlpoolSwapEvent(DexEventBase):
     token_mint_a: str = ""
     token_mint_b: str = ""
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """Orca Whirlpool 交换事件"""
     whirlpool: str = ""
@@ -1071,7 +1068,6 @@ class OrcaWhirlpoolPoolInitializedEvent(DexEventBase):
 
 @dataclass
 class MeteoraDlmmSwapEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """Meteora DLMM 交换事件"""
     # Instruction / account context (not in Borsh event payload)
@@ -1181,7 +1177,6 @@ class MeteoraPoolsSetPoolFeesEvent(DexEventBase):
 
 @dataclass
 class MeteoraPoolsSwapEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """Meteora Pools 交换事件; instruction limits are separate from executed amounts."""
     amount_in: int = 0
@@ -1234,7 +1229,6 @@ class MeteoraPoolsPoolCreatedEvent(DexEventBase):
 
 @dataclass
 class MeteoraDammV2SwapEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """Meteora DAMM v2 交换事件（含 EvtSwap / EvtSwap2 全字段）"""
     pool: str = ""
@@ -1499,7 +1493,6 @@ class MeteoraDammV2CreateDynamicConfigEvent(DexEventBase):
 
 @dataclass
 class MeteoraDbcSwapEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     event_version: int = 0
     swap_mode: int = 0
@@ -1556,7 +1549,6 @@ class MeteoraDbcCurveCompleteEvent(DexEventBase):
 
 @dataclass
 class RaydiumLaunchlabTradeEvent(DexEventBase):
-    parse_status: TradeParseStatus = TradeParseStatus.INSTRUCTION_DECODED
     third_program: Optional[RawInstructionPayload] = None
     """RaydiumLaunchlab 交易事件"""
     pool_state: str = ""
@@ -2687,16 +2679,18 @@ def _to_typed_event(event: dict) -> Optional[TypedDexEvent]:
 def to_typed_event(event: dict) -> Optional[TypedDexEvent]:
     """Restore typed payloads, including optional execution provenance."""
     result = _to_typed_event(event)
-    if result is not None and hasattr(result, "parse_status"):
+    if result is not None and hasattr(result, "third_program"):
         data = next(iter(event.values()))
-        if data.get("parse_status") is not None:
-            result.parse_status = TradeParseStatus(data["parse_status"])
         raw = data.get("third_program")
         if raw is not None:
             result.third_program = RawInstructionPayload(**raw)
         for name in ("input_mint", "output_mint", "token_mint_a", "token_mint_b"):
             if name in data and hasattr(result, name):
                 setattr(result, name, _get_str(data, name))
+    if isinstance(result, (PumpFunCreateEvent, PumpFunCreateV2TokenEvent)):
+        data = next(iter(event.values()))
+        result.transaction_version = data.get("transaction_version")
+        result.alt_addresses = data.get("alt_addresses")
     return result
 
 

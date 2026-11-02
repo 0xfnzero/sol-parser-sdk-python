@@ -1,14 +1,7 @@
 """Trade evidence and lossless router input. No network access or inferred amounts."""
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Optional
-
-
-class TradeParseStatus(str, Enum):
-    UNRESOLVED = "Unresolved"
-    INSTRUCTION_DECODED = "InstructionDecoded"
-    EXECUTION_CONFIRMED = "ExecutionConfirmed"
 
 
 @dataclass
@@ -48,7 +41,6 @@ def mark_execution_source(event, outer_index, msg, meta):
     native = native_trade_program(event)
     if native is None or meta.HasField("err"):
         return
-    event.data.parse_status = TradeParseStatus.EXECUTION_CONFIRMED
     if not 0 <= outer_index < len(msg.instructions):
         return
     import base58

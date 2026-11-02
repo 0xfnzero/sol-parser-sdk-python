@@ -516,7 +516,7 @@ __all__ += ["RawInstructionDexType"]
 from .shredstream_client import parse_shred_transaction, parse_shred_transaction_with_loaded_addresses, parse_shred_transaction_best_effort
 
 __all__ += ["parse_shred_transaction", "parse_shred_transaction_with_loaded_addresses", "parse_shred_transaction_best_effort"]
-from .trade_source import RawInstructionPayload, TradeParseStatus
+from .trade_source import RawInstructionPayload
 from .stock_catalog import screened_stock_catalog, preferred_stock_pool, stock_conversion_legs
 from .stock_prices import StockPriceTracker, StockTokenPriceEvent
-__all__ += ["RawInstructionPayload", "TradeParseStatus", "screened_stock_catalog", "preferred_stock_pool", "stock_conversion_legs", "StockPriceTracker", "StockTokenPriceEvent"]
+__all__ += ["RawInstructionPayload", "screened_stock_catalog", "preferred_stock_pool", "stock_conversion_legs", "StockPriceTracker", "StockTokenPriceEvent"]

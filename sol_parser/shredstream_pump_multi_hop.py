@@ -6,7 +6,7 @@ import base58
 from .event_types import DexEvent, PumpFunTradeEvent
 from .grpc_types import EventType
 from .instructions import PUMPFUN_PROGRAM_ID, PUMPSWAP_PROGRAM_ID
-from .trade_source import RawInstructionPayload, TradeParseStatus
+from .trade_source import RawInstructionPayload
 from .dex_parsers import Z
 
 MULTI_HOP_SWAP = bytes([43, 100, 73, 19, 233, 246, 111, 148])
@@ -105,11 +105,6 @@ def parse_curve_hops(data, indices, keys, index, metadata):
                     program=PUMPFUN_PROGRAM_ID,
                     system_program=get(9) or Z,
                     is_buy=known and buy,
-                    parse_status=(
-                        TradeParseStatus.INSTRUCTION_DECODED
-                        if known
-                        else TradeParseStatus.UNRESOLVED
-                    ),
                     third_program=RawInstructionPayload(
                         PUMPSWAP_PROGRAM_ID,
                         index,

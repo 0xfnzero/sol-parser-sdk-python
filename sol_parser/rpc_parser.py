@@ -101,6 +101,7 @@ class RpcMessage:
     recent_blockhash: str
     instructions: List[RpcCompiledInstruction]
     address_table_lookups: List[RpcMessageAddressTableLookup]
+    transaction_config: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -120,6 +121,7 @@ class RpcTransactionResponse:
     transaction: Optional[RpcTransaction]
     #: 该笔交易在区块中的序号（``getTransaction`` 的 ``transactionIndex``；单交易拉取时可能为 0）
     transaction_index: int = 0
+    version: Optional[Union[str, int]] = None
 
 
 def _merge_rpc_full_account_keys(
@@ -152,7 +154,7 @@ class RpcClient:
     def get_transaction(
         self,
         signature: str,
-        max_supported_transaction_version: int = 0
+        max_supported_transaction_version: int = 1
     ) -> Optional[RpcTransactionResponse]:
         raise NotImplementedError
 
@@ -173,7 +175,7 @@ def parse_transaction_from_rpc(
         (events, error) 元组
     """
     try:
-        tx = rpc_client.get_transaction(signature, max_supported_transaction_version=0)
+        tx = rpc_client.get_transaction(signature, max_supported_transaction_version=1)
     except Exception as e:
         return [], ParseError("RpcError", f"Failed to fetch transaction: {e}")
 
@@ -348,6 +350,8 @@ def parse_rpc_transaction(
         apply_account_fill_to_events(events, tx_pb, meta_pb)
         enrich_pumpfun_same_tx_post_merge(events)
 
+    from .grpc.transaction_meta import fill_creation_context
+    fill_creation_context(events, tx.version, (l.account_key for l in msg.address_table_lookups))
     return events, None
 
 
@@ -644,6 +648,7 @@ def rpc_get_transaction_result_dict_to_response(
         recent_blockhash=str(recent),
         instructions=instructions,
         address_table_lookups=lookups,
+        transaction_config=msg_dict.get("transactionConfig"),
     )
 
     rpc_tx = RpcTransaction(signatures=[str(s) for s in sigs], message=message)
@@ -703,6 +708,7 @@ def rpc_get_transaction_result_dict_to_response(
         meta=meta,
         transaction=rpc_tx,
         transaction_index=transaction_index,
+        version=result.get("version"),
     )
 
 
@@ -725,6 +731,14 @@ def rpc_response_to_solana_storage(
 
     msg = rpc_tx.transaction.message
     out_msg = tx.message
+    out_msg.versioned = rpc_tx.version in (0, 1)
+    if rpc_tx.version == 1:
+        out_msg.config.SetInParent()
+        for name, field_name in (("priorityFee", "priority_fee"), ("computeUnitLimit", "compute_unit_limit"),
+                                 ("loadedAccountsDataSizeLimit", "loaded_accounts_data_size_limit"), ("heapSize", "heap_size")):
+            value = (msg.transaction_config or {}).get(name)
+            if value is not None:
+                setattr(out_msg.config, field_name, int(value))
     for k in msg.account_keys:
         out_msg.account_keys.append(base58.b58decode(k))
     if msg.recent_blockhash:

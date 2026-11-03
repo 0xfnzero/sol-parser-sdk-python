@@ -363,6 +363,9 @@ def _merge_grpc_instruction_into_log(log_ev: DexEvent, ix_ev: DexEvent) -> None:
         for attr in limits:
             setattr(log, attr, getattr(ix, attr))
     elif log_ev.type == EventType.RAYDIUM_CLMM_SWAP and ix_ev.type == EventType.RAYDIUM_CLMM_SWAP:
+        if ix.ix_name in ("swap", "swap_v2"):
+            for attr in ("ix_name", "amount", "other_amount_threshold", "sqrt_price_limit_x64", "is_base_input"):
+                setattr(log, attr, getattr(ix, attr))
         for attr in ("token_account_0", "token_account_1", "sender"):
             _fill_attr(log, attr, ix)
     elif log_ev.type == EventType.RAYDIUM_AMM_V4_SWAP and ix_ev.type == EventType.RAYDIUM_AMM_V4_SWAP:

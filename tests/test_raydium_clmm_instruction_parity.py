@@ -434,3 +434,25 @@ def test_customizable_pool_rejects_invalid_idl_boundaries() -> None:
         assert parse(data) is None
     assert parse(valid, 12) is None
     assert parse(valid) is not None
+
+
+def test_clmm_swap_inputs_do_not_claim_execution_and_survive_log_merge():
+    from sol_parser.log_instr_dedup import dedupe_log_instruction_events
+    from sol_parser.event_types import DexEvent, RaydiumClmmSwapEvent
+    for name, disc in (("swap", bytes([248,198,158,145,225,117,135,200])), ("swap_v2", bytes([43,4,237,11,26,201,30,98]))):
+        for mode in (False, True):
+            limit = (1 << 80) + 99
+            wire = disc + struct.pack("<QQ", 123, 45) + limit.to_bytes(16, "little") + bytes([mode])
+            ix = parse_raydium_clmm_instruction(wire, [f"account_{i}" for i in range(14)], "sig", 1, 0, None, 10)
+            e = ix.data
+            assert (e.amount_0, e.amount_1, e.sqrt_price_x64, e.zero_for_one) == (0, 0, "0", False)
+            assert (e.ix_name, e.amount, e.other_amount_threshold, e.sqrt_price_limit_x64, e.is_base_input) == (name, 123, 45, str(limit), mode)
+            log = DexEvent(EventType.RAYDIUM_CLMM_SWAP, RaydiumClmmSwapEvent(pool_state=e.pool_state, amount_0=120, amount_1=50, sqrt_price_x64="777", zero_for_one=not mode))
+            out = dedupe_log_instruction_events([log], [ix])
+            assert len(out) == 1
+            e = out[0].data
+            assert (e.ix_name, e.amount, e.other_amount_threshold, e.sqrt_price_limit_x64, e.is_base_input) == (name, 123, 45, str(limit), mode)
+            assert (e.amount_0, e.amount_1, e.sqrt_price_x64, e.zero_for_one) == (120, 50, "777", not mode)
+        for invalid_mode in (2, 255):
+            invalid_wire = wire[:40] + bytes([invalid_mode])
+            assert parse_raydium_clmm_instruction(invalid_wire, [f"account_{i}" for i in range(14)], "sig", 1, 0, None, 10) is None

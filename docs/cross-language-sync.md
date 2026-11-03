@@ -59,3 +59,7 @@ Cache resolver callbacks receive `(transaction, slot, recv_us, tx_index, event_t
 The wrapper replay now includes the two reported GMGN ALT transactions (`2EUPDVEH…` and `38NiGzWa…`). Each has zero static-key candidates and three candidates after ALT expansion. gRPC/RPC can verify the three executed Pump buys. The saved metadata is offline replay evidence, not a live Shred subscription.
 
 Python: `with_address_lookup_resolver` returns `(writable, readonly)` or None. Exceptions reach the subscription error callback and skip that transaction. Protobuf source is checked in as `sol_parser/solana-storage.proto`; regenerate with grpcio-tools 1.73.1 to retain the protobuf 6.31 runtime floor.
+
+CLMM `swap` / `swap_v2` preserve `ix_name`, `amount`, `other_amount_threshold`, `sqrt_price_limit_x64` and `is_base_input` separately from executed state, matching Rust. Exact-input mode is not swap direction; a price limit is not the ending price. Log/instruction merging preserves actual execution values.
+
+Both public RPC-to-protobuf conversion functions use the same implementation and retain V1 config presence, CPI stack heights, token balances (including owner/program and exact raw amounts), and compute units. `convert_rpc_to_grpc` keeps its `(meta, transaction, error)` return order. Invalid CLMM swap boolean bytes are rejected consistently across languages.

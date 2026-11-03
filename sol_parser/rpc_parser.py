@@ -53,6 +53,8 @@ class RpcTokenBalance:
     account_index: int
     mint: str
     ui_token_amount: Dict[str, Any]
+    owner: str = ""
+    program_id: str = ""
 
 
 @dataclass
@@ -422,97 +424,15 @@ def _parse_rpc_instruction(
 def convert_rpc_to_grpc(
     rpc_tx: RpcTransactionResponse,
 ) -> Tuple[Optional[Any], Optional[Any], Optional[ParseError]]:
-    """将 RPC 格式转换为 gRPC 格式
-
-    Returns:
-        (grpc_meta, grpc_tx, error) 元组
-    """
-    try:
-        from . import geyser_pb2
-    except ImportError:
-        return None, None, ParseError(
-            "ImportError",
-            "需要 protobuf 生成的代码。请从 https://github.com/rpcpool/yellowstone-grpc 获取 proto 文件并生成 Python 代码。"
-        )
-
-    meta = rpc_tx.meta
-    if meta is None:
+    """Convert through the shared protobuf path, returning (meta, transaction, error)."""
+    if rpc_tx.meta is None:
         return None, None, ParseError("ConversionError", "meta is nil")
-
-    # 转换 TransactionStatusMeta
-    grpc_meta = geyser_pb2.TransactionStatusMeta(
-        fee=meta.fee,
-        pre_balances=meta.pre_balances,
-        post_balances=meta.post_balances,
-        log_messages=meta.log_messages,
-    )
-
-    if meta.err is not None:
-        # Preserve failure presence without fabricating a Yellowstone binary error enum.
-        grpc_meta.err.SetInParent()
-
-    # 转换内部指令
-    for group in meta.inner_instructions:
-        grpc_group = grpc_meta.inner_instructions.add()
-        grpc_group.index = group.index
-        for ix in group.instructions:
-            grpc_ix = grpc_group.instructions.add()
-            grpc_ix.program_id_index = ix.program_id_index
-            grpc_ix.accounts = bytes(ix.accounts)
-            grpc_ix.data = ix.data
-
-    # 转换加载的地址
-    if meta.loaded_addresses:
-        for addr in meta.loaded_addresses.writable:
-            grpc_meta.loaded_writable_addresses.append(base58.b58decode(addr))
-        for addr in meta.loaded_addresses.readonly:
-            grpc_meta.loaded_readonly_addresses.append(base58.b58decode(addr))
-
-    # 转换交易
-    if rpc_tx.transaction is None:
-        return None, None, ParseError("ConversionError", "transaction is nil")
-
-    tx = rpc_tx.transaction
-    grpc_tx = geyser_pb2.Transaction()
-
-    # 转换签名
-    for sig in tx.signatures:
-        grpc_tx.signatures.append(base58.b58decode(sig))
-
-    # 转换消息
-    if tx.message:
-        msg = tx.message
-        grpc_msg = grpc_tx.message
-
-        # 转换账户密钥
-        for key in msg.account_keys:
-            grpc_msg.account_keys.append(base58.b58decode(key))
-
-        # 转换最近区块哈希
-        if msg.recent_blockhash:
-            grpc_msg.recent_blockhash = base58.b58decode(msg.recent_blockhash)
-
-        # 转换指令
-        for ix in msg.instructions:
-            grpc_ix = grpc_msg.instructions.add()
-            grpc_ix.program_id_index = ix.program_id_index
-            grpc_ix.accounts = bytes(ix.accounts)
-            grpc_ix.data = ix.data
-
-        # 转换地址表查找
-        for lookup in msg.address_table_lookups:
-            grpc_lookup = grpc_msg.address_table_lookups.add()
-            grpc_lookup.account_key = base58.b58decode(lookup.account_key)
-            grpc_lookup.writable_indexes = bytes(lookup.writable_indexes)
-            grpc_lookup.readonly_indexes = bytes(lookup.readonly_indexes)
-
-        # 转换消息头
-        if msg.header:
-            grpc_msg.header.num_required_signatures = msg.header.num_required_signatures
-            grpc_msg.header.num_readonly_signed_accounts = msg.header.num_readonly_signed_accounts
-            grpc_msg.header.num_readonly_unsigned_accounts = msg.header.num_readonly_unsigned_accounts
-
-    return grpc_meta, grpc_tx, None
+    if rpc_tx.transaction is None or rpc_tx.transaction.message is None:
+        return None, None, ParseError("ConversionError", "transaction message is nil")
+    tx, meta = rpc_response_to_solana_storage(rpc_tx)
+    if tx is None or meta is None:
+        return None, None, ParseError("ImportError", "protobuf transaction types are unavailable")
+    return meta, tx, None
 
 
 def _ix_data_from_rpc(ix: dict) -> bytes:
@@ -572,6 +492,19 @@ def _parse_rpc_compiled_ix(ix: dict, account_keys: List[str]) -> RpcCompiledInst
             else None
         ),
     )
+
+
+def _rpc_token_balances(items: list) -> List[RpcTokenBalance]:
+    return [
+        RpcTokenBalance(
+            account_index=int(item.get("accountIndex", item.get("account_index", 0))),
+            mint=item.get("mint", ""),
+            ui_token_amount=item.get("uiTokenAmount", item.get("ui_token_amount")) or {},
+            owner=item.get("owner") or "",
+            program_id=item.get("programId", item.get("program_id")) or "",
+        )
+        for item in items
+    ]
 
 
 def rpc_get_transaction_result_dict_to_response(
@@ -695,8 +628,8 @@ def rpc_get_transaction_result_dict_to_response(
             post_balances=[int(x) for x in meta_dict.get("postBalances") or meta_dict.get("post_balances") or []],
             log_messages=[str(x) for x in logs],
             inner_instructions=inner_groups,
-            pre_token_balances=[],
-            post_token_balances=[],
+            pre_token_balances=_rpc_token_balances(meta_dict.get("preTokenBalances") or meta_dict.get("pre_token_balances") or []),
+            post_token_balances=_rpc_token_balances(meta_dict.get("postTokenBalances") or meta_dict.get("post_token_balances") or []),
             loaded_addresses=loaded,
             compute_units_consumed=meta_dict.get("computeUnitsConsumed"),
             err=meta_dict.get("err"),
@@ -765,6 +698,23 @@ def rpc_response_to_solana_storage(
     meta.pre_balances.extend(m.pre_balances)
     meta.post_balances.extend(m.post_balances)
     meta.log_messages.extend(m.log_messages)
+    if m.compute_units_consumed is not None:
+        meta.compute_units_consumed = int(m.compute_units_consumed)
+    for balances, out_balances in (
+        (m.pre_token_balances, meta.pre_token_balances),
+        (m.post_token_balances, meta.post_token_balances),
+    ):
+        for balance in balances:
+            out = out_balances.add()
+            out.account_index = balance.account_index
+            out.mint = balance.mint
+            out.owner = balance.owner
+            out.program_id = balance.program_id
+            ui = balance.ui_token_amount
+            out.ui_token_amount.amount = str(ui.get("amount", "0"))
+            out.ui_token_amount.decimals = int(ui.get("decimals", 0))
+            out.ui_token_amount.ui_amount = float(ui.get("uiAmount", ui.get("ui_amount")) or 0)
+            out.ui_token_amount.ui_amount_string = ui.get("uiAmountString", ui.get("ui_amount_string")) or ""
     for group in m.inner_instructions:
         g = meta.inner_instructions.add()
         g.index = group.index

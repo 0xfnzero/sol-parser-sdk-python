@@ -1689,6 +1689,8 @@ def parse_raydium_clmm_instruction(
     if discriminator in (_DISC_CLMM_SWAP, _DISC_CLMM_SWAP_V2):
         if len(data) < 8 + 8 + 8 + 16 + 1:
             return None
+        if data[40] not in (0, 1):
+            return None
         sqrt_price_x64 = int.from_bytes(data[24:40], "little")
         is_base_input = data[40] == 1
         return legacy_dict_to_dex_event({"RaydiumClmmSwap": {
@@ -1696,8 +1698,12 @@ def parse_raydium_clmm_instruction(
             "pool_state": _get_account_safe(accounts, 2),
             "sender": _get_account_safe(accounts, 0),
             "token_account_0": _get_account_safe(accounts, 3), "token_account_1": _get_account_safe(accounts, 4),
-            "amount_0": 0, "amount_1": 0, "zero_for_one": is_base_input,
-            "sqrt_price_x64": str(sqrt_price_x64), "liquidity": "0",
+            "amount_0": 0, "amount_1": 0, "zero_for_one": False,
+            "sqrt_price_x64": "0", "liquidity": "0",
+            "ix_name": "swap_v2" if discriminator == _DISC_CLMM_SWAP_V2 else "swap",
+            "amount": struct.unpack_from("<Q", data, 8)[0],
+            "other_amount_threshold": struct.unpack_from("<Q", data, 16)[0],
+            "sqrt_price_limit_x64": str(sqrt_price_x64), "is_base_input": is_base_input,
             "transfer_fee_0": 0, "transfer_fee_1": 0, "tick": 0,
         }})
     if discriminator == _DISC_CLMM_INC_LIQ:

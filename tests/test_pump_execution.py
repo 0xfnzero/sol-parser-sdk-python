@@ -148,13 +148,35 @@ def test_grpc_creation_context_survives_protobuf():
     import asyncio
     from sol_parser import YellowstoneGrpc
     from sol_parser.grpc_types import SubscribeUpdateTransactionInfo
-    from sol_parser.rpc_parser import rpc_response_to_solana_storage
+    from sol_parser.rpc_parser import rpc_response_to_solana_storage, convert_rpc_to_grpc
     from sol_parser.event_types import PumpFunCreateEvent, PumpFunCreateV2TokenEvent
     async def run():
         for case in CASES:
             raw = case['raw']
             response = rpc_get_transaction_result_dict_to_response(raw)
-            tx, meta = rpc_response_to_solana_storage(response)
+            expected_tx, expected_meta = rpc_response_to_solana_storage(response)
+            meta, tx, error = convert_rpc_to_grpc(response)
+            assert error is None
+            assert tx.SerializeToString() == expected_tx.SerializeToString()
+            assert meta.SerializeToString() == expected_meta.SerializeToString()
+            assert tx.message.HasField("config") == (raw['version'] == 1)
+            assert meta.compute_units_consumed == raw['meta'].get('computeUnitsConsumed', 0)
+            for name, field in (("preTokenBalances", "pre_token_balances"), ("postTokenBalances", "post_token_balances")):
+                original = raw['meta'].get(name) or []
+                encoded = getattr(meta, field)
+                assert len(encoded) == len(original)
+                for balance, out in zip(original, encoded):
+                    assert (out.account_index, out.mint, out.owner, out.program_id) == (
+                        balance['accountIndex'], balance['mint'], balance.get('owner', ''), balance.get('programId', ''))
+                    ui = balance['uiTokenAmount']
+                    assert (out.ui_token_amount.amount, out.ui_token_amount.decimals) == (ui['amount'], ui['decimals'])
+                    assert out.ui_token_amount.ui_amount == (ui.get('uiAmount') or 0)
+                    assert out.ui_token_amount.ui_amount_string == ui.get('uiAmountString', '')
+            for group, encoded_group in zip(response.meta.inner_instructions, meta.inner_instructions):
+                for ix, encoded_ix in zip(group.instructions, encoded_group.instructions):
+                    assert encoded_ix.HasField("stack_height") == (ix.stack_height is not None)
+                    if ix.stack_height is not None:
+                        assert encoded_ix.stack_height == ix.stack_height
             info = SubscribeUpdateTransactionInfo(signature=base58.b58decode(raw['transaction']['signatures'][0]),
                 transaction_raw=tx.SerializeToString(), meta_raw=meta.SerializeToString())
             queue = asyncio.Queue()

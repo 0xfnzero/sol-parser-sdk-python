@@ -738,6 +738,12 @@ class RaydiumAmmV4Initialize2Event(DexEventBase):
 
 @dataclass
 class RaydiumClmmSwapEvent(DexEventBase):
+    # Original inputs; executed amounts and ending price are separate.
+    ix_name: str = ""
+    amount: int = 0
+    other_amount_threshold: int = 0
+    sqrt_price_limit_x64: str = "0"
+    is_base_input: bool = False
     input_mint: str = ""
     output_mint: str = ""
     third_program: Optional[RawInstructionPayload] = None
@@ -2298,6 +2304,11 @@ def _to_typed_event(event: dict) -> Optional[TypedDexEvent]:
     if event_type == EventType.RAYDIUM_CLMM_SWAP:
         return RaydiumClmmSwapEvent(
             metadata=meta,
+            ix_name=_get_str(data, "ix_name"),
+            amount=_get_int(data, "amount"),
+            other_amount_threshold=_get_int(data, "other_amount_threshold"),
+            sqrt_price_limit_x64=(_get_str(data, "sqrt_price_limit_x64") or "0"),
+            is_base_input=_get_bool(data, "is_base_input"),
             pool_state=_get_str(data, "pool_state"),
             sender=_get_str(data, "sender"),
             token_account_0=_get_str(data, "token_account_0"),
